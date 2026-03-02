@@ -44,8 +44,9 @@ export default function EODReport({ logs, userName }: Props) {
     const handlePDF = useCallback(async () => {
         setPdfLoading(true);
         try {
-            const { jsPDF } = await import('jspdf');
-            const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+            const jsPDFModule = await import('jspdf');
+            const jsPDFClass = jsPDFModule.default || (jsPDFModule as any).jsPDF;
+            const doc = new jsPDFClass({ unit: 'mm', format: 'a4' });
             const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
             // Header
