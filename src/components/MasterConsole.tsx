@@ -187,8 +187,7 @@ function RecruiterRow({ r, isMaster, onEndBreak, onEndBrb, onPunchOut, confirmin
     const doneMs = isDone && r.punchIn && r.punchOut ? r.punchOut - r.punchIn : 0;
 
     return (
-        <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0, overflow: 'hidden' }}
-            className={`flex items-center gap-4 px-4 py-3 rounded-xl border transition-all group ${cfg.rowBg}`}>
+        <div className={`flex items-center gap-4 px-4 py-3 rounded-xl border transition-all group ${cfg.rowBg}`}>
             {/* Avatar */}
             <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-black flex-shrink-0 ring-2 ${cfg.ring} ${isDone || isLeave ? 'bg-white/5 text-slate-400' : cfg.text.replace('text-', 'bg-').replace('-400', '-500/15') + ' ' + cfg.text}`}>
                 {r.user.name[0].toUpperCase()}
@@ -253,7 +252,7 @@ function RecruiterRow({ r, isMaster, onEndBreak, onEndBrb, onPunchOut, confirmin
                     }
                 </div>
             )}
-        </motion.div>
+        </div>
     );
 }
 
@@ -271,6 +270,19 @@ export default function MasterConsole({ currentUserId, isMaster }: Props) {
     const [confirmEnd, setConfirmEnd] = useState<string | null>(null);
     const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
     const mountedRef = useRef(true);
+    const filterDropdownRef = useRef<HTMLDivElement>(null);
+
+    // Close dropdown on outside click
+    useEffect(() => {
+        if (!clientFilterOpen) return;
+        function handleOutside(e: MouseEvent) {
+            if (filterDropdownRef.current && !filterDropdownRef.current.contains(e.target as Node)) {
+                setClientFilterOpen(false);
+            }
+        }
+        document.addEventListener('mousedown', handleOutside);
+        return () => document.removeEventListener('mousedown', handleOutside);
+    }, [clientFilterOpen]);
 
     const refresh = useCallback(async () => {
         const [data, pData, clientsData, leavesData] = await Promise.all([
@@ -405,7 +417,7 @@ export default function MasterConsole({ currentUserId, isMaster }: Props) {
             <div className="grid grid-cols-[1fr_280px] gap-5 items-start">
 
                 {/* LEFT: Recruiter List */}
-                <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-3 min-h-0">
                     {/* Filter row */}
                     <div className="flex z-10 items-center justify-between bg-[#0A0A0A] p-2.5 rounded-xl border border-white/[0.06] shadow-lg relative">
                         <div className="flex items-center gap-3 flex-1">
@@ -425,7 +437,7 @@ export default function MasterConsole({ currentUserId, isMaster }: Props) {
                             <div className="w-px h-5 bg-white/10" />
 
                             {/* Multi-select Client Filter */}
-                            <div className="relative">
+                            <div className="relative" ref={filterDropdownRef}>
                                 <button type="button" onClick={() => setClientFilterOpen(!clientFilterOpen)}
                                     className="flex items-center gap-1.5 px-3 py-1.5 bg-transparent hover:bg-white/[0.04] rounded-lg transition-colors text-sm font-semibold text-slate-300">
                                     <Filter size={13} className="text-slate-500" />

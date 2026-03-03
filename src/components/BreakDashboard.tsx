@@ -131,20 +131,7 @@ export default function BreakDashboard({ currentUserId, isMaster, clientName }: 
                     {onBrb.map(r => <PersonRow key={r.user.id} r={r} showTimer />)}
                 </div>
             )}
-            {working.length > 0 && (
-                <div className="rounded-2xl border border-white/6 bg-white/[0.02] overflow-hidden">
-                    <div className="px-4 pt-3 pb-1">
-                        <span className="text-xs font-black tracking-widest uppercase text-emerald-400/60">Working · {working.length}</span>
-                    </div>
-                    {working.map(r => <PersonRow key={r.user.id} r={r} />)}
-                </div>
-            )}
-            {away.length > 0 && (
-                <div className="rounded-2xl border border-white/5 overflow-hidden">
-                    {away.map(r => <PersonRow key={r.user.id} r={r} />)}
-                </div>
-            )}
-            {everyoneWorking && (
+            {onBreak.length === 0 && onBrb.length === 0 && (
                 <div className="flex items-center gap-3 px-4 py-3.5 rounded-2xl border border-emerald-500/20 bg-emerald-900/10">
                     <Sparkles size={15} className="text-emerald-400 flex-shrink-0" />
                     <AnimatePresence mode="wait">
