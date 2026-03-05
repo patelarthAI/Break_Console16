@@ -4,8 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     FileSpreadsheet, Plus, Trash2, Download, CheckCircle,
     Edit2, X, ChevronDown, CalendarCheck2,
-    TrendingDown, AlertCircle, Filter, Search,
-    SlidersHorizontal, ChevronUp, Users2
+    TrendingDown, AlertCircle, Filter, Search, Users2
 } from 'lucide-react';
 import { getLeaves, addLeave, deleteLeave, updateLeave, getClients, ClientRow, getAllUsers } from '@/lib/store';
 import { LeaveRecord, User as AppUser } from '@/types';
@@ -14,6 +13,14 @@ import { useToast } from '@/components/Toast';
 import ConfirmDialog from '@/components/ConfirmDialog';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** Convert ISO date string (YYYY-MM-DD) → DD-Mon-YY, e.g. "07-Jan-25" */
+function fmtDate(iso: string): string {
+    const [yr, mo, dy] = iso.split('-');
+    return `${dy}-${MONTHS[parseInt(mo) - 1]}-${yr.slice(2)}`;
+}
+
 const LEAVE_TYPES = ['Sick Leave', 'Casual Leave', 'LWP', 'HD-Casual', 'Health Issue', 'Vacation', 'Bereavement'];
 
 const LEAVE_META: Record<string, { dot: string; text: string; bg: string; border: string }> = {
@@ -37,17 +44,14 @@ function TypeBadge({ type }: { type: string }) {
     );
 }
 
-function StatCard({ label, value, sub, color, icon }: { label: string; value: string | number; sub?: string; color: string; icon: React.ReactNode }) {
+function StatCard({ label, value, sub, color, accent }: { label: string; value: string | number; sub?: string; color: string; accent: string; }) {
     return (
-        <div className="flex flex-col gap-3 bg-[#0A0A0A] border border-white/[0.06] rounded-xl px-6 py-5 hover:-translate-y-0.5 hover:border-white/[0.15] hover:shadow-2xl hover:shadow-black/50 transition-all duration-300 group">
-            <div className="flex items-center justify-between">
-                <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500">{label}</p>
-                <div className="text-slate-700 group-hover:text-slate-500 transition-colors">{icon}</div>
-            </div>
-            <div>
-                <p className={`text-3xl font-black tabular-nums tracking-tighter leading-none ${color}`}>{value}</p>
-                {sub && <p className="text-[11px] text-slate-600 mt-1.5 font-medium">{sub}</p>}
-            </div>
+        <div className="relative flex flex-col bg-[#0a0a1a] border border-white/5 rounded-xl px-5 py-4 overflow-hidden hover:bg-white/[0.04] hover:border-white/10 transition-all duration-300 group">
+            {/* Colored top accent bar — same pattern as Live Dashboard */}
+            <div className={`absolute top-0 left-0 right-0 h-[3px] ${accent} opacity-80`} />
+            <p className={`text-3xl font-black tabular-nums tracking-tighter leading-none mt-2 ${color}`}>{value}</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mt-2">{label}</p>
+            {sub && <p className="text-[10px] text-slate-600 mt-0.5">{sub}</p>}
         </div>
     );
 }
@@ -101,6 +105,24 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: AppUs
     const [filterEmployee, setFilterEmployee] = useState('');
     const [search, setSearch] = useState('');
     const [periodFilter, setPeriodFilter] = useState(''); // '' = all, 'YYYY' = year, 'YYYY-MM' = month
+
+    // Dropdown open states
+    const [clientDropOpen, setClientDropOpen] = useState(false);
+    const [empDropOpen, setEmpDropOpen] = useState(false);
+    const [periodDropOpen, setPeriodDropOpen] = useState(false);
+    const clientDropRef = useRef<HTMLDivElement>(null);
+    const empDropRef = useRef<HTMLDivElement>(null);
+    const periodDropRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        function handleClick(e: MouseEvent) {
+            if (clientDropRef.current && !clientDropRef.current.contains(e.target as Node)) setClientDropOpen(false);
+            if (empDropRef.current && !empDropRef.current.contains(e.target as Node)) setEmpDropOpen(false);
+            if (periodDropRef.current && !periodDropRef.current.contains(e.target as Node)) setPeriodDropOpen(false);
+        }
+        document.addEventListener('mousedown', handleClick);
+        return () => document.removeEventListener('mousedown', handleClick);
+    }, []);
 
     useEffect(() => { loadData(); }, []);
 
@@ -207,8 +229,17 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: AppUs
     }, [displayedLeaves]);
 
     function handleExport() {
-        const header = ['Date', 'Client', 'Employee', 'Leave Type', 'Duration', 'Planned', 'Reason', 'Approver'];
-        const data = displayedLeaves.map(l => [l.date, l.client_name, l.employee_name, l.leave_type, l.day_count === 1 ? 'Full Day' : 'Half Day', l.is_planned ? 'Yes' : 'No', l.reason || '', l.approver || '']);
+        const header = ['Date', 'Client', 'Name', 'Planned', 'Reason', 'Approver', 'Leave Type', 'Count'];
+        const data = displayedLeaves.map(l => [
+            fmtDate(l.date),
+            l.client_name,
+            l.employee_name,
+            l.is_planned ? 'Yes' : 'No',
+            l.reason || '',
+            l.approver || '',
+            l.leave_type,
+            l.day_count,
+        ]);
         exportExcel([header, ...data], 'leave-tracker');
     }
 
@@ -249,12 +280,12 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: AppUs
                 </div>
             </div>
 
-            {/* ── Stats Row ───────────────────────────────────────────────── */}
+            {/* ── Stats Row — matching Live Dashboard KPI tile style ─────── */}
             <div className="grid grid-cols-4 gap-3">
-                <StatCard label="Total Records" value={displayedLeaves.length} color="text-white" icon={<FileSpreadsheet size={14} />} />
-                <StatCard label="Total Days" value={totalDays.toFixed(1)} color="text-emerald-400" sub="days taken" icon={<CalendarCheck2 size={14} />} />
-                <StatCard label="LWP Days" value={lwpCount.toFixed(1)} color={lwpCount > 0 ? 'text-red-400' : 'text-slate-500'} sub="leave without pay" icon={<TrendingDown size={14} />} />
-                <StatCard label="Unplanned" value={unplanned} color={unplanned > 0 ? 'text-amber-400' : 'text-slate-500'} sub="no advance notice" icon={<AlertCircle size={14} />} />
+                <StatCard label="Total Records" value={displayedLeaves.length} color="text-slate-200" accent="bg-slate-500" />
+                <StatCard label="Total Days" value={totalDays.toFixed(1)} color="text-emerald-400" accent="bg-emerald-500" sub="days taken" />
+                <StatCard label="LWP Days" value={lwpCount.toFixed(1)} color={lwpCount > 0 ? 'text-rose-400' : 'text-slate-500'} accent={lwpCount > 0 ? 'bg-rose-500' : 'bg-slate-800'} sub="leave without pay" />
+                <StatCard label="Unplanned" value={unplanned} color={unplanned > 0 ? 'text-amber-400' : 'text-slate-500'} accent={unplanned > 0 ? 'bg-amber-500' : 'bg-slate-800'} sub="no advance notice" />
             </div>
 
             {/* ── Employee Summary Strip ───────────────────────────────────── */}
@@ -285,84 +316,166 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: AppUs
                 </div>
             )}
 
-            {/* ── Filter & Search Bar ──────────────────────────────────────── */}
-            <div className="flex items-center justify-between bg-[#0A0A0A] p-2.5 rounded-xl border border-white/[0.06] shadow-lg">
-                <div className="flex items-center gap-3 flex-1">
+            {/* ── Filter & Search Bar — matching Live Dashboard style ───────── */}
+            <div className="flex z-10 items-center justify-between bg-black/60 backdrop-blur-md p-2.5 rounded-2xl border border-white/10 shadow-lg relative">
+                <div className="flex items-center gap-2 flex-1 flex-wrap">
                     {/* Search */}
-                    <div className="relative flex-1 max-w-sm ml-2">
-                        <Search size={14} className="absolute left-0 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                    <div className="relative flex-1 max-w-sm ml-1">
+                        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
                         <input type="text" placeholder="Search employee, client, type…" value={search} onChange={e => setSearch(e.target.value)}
-                            className="w-full bg-transparent border-none py-1.5 pl-7 pr-3 text-sm text-white placeholder:text-slate-600 focus:outline-none transition-all" />
-                        {search && <button onClick={() => setSearch('')} className="absolute right-0 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"><X size={14} /></button>}
+                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-2 pl-10 pr-3 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-white/20 transition-all font-semibold" />
+                        {search && <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"><X size={14} /></button>}
                     </div>
 
-                    <div className="w-px h-5 bg-white/10" />
+                    <div className="w-px h-6 bg-white/10" />
 
-                    <div className="flex items-center gap-4 px-2">
-                        <div className="flex items-center gap-1.5">
+                    {/* All Clients dropdown */}
+                    <div className="relative" ref={clientDropRef}>
+                        <button onClick={() => { setClientDropOpen(o => !o); setEmpDropOpen(false); setPeriodDropOpen(false); }}
+                            className="flex items-center gap-1.5 px-3 py-2 bg-transparent hover:bg-white/[0.04] rounded-xl transition-colors text-[13px] font-bold text-slate-300">
                             <Filter size={13} className="text-slate-500" />
-                            <SelectWrap>
-                                <select value={filterClient} onChange={e => { setFilterClient(e.target.value); setFilterEmployee(''); }}
-                                    className="bg-transparent text-sm font-semibold text-slate-400 focus:outline-none appearance-none pr-5 cursor-pointer hover:text-white transition-colors">
-                                    <option value="" className="bg-[#0A0A0A]">All Clients</option>
-                                    {clients.map(c => <option key={c.id} value={c.name} className="bg-[#0A0A0A]">{c.name}</option>)}
-                                </select>
-                            </SelectWrap>
-                        </div>
-
-                        <SelectWrap>
-                            <select value={filterEmployee} onChange={e => setFilterEmployee(e.target.value)}
-                                className="bg-transparent text-sm font-semibold text-slate-400 focus:outline-none appearance-none pr-5 cursor-pointer hover:text-white transition-colors">
-                                <option value="" className="bg-[#0A0A0A]">All Employees</option>
-                                {[...new Set(leaves.filter(l => !filterClient || l.client_name === filterClient).map(l => l.employee_name))].sort().map(n => (
-                                    <option key={n} value={n} className="bg-[#0A0A0A]">{n}</option>
-                                ))}
-                            </select>
-                        </SelectWrap>
-
-                        <div className="flex items-center gap-1.5 pl-2 border-l border-white/10">
-                            <SlidersHorizontal size={13} className="text-slate-500" />
-                            <SelectWrap>
-                                <select value={periodFilter} onChange={e => setPeriodFilter(e.target.value)}
-                                    className="bg-transparent text-sm font-semibold text-slate-400 focus:outline-none appearance-none pr-5 cursor-pointer hover:text-white transition-colors">
-                                    <option value="" className="bg-[#0A0A0A]">All Time</option>
-                                    {/* Unique years */}
-                                    {[...new Set(availableYearMonths.map(ym => ym.slice(0, 4)))].map(yr => (
-                                        <option key={yr} value={yr} className="bg-[#0A0A0A] font-bold">── {yr}</option>
-                                    ))}
-                                    {/* Individual months */}
-                                    {availableYearMonths.map(ym => {
-                                        const [yr, mo] = ym.split('-');
-                                        const label = new Date(Number(yr), Number(mo) - 1, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-                                        return <option key={ym} value={ym} className="bg-[#0A0A0A]">&nbsp;&nbsp;{label}</option>;
-                                    })}
-                                </select>
-                            </SelectWrap>
-                        </div>
-
-                        {hasFilter && (
-                            <button onClick={() => { setFilterClient(''); setFilterEmployee(''); setSearch(''); setPeriodFilter(''); }}
-                                className="ml-1 text-[11px] font-bold text-slate-400 hover:text-white transition-colors flex items-center gap-1 bg-white/[0.04] hover:bg-white/10 px-2 py-1 rounded border border-white/5">
-                                <X size={12} /> Clear
-                            </button>
-                        )}
+                            {filterClient || 'All Clients'}
+                            <ChevronDown size={13} className={`text-slate-500 transition-transform ${clientDropOpen ? 'rotate-180' : ''}`} />
+                        </button>
+                        <AnimatePresence>
+                            {clientDropOpen && (
+                                <motion.div initial={{ opacity: 0, y: 4, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 4, scale: 0.98 }}
+                                    className="absolute top-full left-0 mt-2 w-52 bg-[#0C0C14] border border-white/10 rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.8)] overflow-hidden z-[100] py-1">
+                                    <div className="px-3 py-2 border-b border-white/[0.06]">
+                                        <span className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Filter by Client</span>
+                                    </div>
+                                    <div className="max-h-64 overflow-y-auto">
+                                        <button onClick={() => { setFilterClient(''); setFilterEmployee(''); setClientDropOpen(false); }}
+                                            className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left transition-all ${!filterClient ? 'bg-indigo-500/15 text-white font-bold' : 'text-slate-300 hover:bg-white/5 font-medium'}`}>
+                                            <span className={`w-4 h-4 rounded-md border flex items-center justify-center flex-shrink-0 ${!filterClient ? 'bg-emerald-500 border-emerald-500' : 'border-slate-600'}`}>
+                                                {!filterClient && <span className="text-black text-[10px] font-black">✓</span>}
+                                            </span>
+                                            All Clients
+                                        </button>
+                                        {clients.map(c => (
+                                            <button key={c.id} onClick={() => { setFilterClient(c.name); setFilterEmployee(''); setClientDropOpen(false); }}
+                                                className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left transition-all ${filterClient === c.name ? 'bg-indigo-500/15 text-white font-bold' : 'text-slate-300 hover:bg-white/5 font-medium'}`}>
+                                                <span className={`w-4 h-4 rounded-md border flex items-center justify-center flex-shrink-0 ${filterClient === c.name ? 'bg-emerald-500 border-emerald-500' : 'border-slate-600'}`}>
+                                                    {filterClient === c.name && <span className="text-black text-[10px] font-black">✓</span>}
+                                                </span>
+                                                {c.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </div>
+
+                    {/* All Employees dropdown */}
+                    <div className="relative" ref={empDropRef}>
+                        <button onClick={() => { setEmpDropOpen(o => !o); setClientDropOpen(false); setPeriodDropOpen(false); }}
+                            className="flex items-center gap-1.5 px-3 py-2 bg-transparent hover:bg-white/[0.04] rounded-xl transition-colors text-[13px] font-bold text-slate-300">
+                            {filterEmployee || 'All Employees'}
+                            <ChevronDown size={13} className={`text-slate-500 transition-transform ${empDropOpen ? 'rotate-180' : ''}`} />
+                        </button>
+                        <AnimatePresence>
+                            {empDropOpen && (
+                                <motion.div initial={{ opacity: 0, y: 4, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 4, scale: 0.98 }}
+                                    className="absolute top-full left-0 mt-2 w-56 bg-[#0C0C14] border border-white/10 rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.8)] overflow-hidden z-[100] py-1">
+                                    <div className="px-3 py-2 border-b border-white/[0.06]">
+                                        <span className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Filter by Employee</span>
+                                    </div>
+                                    <div className="max-h-64 overflow-y-auto">
+                                        <button onClick={() => { setFilterEmployee(''); setEmpDropOpen(false); }}
+                                            className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left transition-all ${!filterEmployee ? 'bg-indigo-500/15 text-white font-bold' : 'text-slate-300 hover:bg-white/5 font-medium'}`}>
+                                            <span className={`w-4 h-4 rounded-md border flex items-center justify-center flex-shrink-0 ${!filterEmployee ? 'bg-emerald-500 border-emerald-500' : 'border-slate-600'}`}>
+                                                {!filterEmployee && <span className="text-black text-[10px] font-black">✓</span>}
+                                            </span>
+                                            All Employees
+                                        </button>
+                                        {[...new Set(leaves.filter(l => !filterClient || l.client_name === filterClient).map(l => l.employee_name))].sort().map(n => (
+                                            <button key={n} onClick={() => { setFilterEmployee(n); setEmpDropOpen(false); }}
+                                                className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left transition-all ${filterEmployee === n ? 'bg-indigo-500/15 text-white font-bold' : 'text-slate-300 hover:bg-white/5 font-medium'}`}>
+                                                <span className={`w-4 h-4 rounded-md border flex items-center justify-center flex-shrink-0 ${filterEmployee === n ? 'bg-emerald-500 border-emerald-500' : 'border-slate-600'}`}>
+                                                    {filterEmployee === n && <span className="text-black text-[10px] font-black">✓</span>}
+                                                </span>
+                                                {n}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+
+                    <div className="w-px h-6 bg-white/10" />
+
+                    {/* All Time dropdown */}
+                    <div className="relative" ref={periodDropRef}>
+                        <button onClick={() => { setPeriodDropOpen(o => !o); setClientDropOpen(false); setEmpDropOpen(false); }}
+                            className="flex items-center gap-1.5 px-3 py-2 bg-transparent hover:bg-white/[0.04] rounded-xl transition-colors text-[13px] font-bold text-slate-300">
+                            {periodFilter
+                                ? (periodFilter.length === 4 ? periodFilter : new Date(periodFilter + '-01').toLocaleDateString('en-US', { month: 'short', year: 'numeric' }))
+                                : 'All Time'}
+                            <ChevronDown size={13} className={`text-slate-500 transition-transform ${periodDropOpen ? 'rotate-180' : ''}`} />
+                        </button>
+                        <AnimatePresence>
+                            {periodDropOpen && (
+                                <motion.div initial={{ opacity: 0, y: 4, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 4, scale: 0.98 }}
+                                    className="absolute top-full left-0 mt-2 w-48 bg-[#0C0C14] border border-white/10 rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.8)] overflow-hidden z-[100] py-1">
+                                    <div className="px-3 py-2 border-b border-white/[0.06]">
+                                        <span className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Filter by Period</span>
+                                    </div>
+                                    <div className="max-h-64 overflow-y-auto">
+                                        <button onClick={() => { setPeriodFilter(''); setPeriodDropOpen(false); }}
+                                            className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left transition-all ${!periodFilter ? 'bg-indigo-500/15 text-white font-bold' : 'text-slate-300 hover:bg-white/5 font-medium'}`}>
+                                            <span className={`w-4 h-4 rounded-md border flex items-center justify-center flex-shrink-0 ${!periodFilter ? 'bg-emerald-500 border-emerald-500' : 'border-slate-600'}`}>
+                                                {!periodFilter && <span className="text-black text-[10px] font-black">✓</span>}
+                                            </span>
+                                            All Time
+                                        </button>
+                                        {[...new Set(availableYearMonths.map(ym => ym.slice(0, 4)))].map(yr => (
+                                            <button key={yr} onClick={() => { setPeriodFilter(yr); setPeriodDropOpen(false); }}
+                                                className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs text-left font-black tracking-widest uppercase transition-all ${periodFilter === yr ? 'bg-indigo-500/15 text-indigo-300' : 'text-slate-500 hover:bg-white/5 hover:text-slate-300'}`}>
+                                                ── {yr}
+                                            </button>
+                                        ))}
+                                        {availableYearMonths.map(ym => {
+                                            const [yr, mo] = ym.split('-');
+                                            const label = new Date(Number(yr), Number(mo) - 1, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+                                            return (
+                                                <button key={ym} onClick={() => { setPeriodFilter(ym); setPeriodDropOpen(false); }}
+                                                    className={`w-full flex items-center gap-2.5 pl-6 pr-3 py-2.5 text-sm text-left transition-all ${periodFilter === ym ? 'bg-indigo-500/15 text-white font-bold' : 'text-slate-300 hover:bg-white/5 font-medium'}`}>
+                                                    <span className={`w-4 h-4 rounded-md border flex items-center justify-center flex-shrink-0 ${periodFilter === ym ? 'bg-emerald-500 border-emerald-500' : 'border-slate-600'}`}>
+                                                        {periodFilter === ym && <span className="text-black text-[10px] font-black">✓</span>}
+                                                    </span>
+                                                    {label}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+
+                    {hasFilter && (
+                        <button onClick={() => { setFilterClient(''); setFilterEmployee(''); setSearch(''); setPeriodFilter(''); }}
+                            className="flex items-center gap-1 text-[11px] font-bold text-slate-500 hover:text-white transition-colors px-2.5 py-1.5 rounded-lg hover:bg-white/5">
+                            <X size={11} /> Clear all
+                        </button>
+                    )}
                 </div>
 
-                <div className="pr-3 pl-4 border-l border-white/10">
-                    <span className="text-[11px] text-slate-500 font-bold tracking-wide uppercase">
-                        {displayedLeaves.length} {displayedLeaves.length === 1 ? 'Match' : 'Matches'}
-                        {periodFilter && <span className="ml-1 text-slate-400 normal-case">· {periodFilter.length === 4 ? periodFilter : new Date(periodFilter + '-01').toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>}
+                <div className="flex items-center gap-3 pr-2 pl-4 border-l border-white/10">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                        {displayedLeaves.length} Match{displayedLeaves.length !== 1 ? 'es' : ''}
                     </span>
                 </div>
             </div>
 
             {/* ── Table ───────────────────────────────────────────────────── */}
-            <div className="rounded-xl border border-white/[0.07] overflow-hidden bg-[#0A0A0A]">
+            <div className="rounded-xl border border-white/[0.07] overflow-hidden bg-white/[0.02]">
                 <div className="overflow-x-auto">
                     <table className="w-full">
                         <thead>
-                            <tr className="border-b border-white/[0.06] bg-[#0A0A0A] shadow-[0_1px_0_rgba(255,255,255,0.02)]">
+                            <tr className="border-b border-white/[0.06] bg-white/[0.03] shadow-[0_1px_0_rgba(255,255,255,0.02)]">
                                 {['Date', 'Employee', 'Client', 'Leave Type', 'Duration', 'Planned', 'Reason', 'Logged by', ''].map(h => (
                                     <th key={h} className="py-3 px-4 text-left text-[11px] font-bold tracking-[0.1em] uppercase text-slate-500 whitespace-nowrap first:pl-5 last:w-16">
                                         {h}
@@ -404,7 +517,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: AppUs
                                             transition={{ duration: 0.15 }} // Removed per-row stagger delay for instant tabular display
                                             className={`border-b border-white/[0.04] hover:bg-white/5 transition-colors group cursor-default
                                                 ${editingId === l.id ? 'bg-amber-500/[0.04] border-l-2 border-l-amber-500/40' : ''}`}>
-                                            <td className="py-3.5 px-4 pl-5 font-mono text-xs text-slate-500 whitespace-nowrap">{l.date}</td>
+                                            <td className="py-3.5 px-4 pl-5 font-mono text-xs text-slate-400 whitespace-nowrap">{fmtDate(l.date)}</td>
                                             <td className="py-3.5 px-4">
                                                 <div className="flex items-center gap-2">
                                                     <span className="w-6 h-6 rounded-md bg-white/5 text-[10px] font-black text-white flex items-center justify-center flex-shrink-0">

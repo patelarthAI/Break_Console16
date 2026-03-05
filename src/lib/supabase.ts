@@ -12,6 +12,7 @@ export const supabase = createClient(url, key, {
 export interface UserRow {
     id: string; name: string; client_name: string;
     is_master: boolean; is_approved: boolean;
+    shift_start: string; shift_end: string; timezone: string;
 }
 export interface LogRow {
     id: string; user_id: string; event_type: string;

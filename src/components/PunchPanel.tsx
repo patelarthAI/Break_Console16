@@ -84,7 +84,7 @@ export default function PunchPanel({ status, onPunchIn, onPunchOut, onStartBreak
             <div className="border-t border-white/10 my-1" />
 
             {/* Row 3 ── Punch In (full width) */}
-            <Btn onClick={onPunchIn} variant="electric" disabled={status !== 'idle'} glow={status === 'idle'} fullWidth>
+            <Btn onClick={onPunchIn} variant="electric" disabled={status !== 'idle' && status !== 'punched_out'} glow={status === 'idle'} fullWidth>
                 <LogIn size={17} /> Punch In
             </Btn>
 

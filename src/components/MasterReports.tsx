@@ -1,7 +1,7 @@
 'use client';
-import { useState, useCallback, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { Briefcase, FileText, Calendar, ChevronLeft, ChevronRight, Download, AlertTriangle, CheckCircle, BarChart2 } from 'lucide-react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Briefcase, FileText, Calendar, ChevronLeft, ChevronRight, Download, AlertTriangle, CheckCircle, BarChart2, Users, X, ChevronDown, Filter } from 'lucide-react';
 import { getAllUsers, getLogsForDate, getLogDatesForMonth, getClients, ClientRow } from '@/lib/store';
 import {
     computeSession, computeWorkedTime, computeTotalTime,
@@ -41,65 +41,99 @@ function weekLabel(weekOffset: number): string {
 }
 function monthLabel(d: Date): string { return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }); }
 
-interface DayRow { userId: string; name: string; clientName: string; date: string; punchIn?: number; punchOut?: number; workedMs: number; breakMs: number; brbMs: number; breakCount: number; brbCount: number; breakViol: boolean; brbViol: boolean; }
+interface DayRow { userId: string; name: string; clientName: string; date: string; punchIn?: number; punchOut?: number; workedMs: number; breakMs: number; brbMs: number; breakCount: number; brbCount: number; breakViol: boolean; brbViol: boolean; lateIn: boolean; earlyOut: boolean; }
 
-async function buildRow(userId: string, name: string, clientName: string, date: string): Promise<DayRow> {
+async function buildRow(
+    userId: string, name: string, clientName: string, date: string,
+    shiftStart = '08:00', shiftEnd = '17:00', timezone = 'America/Chicago'
+): Promise<DayRow> {
     const logs = await getLogsForDate(userId, date);
     const session = computeSession(logs);
     const now = Date.now();
     const breakMs = computeTotalTime(session.breaks, now);
     const brbMs = computeTotalTime(session.brbs, now);
-    const v = checkViolations(breakMs, brbMs);
-    return { userId, name, clientName, date, punchIn: session.punchIn, punchOut: session.punchOut, workedMs: computeWorkedTime(session, now), breakMs, brbMs, breakCount: countBreaks(logs), brbCount: countBRBs(logs), breakViol: v.breakViol, brbViol: v.brbViol };
+    const v = checkViolations(breakMs, brbMs, session.punchIn, session.punchOut, shiftStart, shiftEnd, timezone);
+    return { userId, name, clientName, date, punchIn: session.punchIn, punchOut: session.punchOut, workedMs: computeWorkedTime(session, now), breakMs, brbMs, breakCount: countBreaks(logs), brbCount: countBRBs(logs), breakViol: v.breakViol, brbViol: v.brbViol, lateIn: v.lateIn, earlyOut: v.earlyOut };
 }
 
-function ViolBadge({ breakViol, brbViol }: { breakViol: boolean; brbViol: boolean }) {
-    if (!breakViol && !brbViol) return <span className="text-emerald-400"><CheckCircle size={13} /></span>;
-    return (<div className="flex flex-col gap-0.5">{breakViol && <span className="flex items-center gap-1 text-rose-400 text-xs font-bold"><AlertTriangle size={10} />Break</span>}{brbViol && <span className="flex items-center gap-1 text-orange-400 text-xs font-bold"><AlertTriangle size={10} />BRB</span>}</div>);
+function ViolBadge({ breakViol, brbViol, lateIn, earlyOut }: { breakViol: boolean; brbViol: boolean; lateIn: boolean; earlyOut: boolean }) {
+    if (!breakViol && !brbViol && !lateIn && !earlyOut) return <span className="text-emerald-400"><CheckCircle size={13} /></span>;
+    return (
+        <div className="flex flex-col gap-0.5">
+            {breakViol && <span className="flex items-center gap-1 text-orange-400 text-[10px] font-bold"><AlertTriangle size={9} />Break</span>}
+            {brbViol && <span className="flex items-center gap-1 text-sky-400 text-[10px] font-bold"><AlertTriangle size={9} />BRB</span>}
+            {lateIn && <span className="flex items-center gap-1 text-amber-400 text-[10px] font-bold"><AlertTriangle size={9} />Late In</span>}
+            {earlyOut && <span className="flex items-center gap-1 text-purple-400 text-[10px] font-bold"><AlertTriangle size={9} />Early Out</span>}
+        </div>
+    );
 }
 
-interface Summary { totalWorked: number; totalBreak: number; totalBrb: number; breakCount: number; brbCount: number; breakViolDays: number; brbViolDays: number; daysWorked: number; }
+interface Summary { totalWorked: number; totalBreak: number; totalBrb: number; breakCount: number; brbCount: number; breakViolDays: number; brbViolDays: number; lateInDays: number; earlyOutDays: number; daysWorked: number; }
 function summarize(rows: DayRow[]): Summary {
-    return rows.reduce((a, r) => ({ totalWorked: a.totalWorked + r.workedMs, totalBreak: a.totalBreak + r.breakMs, totalBrb: a.totalBrb + r.brbMs, breakCount: a.breakCount + r.breakCount, brbCount: a.brbCount + r.brbCount, breakViolDays: a.breakViolDays + (r.breakViol ? 1 : 0), brbViolDays: a.brbViolDays + (r.brbViol ? 1 : 0), daysWorked: a.daysWorked + (r.workedMs > 0 ? 1 : 0) }),
-        { totalWorked: 0, totalBreak: 0, totalBrb: 0, breakCount: 0, brbCount: 0, breakViolDays: 0, brbViolDays: 0, daysWorked: 0 });
+    return rows.reduce((a, r) => ({
+        totalWorked: a.totalWorked + r.workedMs,
+        totalBreak: a.totalBreak + r.breakMs,
+        totalBrb: a.totalBrb + r.brbMs,
+        breakCount: a.breakCount + r.breakCount,
+        brbCount: a.brbCount + r.brbCount,
+        breakViolDays: a.breakViolDays + (r.breakViol ? 1 : 0),
+        brbViolDays: a.brbViolDays + (r.brbViol ? 1 : 0),
+        lateInDays: a.lateInDays + (r.lateIn ? 1 : 0),
+        earlyOutDays: a.earlyOutDays + (r.earlyOut ? 1 : 0),
+        daysWorked: a.daysWorked + (r.workedMs > 0 ? 1 : 0),
+    }), { totalWorked: 0, totalBreak: 0, totalBrb: 0, breakCount: 0, brbCount: 0, breakViolDays: 0, brbViolDays: 0, lateInDays: 0, earlyOutDays: 0, daysWorked: 0 });
 }
 
 function ReportTable({ rows, showDate, showName }: { rows: DayRow[]; showDate: boolean; showName: boolean; }) {
     if (!rows.length) return <p className="text-center text-slate-500 font-medium text-sm py-16 bg-black/20 rounded-[2rem] border border-white/5">No data for this period.</p>;
     return (
-        <div className="overflow-x-auto rounded-[1.5rem] border border-white/10 bg-black/40 backdrop-blur-xl shadow-2xl relative">
-            {/* Subtle glow behind table header */}
-            <div className="absolute top-0 left-0 right-0 h-10 bg-blue-500/10 blur-[20px] pointer-events-none" />
-
+        <div className="overflow-x-auto rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl shadow-2xl relative">
             <table className="w-full text-xs min-w-[700px] relative z-10">
                 <thead>
-                    <tr className="bg-white/5 text-slate-300 border-b border-white/10">
+                    <tr className="bg-white/[0.04] text-slate-400 border-b border-white/10">
                         {showName && <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px]">Name</th>}
                         {showDate && <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px]">Date</th>}
                         {showDate && <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px]">Day</th>}
-                        <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px]">In</th><th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px]">Out</th>
-                        <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px] text-[#ffd700]">Worked</th>
-                        <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px] text-amber-400">Breaks</th><th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px] text-amber-400">Break Time</th>
-                        <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px] text-[#3b82f6]">BRBs</th><th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px] text-[#3b82f6]">BRB Time</th>
-                        <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px] text-rose-400">⚠️</th>
+                        <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px] text-emerald-500">In</th>
+                        <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px] text-rose-500">Out</th>
+                        <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px] text-indigo-400">Worked</th>
+                        <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px] text-orange-400">Breaks</th>
+                        <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px] text-orange-400">Break Time</th>
+                        <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px] text-sky-400">BRBs</th>
+                        <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px] text-sky-400">BRB Time</th>
+                        <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px] text-purple-400">⏱ Total Break</th>
+                        <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px] text-rose-400">⚠ Violations</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                    {rows.map((r, i) => (
-                        <tr key={`${r.userId}-${r.date}-${i}`} className={`hover:bg-white/5 transition-colors ${r.breakViol || r.brbViol ? 'border-l-[3px] border-l-rose-500 bg-rose-500/5' : ''}`}>
-                            {showName && <td className="py-3 px-4 font-extrabold text-white whitespace-nowrap tracking-tight">{r.name}</td>}
-                            {showDate && <td className="py-3 px-4 text-slate-300 font-mono whitespace-nowrap">{r.date}</td>}
-                            {showDate && <td className="py-3 px-4 text-slate-400 font-medium whitespace-nowrap">{dayName(r.date)}</td>}
-                            <td className="py-3 px-4 text-emerald-400 font-mono font-bold whitespace-nowrap tracking-tight">{r.punchIn ? formatTime(r.punchIn) : <span className="text-slate-600">—</span>}</td>
-                            <td className="py-3 px-4 text-rose-400 font-mono font-bold whitespace-nowrap tracking-tight">{r.punchOut ? formatTime(r.punchOut) : <span className="text-blue-400 animate-pulse font-extrabold text-[10px] uppercase tracking-widest bg-blue-500/20 px-2 py-0.5 rounded-full border border-blue-500/30 shadow-[0_0_10px_rgba(59,130,246,0.3)]">Active</span>}</td>
-                            <td className="py-3 px-4 text-[#ffd700] font-mono font-extrabold whitespace-nowrap tracking-tight">{r.workedMs > 0 ? formatDuration(r.workedMs) : <span className="text-slate-600">—</span>}</td>
-                            <td className="py-3 px-4 text-amber-400 font-bold whitespace-nowrap">{r.breakCount > 0 ? r.breakCount : '—'}</td>
-                            <td className="py-3 px-4 text-amber-400 font-mono font-bold whitespace-nowrap tracking-tight">{r.breakMs > 0 ? formatDuration(r.breakMs) : '—'}</td>
-                            <td className="py-3 px-4 text-[#3b82f6] font-bold whitespace-nowrap">{r.brbCount > 0 ? r.brbCount : '—'}</td>
-                            <td className="py-3 px-4 text-[#3b82f6] font-mono font-bold whitespace-nowrap tracking-tight">{r.brbMs > 0 ? formatDuration(r.brbMs) : '—'}</td>
-                            <td className="py-3 px-4 whitespace-nowrap"><ViolBadge breakViol={r.breakViol} brbViol={r.brbViol} /></td>
-                        </tr>
-                    ))}
+                    {rows.map((r, i) => {
+                        const anyViol = r.breakViol || r.brbViol || r.lateIn || r.earlyOut;
+                        return (
+                            <tr key={`${r.userId}-${r.date}-${i}`} className={`hover:bg-white/[0.03] transition-colors ${anyViol ? 'border-l-2 border-l-rose-500/70 bg-rose-500/[0.04]' : ''}`}>
+                                {showName && <td className="py-3 px-4 font-extrabold text-white whitespace-nowrap tracking-tight">{r.name}</td>}
+                                {showDate && <td className="py-3 px-4 text-slate-300 font-mono whitespace-nowrap">{r.date}</td>}
+                                {showDate && <td className="py-3 px-4 text-slate-500 font-medium whitespace-nowrap">{dayName(r.date)}</td>}
+                                <td className="py-3 px-4 text-emerald-400 font-mono font-bold whitespace-nowrap tracking-tight">{r.punchIn ? formatTime(r.punchIn) : <span className="text-slate-600">—</span>}</td>
+                                <td className="py-3 px-4 font-mono font-bold whitespace-nowrap tracking-tight">{r.punchOut ? <span className="text-rose-400">{formatTime(r.punchOut)}</span> : <span className="text-sky-400 animate-pulse font-extrabold text-[10px] uppercase tracking-widest bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/30">Active</span>}</td>
+                                <td className="py-3 px-4 text-indigo-400 font-mono font-extrabold whitespace-nowrap tracking-tight">{r.workedMs > 0 ? formatDuration(r.workedMs) : <span className="text-slate-600">—</span>}</td>
+                                <td className="py-3 px-4 text-orange-400 font-bold whitespace-nowrap">{r.breakCount > 0 ? r.breakCount : '—'}</td>
+                                <td className="py-3 px-4 text-orange-400 font-mono font-bold whitespace-nowrap tracking-tight">{r.breakMs > 0 ? formatDuration(r.breakMs) : '—'}</td>
+                                <td className="py-3 px-4 text-sky-400 font-bold whitespace-nowrap">{r.brbCount > 0 ? r.brbCount : '—'}</td>
+                                <td className="py-3 px-4 text-sky-400 font-mono font-bold whitespace-nowrap tracking-tight">{r.brbMs > 0 ? formatDuration(r.brbMs) : '—'}</td>
+                                <td className="py-3 px-4 font-mono font-bold whitespace-nowrap tracking-tight">
+                                    {(r.breakMs + r.brbMs) > 0 ? (
+                                        <span className={`${(r.breakMs + r.brbMs) > 85 * 60 * 1000
+                                            ? 'text-rose-400'
+                                            : (r.breakMs + r.brbMs) > 60 * 60 * 1000
+                                                ? 'text-amber-400'
+                                                : 'text-purple-400'
+                                            }`}>{formatDuration(r.breakMs + r.brbMs)}</span>
+                                    ) : '—'}
+                                </td>
+                                <td className="py-3 px-4 whitespace-nowrap"><ViolBadge breakViol={r.breakViol} brbViol={r.brbViol} lateIn={r.lateIn} earlyOut={r.earlyOut} /></td>
+                            </tr>
+                        );
+                    })}
                 </tbody>
             </table>
         </div>
@@ -124,11 +158,11 @@ function UserSummaryCard({ name, rows }: { name: string; rows: DayRow[] }) {
             <div className="grid grid-cols-3 gap-3 text-center">
                 {[
                     { label: 'Days', val: `${s.daysWorked}d`, color: 'text-white' },
-                    { label: 'Total Worked', val: formatDuration(s.totalWorked), color: 'text-[#ffd700]' },
+                    { label: 'Total Worked', val: formatDuration(s.totalWorked), color: 'text-indigo-400' },
                     { label: 'Avg Break/day', val: formatDuration(avgBreak), color: avgBreak > BREAK_LIMIT_MS ? 'text-rose-400' : 'text-amber-400' },
-                    { label: 'Avg BRB/day', val: formatDuration(avgBrb), color: avgBrb > BRB_LIMIT_MS ? 'text-orange-400' : 'text-[#3b82f6]' },
-                    { label: 'Break Viols', val: s.breakViolDays, color: s.breakViolDays > 0 ? 'text-rose-400' : 'text-slate-500' },
-                    { label: 'BRB Viols', val: s.brbViolDays, color: s.brbViolDays > 0 ? 'text-orange-400' : 'text-slate-500' },
+                    { label: 'Avg BRB/day', val: formatDuration(avgBrb), color: avgBrb > BRB_LIMIT_MS ? 'text-sky-400' : 'text-blue-400' },
+                    { label: 'Break Viols', val: s.breakViolDays, color: s.breakViolDays > 0 ? 'text-orange-400' : 'text-slate-500' },
+                    { label: 'BRB Viols', val: s.brbViolDays, color: s.brbViolDays > 0 ? 'text-sky-400' : 'text-slate-500' },
                 ].map(stat => (
                     <div key={stat.label} className="bg-black/30 border border-white/5 rounded-[1rem] p-3 transition-colors hover:bg-black/50">
                         <p className="text-[10px] font-bold tracking-widest uppercase text-slate-500 mb-1">{stat.label}</p>
@@ -140,6 +174,8 @@ function UserSummaryCard({ name, rows }: { name: string; rows: DayRow[] }) {
     );
 }
 
+type ViolFilter = 'late_in' | 'break' | 'brb' | 'all' | null;
+
 export default function MasterReports() {
     const [range, setRange] = useState<DateRange>('today');
     const [weekOffset, setWeekOffset] = useState(0);
@@ -147,8 +183,26 @@ export default function MasterReports() {
     const [rows, setRows] = useState<DayRow[]>([]);
     const [loading, setLoading] = useState(false);
     const [clients, setClients] = useState<ClientRow[]>([]);
-    const [selectedClient, setSelectedClient] = useState<string>('all');
+    const [selectedClients, setSelectedClients] = useState<string[]>([]);
+    const [clientDropOpen, setClientDropOpen] = useState(false);
+    const clientDropRef = useRef<HTMLDivElement>(null);
     const [loadingClients, setLoadingClients] = useState(true);
+    // Name search + chips
+    const [recruiterSearch, setRecruiterSearch] = useState('');
+    const [selectedRecruiters, setSelectedRecruiters] = useState<string[]>([]);
+    const recruiterRef = useRef<HTMLDivElement>(null);
+    // Violation filter tile
+    const [violationFilter, setViolationFilter] = useState<ViolFilter>(null);
+
+    // Close client dropdown on outside click
+    useEffect(() => {
+        if (!clientDropOpen) return;
+        function handleOutside(e: MouseEvent) {
+            if (clientDropRef.current && !clientDropRef.current.contains(e.target as Node)) setClientDropOpen(false);
+        }
+        document.addEventListener('mousedown', handleOutside);
+        return () => document.removeEventListener('mousedown', handleOutside);
+    }, [clientDropOpen]);
 
     useEffect(() => {
         getClients().then(data => {
@@ -169,18 +223,18 @@ export default function MasterReports() {
 
             if (range === 'today') {
                 const today = dateStr(now);
-                await Promise.all(users.map(async (u) => { newRows.push(await buildRow(u.id, u.name, u.clientName, today)); }));
+                await Promise.all(users.map(async (u) => { newRows.push(await buildRow(u.id, u.name, u.clientName, today, u.shiftStart, u.shiftEnd, u.timezone)); }));
             } else if (range === 'yesterday') {
                 const yest = new Date(now); yest.setDate(yest.getDate() - 1);
-                await Promise.all(users.map(async (u) => { newRows.push(await buildRow(u.id, u.name, u.clientName, dateStr(yest))); }));
+                await Promise.all(users.map(async (u) => { newRows.push(await buildRow(u.id, u.name, u.clientName, dateStr(yest), u.shiftStart, u.shiftEnd, u.timezone)); }));
             } else if (range === 'week') {
                 const dates = getWeekDates(weekOffset);
-                await Promise.all(users.flatMap((u) => dates.map(async (d) => { newRows.push(await buildRow(u.id, u.name, u.clientName, d)); })));
+                await Promise.all(users.flatMap((u) => dates.map(async (d) => { newRows.push(await buildRow(u.id, u.name, u.clientName, d, u.shiftStart, u.shiftEnd, u.timezone)); })));
             } else if (range === 'month') {
                 const refDate = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
                 const ym = yearMonthStr(refDate);
                 const dates = getMonthWorkDates(ym);
-                await Promise.all(users.flatMap((u) => dates.map(async (d) => { newRows.push(await buildRow(u.id, u.name, u.clientName, d)); })));
+                await Promise.all(users.flatMap((u) => dates.map(async (d) => { newRows.push(await buildRow(u.id, u.name, u.clientName, d, u.shiftStart, u.shiftEnd, u.timezone)); })));
             }
             setRows(['week', 'month'].includes(range) ? newRows.filter(r => r.punchIn || r.workedMs > 0) : newRows);
         } finally { setLoading(false); }
@@ -194,62 +248,176 @@ export default function MasterReports() {
 
     const handleCSV = () => {
         const isMultiDay = ['week', 'month'].includes(range);
-        const header = ['Name', 'Client', ...(isMultiDay ? ['Date', 'Day'] : []), 'Punch In', 'Punch Out', 'Worked', 'Breaks #', 'Break Time', 'BRBs #', 'BRB Time', 'Break Violation', 'BRB Violation'];
-        const data = filteredRows.map(r => [r.name, r.clientName, ...(isMultiDay ? [r.date, dayName(r.date)] : []), r.punchIn ? formatTime(r.punchIn) : '', r.punchOut ? formatTime(r.punchOut) : '', formatDuration(r.workedMs), r.breakCount, formatDuration(r.breakMs), r.brbCount, formatDuration(r.brbMs), r.breakViol ? 'YES' : 'No', r.brbViol ? 'YES' : 'No']);
+        const header = ['Name', 'Client', ...(isMultiDay ? ['Date', 'Day'] : []), 'Punch In', 'Punch Out', 'Worked', 'Breaks #', 'Break Time', 'BRBs #', 'BRB Time', 'Total Break', 'Break Viol', 'BRB Viol', 'Late In', 'Early Out'];
+        const data = filteredRows.map(r => [r.name, r.clientName, ...(isMultiDay ? [r.date, dayName(r.date)] : []), r.punchIn ? formatTime(r.punchIn) : '', r.punchOut ? formatTime(r.punchOut) : '', formatDuration(r.workedMs), r.breakCount, formatDuration(r.breakMs), r.brbCount, formatDuration(r.brbMs), formatDuration(r.breakMs + r.brbMs), r.breakViol ? 'YES' : 'No', r.brbViol ? 'YES' : 'No', r.lateIn ? 'YES' : 'No', r.earlyOut ? 'YES' : 'No']);
         const s = summarize(filteredRows.filter(r => r.workedMs > 0));
-        exportExcel([header, ...data, [], ['TOTALS', '', ...(isMultiDay ? ['', ''] : []), '', '', formatDuration(s.totalWorked), s.breakCount, formatDuration(s.totalBreak), s.brbCount, formatDuration(s.totalBrb), `${s.breakViolDays} day(s)`, `${s.brbViolDays} day(s)`], [], ['Violation Limits:', 'Break > 1h 15m per day', 'BRB > 10m per day']], 'data-report');
+        const lateInDays = filteredRows.filter(r => r.lateIn).length;
+        const earlyOutDays = filteredRows.filter(r => r.earlyOut).length;
+        exportExcel([header, ...data, [], ['TOTALS', '', ...(isMultiDay ? ['', ''] : []), '', '', formatDuration(s.totalWorked), s.breakCount, formatDuration(s.totalBreak), s.brbCount, formatDuration(s.totalBrb), `${s.breakViolDays} day(s)`, `${s.brbViolDays} day(s)`, `${lateInDays} day(s)`, `${earlyOutDays} day(s)`], [], ['Policy Rules', 'Break allowance: 1h | Max: 1h 15m', 'BRB max: 10m/day', 'Shift: 8:00 AM CST | Grace: 8:05 AM', 'Shift end: 5:00 PM CST']], 'data-report');
     };
+
+
+
 
     const now = new Date();
     const refDate = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
     const isMultiDay = ['week', 'month'].includes(range);
 
-    const filteredRows = selectedClient === 'all' ? rows : rows.filter(r => r.clientName === selectedClient);
+    // All recruiter names for typeahead
+    const allRecruiters = [...new Set(rows.map(r => r.name))].sort();
+    const filteredSuggestions = recruiterSearch.trim()
+        ? allRecruiters.filter(n => n.toLowerCase().includes(recruiterSearch.toLowerCase()) && !selectedRecruiters.includes(n))
+        : [];
+    const addRecruiter = (name: string) => { setSelectedRecruiters(prev => prev.includes(name) ? prev : [...prev, name]); setRecruiterSearch(''); };
+    const removeRecruiter = (name: string) => setSelectedRecruiters(prev => prev.filter(n => n !== name));
+
+    const clientFiltered = selectedClients.length === 0 ? rows : rows.filter(r => selectedClients.includes(r.clientName));
+    const recruiterFiltered = clientFiltered.filter(r => selectedRecruiters.length === 0 || selectedRecruiters.includes(r.name));
+
+    // Violation tile filter — also auto-sorted by total break (break + BRB) descending
+    const filteredRows = (violationFilter === null ? recruiterFiltered
+        : violationFilter === 'late_in' ? recruiterFiltered.filter(r => r.lateIn)
+            : violationFilter === 'break' ? recruiterFiltered.filter(r => r.breakViol)
+                : violationFilter === 'brb' ? recruiterFiltered.filter(r => r.brbViol)
+                    : recruiterFiltered.filter(r => r.lateIn || r.breakViol || r.brbViol || r.earlyOut)
+    ).slice().sort((a, b) => (b.breakMs + b.brbMs) - (a.breakMs + a.brbMs));
+
+    // Summary always based on un-violation-filtered data for the tile counts to stay stable
+    const baseS = summarize(recruiterFiltered.filter(r => r.workedMs > 0));
     const uniqueUsers = [...new Set(filteredRows.map(r => r.userId))];
     const allS = summarize(filteredRows.filter(r => r.workedMs > 0));
+    const totalViol = baseS.breakViolDays + baseS.brbViolDays + baseS.lateInDays + baseS.earlyOutDays;
+    // Avg worked per unique user
+    const uniqueUserCount = [...new Set(recruiterFiltered.map(r => r.userId))].length || 1;
+    const avgWorkedMs = baseS.totalWorked / uniqueUserCount;
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-5">
+            {/* ── Header row ────────────────────────────────────────────── */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                     <div className="p-2 bg-gradient-to-br from-blue-600/20 to-blue-500/10 rounded-xl border border-blue-500/30 shadow-[inset_0_0_15px_rgba(59,130,246,0.2)]">
                         <FileText size={20} className="text-blue-400 drop-shadow-[0_0_8px_rgba(59,130,246,0.8)]" />
                     </div>
-                    <h2 className="font-extrabold text-white text-lg tracking-tight">Data Reports</h2>
-                    <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400 border border-white/10 bg-white/5 px-2.5 py-1 rounded-full ml-2">Mon–Fri</span>
+                    <h2 className="font-black text-white text-lg tracking-tight">Data Reports</h2>
+                    <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400 border border-white/10 bg-white/5 px-2.5 py-1 rounded-full">Mon–Fri</span>
                 </div>
-                <div className="flex items-center gap-3">
-                    <div className="relative group">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <Briefcase size={12} className="text-slate-500 group-focus-within:text-blue-400 transition-colors duration-300" />
-                        </div>
-                        <select
-                            value={selectedClient}
-                            onChange={(e) => setSelectedClient(e.target.value)}
+                <motion.button onClick={handleCSV} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} disabled={filteredRows.length === 0}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 border border-emerald-400/30 text-white text-xs font-bold tracking-wider hover:from-emerald-500 hover:to-emerald-400 transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-40 disabled:grayscale">
+                    <Download size={14} /> Export Excel
+                </motion.button>
+            </div>
+
+            {/* ── Filter bar — matching Live Dashboard style ─────────────── */}
+            <div className="flex z-10 items-center justify-between bg-black/60 backdrop-blur-md p-2.5 rounded-2xl border border-white/10 shadow-lg relative flex-wrap gap-2">
+                <div className="flex items-center gap-2 flex-1 flex-wrap">
+                    {/* Multi-select client dropdown */}
+                    <div className="relative" ref={clientDropRef}>
+                        <button
+                            onClick={() => setClientDropOpen(o => !o)}
                             disabled={loadingClients}
-                            className="bg-white/[0.03] border border-white/10 rounded-lg py-1.5 pl-8 pr-8 text-xs text-white focus:outline-none focus:bg-white/[0.05] focus:border-blue-500/50 appearance-none min-w-[140px]"
+                            className="flex items-center gap-1.5 px-3 py-2 bg-transparent hover:bg-white/[0.04] rounded-xl transition-colors text-[13px] font-bold text-slate-300"
                         >
-                            <option value="all" className="bg-slate-900 text-white">All Clients</option>
-                            {clients.map(c => (
-                                <option key={c.id} value={c.name} className="bg-slate-900 text-white">{c.name}</option>
-                            ))}
-                        </select>
-                        <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none text-slate-500 group-focus-within:text-blue-400">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
-                        </div>
+                            <Filter size={14} className="text-slate-500" />
+                            {selectedClients.length === 0 ? 'All Clients' : `${selectedClients.length} Clients`}
+                            <ChevronDown size={14} className={`text-slate-500 transition-transform ${clientDropOpen ? 'rotate-180' : ''}`} />
+                        </button>
+                        <AnimatePresence>
+                            {clientDropOpen && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 4, scale: 0.98 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: 4, scale: 0.98 }}
+                                    className="absolute top-full left-0 mt-2 w-56 bg-[#0C0C14] border border-white/10 rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.8)] overflow-hidden z-[100] py-1"
+                                >
+                                    <div className="px-3 py-2 border-b border-white/[0.06] flex items-center justify-between">
+                                        <button onClick={() => setSelectedClients(clients.map(c => c.name))} className="text-[10px] font-bold tracking-widest text-indigo-400 hover:text-indigo-300 uppercase">Select All</button>
+                                        <button onClick={() => setSelectedClients([])} className="text-[10px] font-bold text-slate-600 hover:text-white uppercase tracking-widest">Clear</button>
+                                    </div>
+                                    <div className="max-h-64 overflow-y-auto">
+                                        {clients.map(c => {
+                                            const checked = selectedClients.includes(c.name);
+                                            return (
+                                                <button
+                                                    key={c.id}
+                                                    onClick={() => setSelectedClients(prev =>
+                                                        prev.includes(c.name) ? prev.filter(n => n !== c.name) : [...prev, c.name]
+                                                    )}
+                                                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left transition-all ${checked ? 'bg-indigo-500/15 text-white font-bold' : 'text-slate-300 hover:bg-white/5 font-medium'}`}
+                                                >
+                                                    <span className={`w-4 h-4 rounded-md border flex items-center justify-center flex-shrink-0 transition-all ${checked ? 'bg-emerald-500 border-emerald-500' : 'border-slate-600'}`}>
+                                                        {checked && <span className="text-black text-[10px] font-black">✓</span>}
+                                                    </span>
+                                                    {c.name}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </div>
 
-                    <motion.button onClick={handleCSV} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} disabled={filteredRows.length === 0}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 border border-emerald-400/30 text-white text-xs font-bold tracking-wider hover:from-emerald-500 hover:to-emerald-400 transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-40 disabled:grayscale">
-                        <Download size={14} /> Export Excel
-                    </motion.button>
+                    <div className="w-px h-6 bg-white/10" />
+
+                    {/* Name typeahead search */}
+                    <div className="relative" ref={recruiterRef}>
+                        <div className="flex items-center gap-2 bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 min-w-[200px] focus-within:border-white/20 transition-all">
+                            <Users size={14} className="text-slate-500 flex-shrink-0" />
+                            <input
+                                type="text"
+                                placeholder="Search recruiter…"
+                                value={recruiterSearch}
+                                onChange={e => setRecruiterSearch(e.target.value)}
+                                className="bg-transparent text-sm text-white placeholder:text-slate-500 focus:outline-none w-full font-semibold"
+                            />
+                            {recruiterSearch && <button onClick={() => setRecruiterSearch('')} className="text-slate-600 hover:text-white"><X size={10} /></button>}
+                        </div>
+                        {/* Suggestions dropdown */}
+                        <AnimatePresence>
+                            {filteredSuggestions.length > 0 && (
+                                <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+                                    className="absolute top-full left-0 mt-1 z-50 w-52 rounded-xl border border-white/10 bg-[#0C0C14] backdrop-blur-xl shadow-2xl py-1">
+                                    {filteredSuggestions.slice(0, 8).map(name => (
+                                        <button key={name} onClick={() => addRecruiter(name)}
+                                            className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-white/5 hover:text-white transition-all font-medium">
+                                            {name}
+                                        </button>
+                                    ))}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+
+                    {/* Name chips */}
+                    {selectedRecruiters.map(name => (
+                        <span key={name} className="flex items-center gap-1 text-[11px] font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 px-2.5 py-1 rounded-full">
+                            {name}
+                            <button onClick={() => removeRecruiter(name)} className="text-indigo-400 hover:text-white transition-colors"><X size={10} /></button>
+                        </span>
+                    ))}
+
+                    {/* Violation filter chip (when active) */}
+                    {violationFilter && (
+                        <span className="flex items-center gap-1 text-[11px] font-bold bg-rose-500/15 text-rose-300 border border-rose-500/30 px-2.5 py-1 rounded-full">
+                            {violationFilter === 'late_in' ? '🔴 Late Logins' : violationFilter === 'break' ? '☕ Break Exceeds' : violationFilter === 'brb' ? '🔄 BRB Exceeds' : '⚠️ All Violations'}
+                            <button onClick={() => setViolationFilter(null)} className="text-rose-400 hover:text-white transition-colors"><X size={10} /></button>
+                        </span>
+                    )}
+                </div>
+
+                <div className="flex items-center gap-3 pr-2 pl-4 border-l border-white/10">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                        {filteredRows.length} Match{filteredRows.length !== 1 ? 'es' : ''}
+                    </span>
                 </div>
             </div>
 
+            {/* ── Date range tabs — matching Live Dashboard segmented control ── */}
             <div className="glass-card rounded-[1.5rem] p-1.5 grid grid-cols-4 gap-1 bg-black/20">
                 {(['today', 'yesterday', 'week', 'month'] as const).map((r) => (
                     <button key={r} onClick={() => setRange(r)}
-                        className={`flex items-center justify-center gap-1.5 py-3 rounded-[1.2rem] text-sm font-bold tracking-wide transition-all duration-300 ${range === r ? 'bg-blue-600/90 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)] border border-blue-400/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
+                        className={`flex items-center justify-center gap-1.5 py-3 rounded-[1.2rem] text-sm font-bold tracking-wide transition-all duration-300 ${range === r ? 'bg-indigo-600 text-white shadow-[0_4px_20px_rgba(99,102,241,0.4)] border border-indigo-400/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
                         <Calendar size={14} /> {r === 'today' ? 'Today' : r === 'yesterday' ? 'Yesterday' : r === 'week' ? 'Past Week' : 'Past Month'}
                     </button>
                 ))}
@@ -272,24 +440,81 @@ export default function MasterReports() {
 
             {loading && <p className="text-center text-slate-500 font-medium text-sm py-16 animate-pulse">Processing report data…</p>}
 
-            {!loading && allS.daysWorked > 0 && (
-                <div className="grid grid-cols-3 gap-4">
-                    {[
-                        { label: isMultiDay ? 'Total Team Hours' : 'Today\'s Total', val: formatDuration(allS.totalWorked), color: 'text-[#ffd700]', bg: 'bg-black/40 border-[#ffd700]/30 shadow-[inset_0_0_20px_rgba(255,215,0,0.1)]' },
-                        { label: isMultiDay ? 'Avg Break time' : 'Total Break time', val: formatDuration(isMultiDay && allS.daysWorked > 0 ? allS.totalBreak / allS.daysWorked : allS.totalBreak), color: 'text-amber-400', bg: 'bg-black/40 border-amber-500/30 shadow-[inset_0_0_20px_rgba(245,158,11,0.1)]' },
-                        { label: 'Total Violations', val: `${allS.breakViolDays + allS.brbViolDays}`, color: allS.breakViolDays + allS.brbViolDays > 0 ? 'text-rose-400' : 'text-emerald-400', bg: allS.breakViolDays + allS.brbViolDays > 0 ? 'bg-rose-900/20 border-rose-500/40 shadow-[0_0_20px_rgba(244,63,94,0.15)]' : 'bg-emerald-900/10 border-emerald-500/30' },
-                    ].map(s => (
-                        <div key={s.label} className={`border rounded-[1.5rem] p-4 text-center backdrop-blur-md transition-all hover:scale-105 ${s.bg}`}>
-                            <p className="text-[10px] font-bold tracking-widest uppercase text-slate-400 mb-1.5">{s.label}</p>
-                            <p className={`text-2xl font-black font-mono tracking-tighter ${s.color}`}>{s.val}</p>
+            {/* ── VIOLATIONS DASHBOARD ─────────────────────────────────────────── */}
+            {!loading && baseS.daysWorked > 0 && (
+                <div className="space-y-3">
+                    <div className="grid grid-cols-5 gap-3">
+                        {/* Avg Worked — display only */}
+                        <div className="rounded-2xl border border-indigo-500/30 bg-indigo-500/5 p-4 flex flex-col gap-1">
+                            <p className="text-[10px] font-bold tracking-widest uppercase text-slate-500">Avg Worked / Person</p>
+                            <p className="text-2xl font-black font-mono tabular-nums text-indigo-400">{formatDuration(avgWorkedMs)}</p>
+                            <p className="text-[9px] text-slate-600">{uniqueUserCount} people · {range}</p>
                         </div>
-                    ))}
+
+                        {/* Clickable violation tiles */}
+                        {([
+                            { key: 'late_in' as ViolFilter, label: 'Late Logins', count: baseS.lateInDays, icon: '🔴', active: 'border-amber-500/60 bg-amber-500/10', idle: baseS.lateInDays > 0 ? 'border-amber-500/30 bg-amber-500/5' : 'border-white/8 bg-black/30', num: baseS.lateInDays > 0 ? 'text-amber-400' : 'text-slate-600' },
+                            { key: 'break' as ViolFilter, label: 'Break Exceeds', count: baseS.breakViolDays, icon: '☕', active: 'border-orange-500/60 bg-orange-500/10', idle: baseS.breakViolDays > 0 ? 'border-orange-500/30 bg-orange-500/5' : 'border-white/8 bg-black/30', num: baseS.breakViolDays > 0 ? 'text-orange-400' : 'text-slate-600' },
+                            { key: 'brb' as ViolFilter, label: 'BRB Exceeds', count: baseS.brbViolDays, icon: '🔄', active: 'border-sky-500/60 bg-sky-500/10', idle: baseS.brbViolDays > 0 ? 'border-sky-500/30 bg-sky-500/5' : 'border-white/8 bg-black/30', num: baseS.brbViolDays > 0 ? 'text-sky-400' : 'text-slate-600' },
+                            { key: 'all' as ViolFilter, label: 'Total Violations', count: totalViol, icon: '⚠️', active: 'border-rose-500/60 bg-rose-500/10', idle: totalViol > 0 ? 'border-rose-500/30 bg-rose-500/5' : 'border-emerald-500/20 bg-emerald-500/5', num: totalViol > 0 ? 'text-rose-400' : 'text-emerald-400' },
+                        ]).map(t => {
+                            const isActive = violationFilter === t.key;
+                            return (
+                                <button key={t.label}
+                                    onClick={() => setViolationFilter(isActive ? null : t.key)}
+                                    className={`rounded-2xl border p-4 flex flex-col gap-1 text-left transition-all hover:brightness-110 relative overflow-hidden
+                                        ${isActive ? t.active : t.idle}
+                                        ${t.count === 0 ? 'cursor-default' : 'cursor-pointer'}`}>
+                                    {isActive && <div className="absolute top-0 inset-x-0 h-0.5 bg-current opacity-60" />}
+                                    <p className="text-[10px] font-bold tracking-widest uppercase text-slate-500">{t.label}</p>
+                                    <p className={`text-2xl font-black font-mono tabular-nums ${t.num}`}>{t.count}</p>
+                                    {isActive && <p className="text-[9px] text-slate-500 mt-0.5">↓ filtered below</p>}
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {/* When a violation tile is active: group results by client */}
+                    {violationFilter && filteredRows.length > 0 && (() => {
+                        const byClient = filteredRows.reduce((acc, r) => {
+                            if (!acc[r.clientName]) acc[r.clientName] = [];
+                            acc[r.clientName].push(r);
+                            return acc;
+                        }, {} as Record<string, DayRow[]>);
+                        return (
+                            <div className="rounded-2xl border border-white/8 bg-black/30 p-4 space-y-3">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                                    {filteredRows.length} record{filteredRows.length !== 1 ? 's' : ''} · grouped by client
+                                </p>
+                                {Object.entries(byClient).sort(([a], [b]) => a.localeCompare(b)).map(([client, cRows]) => (
+                                    <div key={client}>
+                                        <div className="flex items-center gap-2 mb-1.5">
+                                            <Briefcase size={11} className="text-slate-600" />
+                                            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{client}</p>
+                                            <span className="text-[10px] text-slate-600">{cRows.length}</span>
+                                        </div>
+                                        <div className="flex flex-wrap gap-1.5 pl-4">
+                                            {[...new Set(cRows.map(r => r.name))].map(name => (
+                                                <button key={name}
+                                                    onClick={() => addRecruiter(name)}
+                                                    className="text-[11px] font-semibold bg-white/[0.04] hover:bg-indigo-500/15 border border-white/8 hover:border-indigo-500/30 text-slate-300 hover:text-indigo-200 px-2.5 py-1 rounded-full transition-all">
+                                                    {name}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        );
+                    })()}
                 </div>
             )}
 
             <div className="flex items-center gap-4 text-[10px] font-bold tracking-widest uppercase text-slate-400 px-2">
-                <span className="flex items-center gap-1.5 bg-black/40 px-3 py-1.5 rounded-full border border-white/5"><AlertTriangle size={12} className="text-rose-400 drop-shadow-[0_0_5px_rgba(244,63,94,0.8)]" /> Break &gt; 1h 15m</span>
-                <span className="flex items-center gap-1.5 bg-black/40 px-3 py-1.5 rounded-full border border-white/5"><AlertTriangle size={12} className="text-orange-400 drop-shadow-[0_0_5px_rgba(251,146,60,0.8)]" /> BRB &gt; 10m</span>
+                <span className="flex items-center gap-1.5 bg-black/40 px-3 py-1.5 rounded-full border border-white/5"><AlertTriangle size={12} className="text-orange-400" /> Break &gt; 1h 15m</span>
+                <span className="flex items-center gap-1.5 bg-black/40 px-3 py-1.5 rounded-full border border-white/5"><AlertTriangle size={12} className="text-sky-400" /> BRB &gt; 10m</span>
+                <span className="flex items-center gap-1.5 bg-black/40 px-3 py-1.5 rounded-full border border-white/5"><AlertTriangle size={12} className="text-amber-400" /> Login after 8:05 AM CST</span>
+                <span className="flex items-center gap-1.5 bg-black/40 px-3 py-1.5 rounded-full border border-white/5"><AlertTriangle size={12} className="text-purple-400" /> Logout before 5:00 PM CST</span>
             </div>
 
             {!loading && <ReportTable rows={filteredRows} showDate={isMultiDay} showName={true} />}

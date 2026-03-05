@@ -20,6 +20,9 @@ export interface User {
   clientName: string;   // replaces email — groups users by client
   isMaster: boolean;
   isApproved: boolean;  // must be approved by master before accessing app
+  shiftStart: string;   // HH:MM in 24h, e.g. "08:00"
+  shiftEnd: string;     // HH:MM in 24h, e.g. "17:00"
+  timezone: string;     // IANA timezone, e.g. "America/Chicago"
 }
 
 export type AppStatus = 'idle' | 'working' | 'on_break' | 'on_brb' | 'punched_out' | 'on_leave';
@@ -46,4 +49,12 @@ export interface LeaveRecord {
   leave_type: string;
   day_count: number;
   created_at?: string;
+}
+
+export interface AppNotification {
+  id: string;
+  message: string;
+  createdBy: string | null;
+  createdAt: string;
+  isActive: boolean;
 }

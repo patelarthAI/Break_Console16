@@ -3,7 +3,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LogOut, BarChart2, Clock as ClockIcon, Users, Activity,
-  FileBarChart2, UserX, Settings, CalendarDays, Briefcase, Pencil, X, Search
+  FileBarChart2, UserX, Settings, CalendarDays, Briefcase, Pencil, X, Search, Bell, Trash2
 } from 'lucide-react';
 import { useToast } from '@/components/Toast';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -17,17 +17,83 @@ import MasterConsole from '@/components/MasterConsole';
 import MasterReports from '@/components/MasterReports';
 import BreakDashboard from '@/components/BreakDashboard';
 import MasterLeaveTracker from '@/components/MasterLeaveTracker';
-import { User, TimeLog, AppStatus } from '@/types';
-import { getCurrentUser, setCurrentUser, getLogs, insertLog, getClients, addClient, deleteClient, ClientRow, getAllUsers, updateUser, getPendingUsers } from '@/lib/store';
+import NotificationPanel from '@/components/NotificationPanel';
+import { User, TimeLog, AppStatus, AppNotification } from '@/types';
+import {
+  getCurrentUser, setCurrentUser, getLogs, insertLog, getClients, addClient, deleteClient,
+  ClientRow, getAllUsers, updateUser, getPendingUsers,
+  getAllNotifications, createNotification, deleteNotification
+} from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 import {
   computeSession, computeWorkedTime, computeTotalTime,
-  formatDuration, generateUUID, getTodayKey,
+  formatDuration, generateUUID, getTodayKey, setServerOffset, getRealNow
 } from '@/lib/timeUtils';
 import { useClock } from '@/hooks/useClock';
 
 type MasterTab = 'dashboard' | 'reports' | 'leaves' | 'settings';
 type UserTab = 'tracker' | 'team';
+
+// ─── Custom Time Picker ───────────────────────────────────────────────────────
+function CustomTimePicker({ value, onChange }: { value: string, onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const options = [];
+  for (let i = 0; i < 24; i++) {
+    for (let j = 0; j < 60; j += 30) {
+      const h = i.toString().padStart(2, '0');
+      const m = j.toString().padStart(2, '0');
+      options.push(`${h}:${m}`);
+    }
+  }
+
+  const formatDisplay = (h24: string) => {
+    if (!h24) return '--:-- AM';
+    const [h, m] = h24.split(':');
+    let hr = parseInt(h, 10);
+    const ampm = hr >= 12 ? 'PM' : 'AM';
+    if (hr > 12) hr -= 12;
+    if (hr === 0) hr = 12;
+    return `${hr.toString().padStart(2, '0')}:${m} ${ampm}`;
+  };
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between bg-white/[0.04] border border-white/10 rounded-xl py-2.5 px-3 text-white text-sm focus:outline-none focus:border-blue-500/50 transition-all hover:bg-white/[0.06]"
+      >
+        <span className="font-semibold">{value ? formatDisplay(value) : '--:-- AM'}</span>
+        <ClockIcon size={13} className="text-slate-500" />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <>
+            <div className="fixed inset-0 z-[150]" onClick={(e) => { e.stopPropagation(); setOpen(false); }} />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: -5 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: -5 }}
+              className="absolute top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-[#131326] border border-blue-500/30 rounded-xl shadow-2xl shadow-blue-900/10 z-[200] scrollbar-thin scrollbar-thumb-white/10"
+            >
+              <div className="flex flex-col py-1.5 px-1.5">
+                {options.map(opt => (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => { onChange(opt); setOpen(false); }}
+                    className={`text-left rounded-lg px-3 py-1.5 text-[13px] font-semibold transition-colors ${value === opt ? 'bg-blue-500/20 text-blue-400' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}
+                  >
+                    {formatDisplay(opt)}
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 // ─── Pending Approval Screen ──────────────────────────────────────────────────
 function PendingApproval({ user, onLogout }: { user: User; onLogout: () => void }) {
@@ -66,7 +132,7 @@ function PendingApproval({ user, onLogout }: { user: User; onLogout: () => void 
 // ─── Settings Panel (Clients + Users) ────────────────────────────────────────
 function SettingsPanel() {
   const { success, error: toastError, warning } = useToast();
-  const [settingsTab, setSettingsTab] = useState<'clients' | 'users'>('clients');
+  const [settingsTab, setSettingsTab] = useState<'clients' | 'users' | 'notifications'>('clients');
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [newClientName, setNewClientName] = useState('');
   const [loadingClients, setLoadingClients] = useState(true);
@@ -76,11 +142,19 @@ function SettingsPanel() {
   const [editName, setEditName] = useState('');
   const [editClient, setEditClient] = useState('');
   const [editApproved, setEditApproved] = useState(true);
+  const [editShiftStart, setEditShiftStart] = useState('08:00');
+  const [editShiftEnd, setEditShiftEnd] = useState('17:00');
+  const [editTimezone, setEditTimezone] = useState('America/Chicago');
   const [saving, setSaving] = useState(false);
   const [userSearch, setUserSearch] = useState('');
   const [pendingCount, setPendingCount] = useState(0);
+  // Notifications
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [newNotif, setNewNotif] = useState('');
+  const [loadingNotifs, setLoadingNotifs] = useState(false);
+  const adminId = getCurrentUser()?.id ?? '';
   // ConfirmDialog state
-  const [confirmDelete, setConfirmDelete] = useState<{ type: 'client' | 'user'; id: string; name: string } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ type: 'client' | 'user' | 'notification'; id: string; name: string } | null>(null);
 
   useEffect(() => {
     getClients().then(d => setClients(d)).finally(() => setLoadingClients(false));
@@ -91,6 +165,10 @@ function SettingsPanel() {
     if (settingsTab === 'users' && allUsers.length === 0) {
       setLoadingUsers(true);
       getAllUsers().then(d => setAllUsers(d)).finally(() => setLoadingUsers(false));
+    }
+    if (settingsTab === 'notifications' && notifications.length === 0) {
+      setLoadingNotifs(true);
+      getAllNotifications().then(d => setNotifications(d)).finally(() => setLoadingNotifs(false));
     }
   }, [settingsTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -116,7 +194,13 @@ function SettingsPanel() {
   }
 
   function openEditUser(u: User) {
-    setEditUser(u); setEditName(u.name); setEditClient(u.clientName); setEditApproved(u.isApproved);
+    setEditUser(u);
+    setEditName(u.name);
+    setEditClient(u.clientName);
+    setEditApproved(u.isApproved);
+    setEditShiftStart(u.shiftStart ?? '08:00');
+    setEditShiftEnd(u.shiftEnd ?? '17:00');
+    setEditTimezone(u.timezone ?? 'America/Chicago');
   }
 
   async function saveEditUser(e: React.FormEvent) {
@@ -124,7 +208,14 @@ function SettingsPanel() {
     if (!editUser) return;
     setSaving(true);
     try {
-      const updated = await updateUser(editUser.id, { name: editName.trim(), clientName: editClient, isApproved: editApproved });
+      const updated = await updateUser(editUser.id, {
+        name: editName.trim(),
+        clientName: editClient,
+        isApproved: editApproved,
+        shiftStart: editShiftStart,
+        shiftEnd: editShiftEnd,
+        timezone: editTimezone,
+      });
       setAllUsers(prev => prev.map(u => u.id === updated.id ? updated : u));
       setEditUser(null);
       success('User updated', `${editName.trim()} has been saved.`);
@@ -141,6 +232,28 @@ function SettingsPanel() {
     success('User deleted', `${name} and all their logs have been removed.`);
   }
 
+  async function confirmDeleteNotification(id: string) {
+    try {
+      await deleteNotification(id);
+      setNotifications(prev => prev.filter(n => n.id !== id));
+      setConfirmDelete(null);
+      success('Notification deleted', 'It has been removed from all recruiter panels.');
+    } catch (err) { console.error(err); toastError('Failed to delete notification'); setConfirmDelete(null); }
+  }
+
+  async function handleSendNotification(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newNotif.trim()) return;
+    try {
+      await createNotification(newNotif.trim(), adminId);
+      setNewNotif('');
+      // Refresh the list immediately
+      const fresh = await getAllNotifications();
+      setNotifications(fresh);
+      success('Broadcast Sent', 'Notification appears instantly on all active recruiter screens.');
+    } catch (err) { console.error(err); toastError('Failed to send completely'); }
+  }
+
   const filteredUsers = userSearch.trim()
     ? allUsers.filter(u =>
       u.name.toLowerCase().includes(userSearch.toLowerCase()) ||
@@ -152,23 +265,45 @@ function SettingsPanel() {
       {/* Confirm Dialog */}
       <ConfirmDialog
         open={!!confirmDelete}
-        title={confirmDelete?.type === 'client' ? `Remove "${confirmDelete?.name}"?` : `Delete ${confirmDelete?.name}?`}
-        message={confirmDelete?.type === 'user' ? 'This will permanently remove the user and ALL their time logs. This cannot be undone.' : 'Recruiters using this client will lose their client assignment.'}
-        confirmLabel={confirmDelete?.type === 'user' ? 'Delete User' : 'Remove Client'}
-        onConfirm={() => { const d = confirmDelete; if (!d) return; d.type === 'client' ? confirmDeleteClient(d.id) : confirmDeleteUser(d.id); }}
+        title={
+          confirmDelete?.type === 'client' ? `Remove "${confirmDelete?.name}"?` :
+            confirmDelete?.type === 'notification' ? 'Delete Broadcast?' :
+              `Delete ${confirmDelete?.name}?`
+        }
+        message={
+          confirmDelete?.type === 'user' ? 'This will permanently remove the user and ALL their time logs. This cannot be undone.' :
+            confirmDelete?.type === 'notification' ? 'This will instantly remove it from all recruiter screens.' :
+              'Recruiters using this client will lose their client assignment.'
+        }
+        confirmLabel={
+          confirmDelete?.type === 'user' ? 'Delete User' :
+            confirmDelete?.type === 'notification' ? 'Delete Broadcast' :
+              'Remove Client'
+        }
+        onConfirm={() => {
+          const d = confirmDelete; if (!d) return;
+          if (d.type === 'client') confirmDeleteClient(d.id);
+          else if (d.type === 'notification') confirmDeleteNotification(d.id);
+          else confirmDeleteUser(d.id);
+        }}
         onCancel={() => setConfirmDelete(null)}
       />
 
       {/* Sub-tabs */}
       <div className="flex gap-2">
-        {(['clients', 'users'] as const).map(t => (
+        {(['clients', 'users', 'notifications'] as const).map(t => (
           <button key={t} onClick={() => setSettingsTab(t)}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all
               ${settingsTab === t ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30' : 'text-slate-500 hover:text-white border border-white/5 hover:border-white/10'}`}>
-            {t === 'clients' ? <Briefcase size={12} /> : <Users size={12} />}
-            {t === 'clients' ? 'Clients' : 'All Users'}
+            {t === 'clients' && <Briefcase size={12} />}
+            {t === 'users' && <Users size={12} />}
+            {t === 'notifications' && <Bell size={12} />}
+            {t.charAt(0).toUpperCase() + t.slice(1)}
             {t === 'users' && pendingCount > 0 && (
               <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-amber-500 text-black text-[9px] font-black leading-none">{pendingCount}</span>
+            )}
+            {t === 'notifications' && notifications.filter(n => n.isActive).length > 0 && (
+              <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 text-[9px] font-black leading-none">{notifications.filter(n => n.isActive).length}</span>
             )}
           </button>
         ))}
@@ -230,6 +365,32 @@ function SettingsPanel() {
                       <input type="checkbox" checked={editApproved} onChange={e => setEditApproved(e.target.checked)} className="w-4 h-4 rounded accent-blue-500" />
                       <span className="text-sm text-slate-300">Account approved / active</span>
                     </label>
+                    {/* Shift Time */}
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1.5">Shift Hours</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <p className="text-[9px] text-slate-600 mb-1">Start</p>
+                          <CustomTimePicker value={editShiftStart} onChange={setEditShiftStart} />
+                        </div>
+                        <div>
+                          <p className="text-[9px] text-slate-600 mb-1">End</p>
+                          <CustomTimePicker value={editShiftEnd} onChange={setEditShiftEnd} />
+                        </div>
+                      </div>
+                    </div>
+                    {/* Timezone */}
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1.5">Timezone (US)</label>
+                      <select value={editTimezone} onChange={e => setEditTimezone(e.target.value)}
+                        className="w-full bg-white/[0.04] border border-white/10 rounded-xl py-2.5 px-3 text-white text-sm focus:outline-none focus:border-blue-500/50 transition-all appearance-none">
+                        <option value="America/Chicago" className="bg-[#0d0d1a]">Central (CT) — Chicago</option>
+                        <option value="America/New_York" className="bg-[#0d0d1a]">Eastern (ET) — New York</option>
+                        <option value="America/Denver" className="bg-[#0d0d1a]">Mountain (MT) — Denver</option>
+                        <option value="America/Los_Angeles" className="bg-[#0d0d1a]">Pacific (PT) — Los Angeles</option>
+                        <option value="America/Phoenix" className="bg-[#0d0d1a]">Arizona (AZ) — No DST</option>
+                      </select>
+                    </div>
                     <div className="flex gap-2 pt-1">
                       <button type="submit" disabled={saving}
                         className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-500 transition-colors disabled:opacity-60">
@@ -269,7 +430,13 @@ function SettingsPanel() {
                       <tbody className="divide-y divide-white/5">
                         {filteredUsers.map(u => (
                           <tr key={u.id} className="hover:bg-white/[0.02] transition-colors">
-                            <td className="py-3 px-4 font-semibold text-white">{u.name}</td>
+                            <td className="py-3 px-4">
+                              <p className="font-semibold text-white">{u.name}</p>
+                              <p className="text-[10px] text-slate-600 mt-0.5">
+                                {u.shiftStart ?? '08:00'} – {u.shiftEnd ?? '17:00'} &nbsp;·&nbsp;
+                                {(u.timezone ?? 'America/Chicago').replace('America/', '')}
+                              </p>
+                            </td>
                             <td className="py-3 px-4 text-slate-400 text-xs">{u.clientName}</td>
                             <td className="py-3 px-4">
                               <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md
@@ -294,6 +461,75 @@ function SettingsPanel() {
                 )}
           </motion.div>
         )}
+
+        {/* NOTIFICATIONS TAB */}
+        {settingsTab === 'notifications' && (
+          <motion.div key="notifications" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-6">
+
+            {/* Compose area */}
+            <div className="bg-gradient-to-br from-blue-500/[0.05] to-indigo-500/[0.02] border border-blue-500/10 rounded-2xl p-5">
+              <h3 className="font-black text-white mb-1 flex items-center gap-2">
+                <Bell size={16} className="text-blue-400" />
+                Broadcast Notification
+              </h3>
+              <p className="text-[11px] text-slate-500 mb-4">Messages appear instantly on all active recruiter screens. They can individual dismiss them.</p>
+              <form onSubmit={handleSendNotification} className="space-y-3">
+                <div className="relative">
+                  <textarea
+                    value={newNotif}
+                    onChange={e => setNewNotif(e.target.value)}
+                    placeholder="Type an announcement to broadcast..."
+                    className="w-full bg-[#0d0d1a]/50 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:outline-none focus:border-blue-500/50 transition-all resize-none min-h-[100px]"
+                    maxLength={300}
+                  />
+                  <span className={`absolute bottom-3 right-4 text-[10px] font-bold ${newNotif.length > 280 ? 'text-rose-400' : 'text-slate-600'}`}>
+                    {newNotif.length}/300
+                  </span>
+                </div>
+                <div className="flex justify-end">
+                  <button type="submit" disabled={!newNotif.trim()}
+                    className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:grayscale text-white px-6 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-blue-500/20 flex items-center gap-2">
+                    <Bell size={14} /> Send Broadcast
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Active List */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-black uppercase tracking-widest text-slate-500 px-1 border-b border-white/5 pb-2">Recent Broadcasts</h4>
+              {loadingNotifs ? (
+                <p className="py-8 text-sm text-slate-600 text-center animate-pulse">Loading...</p>
+              ) : notifications.length === 0 ? (
+                <div className="py-12 bg-white/[0.02] border border-white/5 rounded-2xl text-center">
+                  <Bell size={24} className="mx-auto text-slate-600 mb-2 opacity-50" />
+                  <p className="text-sm text-slate-500">No broadcasts sent yet.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {notifications.map(n => (
+                    <div key={n.id} className="group flex items-start justify-between bg-white/[0.03] hover:bg-white/[0.05] border border-white/5 rounded-xl p-4 transition-colors">
+                      <div className="pr-8">
+                        <p className="text-sm text-slate-300 leading-relaxed mb-2">{n.message}</p>
+                        <p className="text-[10px] text-slate-600 font-medium">
+                          Sent {new Date(n.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })} at {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setConfirmDelete({ type: 'notification', id: n.id, name: 'this broadcast' })}
+                        className="p-2 text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all flex-shrink-0 opacity-0 group-hover:opacity-100"
+                        title="Delete for everyone"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   );
@@ -310,6 +546,13 @@ export default function Home() {
   const now = useClock();
 
   useEffect(() => {
+    // 1. Sync server time to ignore local OS clock spoofing/wrong timezones
+    fetch('/api/time')
+      .then(res => res.json())
+      .then(data => { if (data.now) setServerOffset(data.now); })
+      .catch(e => console.error('Failed to sync server time:', e));
+
+    // 2. Load user session
     const saved = getCurrentUser();
     if (saved) { setUser(saved); if (saved.isApproved) loadLogs(saved.id); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -330,7 +573,7 @@ export default function Home() {
 
   const addLog = useCallback(async (eventType: TimeLog['eventType']) => {
     if (!user) return;
-    const log: TimeLog = { id: generateUUID(), eventType, timestamp: Date.now(), date: getTodayKey() };
+    const log: TimeLog = { id: generateUUID(), eventType, timestamp: getRealNow(), date: getTodayKey() };
     setLogs((prev) => [...prev, log]);
     await insertLog(user.id, log);
   }, [user]);
@@ -374,33 +617,40 @@ export default function Home() {
             <div className="glass-card rounded-2xl px-5 py-3 flex items-center justify-between mb-0 border-b-0 rounded-b-none">
               {/* Brand */}
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-base font-black border flex-shrink-0
-                  ${isMaster ? 'border-amber-500/30 bg-amber-500/10' : 'bg-blue-900/40 border-blue-500/40 text-blue-300'}`}>
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 border
+                  ${isMaster ? 'border-indigo-500/30 bg-indigo-500/10' : 'bg-indigo-900/30 border-indigo-500/30'}`}>
                   {isMaster
-                    ? <img src="/logo.png" alt="Logo" className="w-7 h-7 object-contain" />
-                    : user.name[0].toUpperCase()}
+                    ? <img src="/logo.png" alt="Logo" className="w-6 h-6 object-contain" />
+                    : <span className="text-sm font-black text-indigo-300">{user.name[0].toUpperCase()}</span>}
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <p className="text-sm font-black text-white tracking-tight">{isMaster ? 'Breakthrough Console' : user.name}</p>
-                    {isMaster && <span className="text-[9px] uppercase font-black tracking-widest bg-amber-500 text-black px-1.5 py-0.5 rounded-md">Admin</span>}
+                    <p className="text-sm font-bold text-white tracking-tight">{isMaster ? 'Brigade Pulse' : user.name}</p>
+                    {isMaster && (
+                      <>
+                        <span className="text-[9px] uppercase font-black tracking-widest bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-1.5 py-0.5 rounded">Admin</span>
+                        <span className="flex items-center gap-1 text-[9px] font-bold text-emerald-400 uppercase tracking-wider">
+                          <span className="badge-dot live"></span> Live
+                        </span>
+                      </>
+                    )}
                     {!isMaster && user.clientName && (
-                      <span className="text-[9px] uppercase font-black tracking-widest bg-blue-500/20 text-blue-300 border border-blue-500/30 px-1.5 py-0.5 rounded-md">{user.clientName}</span>
+                      <span className="text-[9px] uppercase font-black tracking-widest bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 px-1.5 py-0.5 rounded">{user.clientName}</span>
                     )}
                   </div>
-                  {isMaster && <p className="text-[10px] text-slate-600 mt-0.5 tracking-wider uppercase">Master Control</p>}
+                  {isMaster && <p className="text-[10px] text-slate-600 mt-0.5 tracking-wider uppercase">Master Control · {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</p>}
                 </div>
               </div>
 
-              {/* Master Tab Nav — lives inside the top bar on desktop */}
+              {/* Master Tab Nav */}
               {isMaster && (
-                <nav className="flex items-center gap-1 bg-black/30 border border-white/8 rounded-xl p-1">
+                <nav className="flex items-center gap-0.5 bg-black/30 border border-white/8 rounded-xl p-1">
                   {MASTER_TABS.map(t => (
                     <button key={t.id} onClick={() => setMasterTab(t.id)}
-                      className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold tracking-wide transition-all duration-200
+                      className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all duration-150
                         ${masterTab === t.id
-                          ? 'bg-amber-500 text-black shadow-[0_2px_12px_rgba(245,158,11,0.4)]'
-                          : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
+                          ? 'bg-indigo-600 text-white shadow-[0_2px_12px_rgba(99,102,241,0.4)]'
+                          : 'text-slate-500 hover:text-slate-200 hover:bg-white/5'}`}>
                       {t.icon} {t.label}
                     </button>
                   ))}
@@ -409,8 +659,8 @@ export default function Home() {
 
               {/* Sign out */}
               <button onClick={handleLogout}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition-all">
-                <LogOut size={13} /> Sign out
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold text-slate-500 hover:text-rose-400 hover:bg-rose-500/8 border border-transparent hover:border-rose-500/15 transition-all">
+                <LogOut size={12} /> Sign out
               </button>
             </div>
 
@@ -448,20 +698,23 @@ export default function Home() {
 
                   <AnimatePresence mode="wait">
                     {userTab === 'tracker' && (
-                      <motion.div key="tracker" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-5">
+                      <motion.div key="tracker" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-5 relative">
+                        {/* The modern floating notification panel for recruiters */}
+                        <NotificationPanel userId={user.id} />
+
                         <Clock />
                         <div className="flex justify-center"><StatusBadge status={status as Exclude<AppStatus, 'on_leave'>} /></div>
                         {logsLoading && <p className="text-center text-xs text-slate-600 animate-pulse">Loading session…</p>}
                         {status !== 'idle' && !logsLoading && (
-                          <div className="grid grid-cols-3 gap-3">
+                          <div className="grid grid-cols-3 gap-2.5">
                             {[
-                              { label: 'Worked', value: formatDuration(workedMs), color: 'text-amber-400', border: 'border-amber-500/20' },
-                              { label: 'Break', value: formatDuration(breakMs), color: 'text-blue-400', border: 'border-blue-500/20' },
-                              { label: 'BRB', value: formatDuration(brbMs), color: 'text-violet-400', border: 'border-violet-500/20' },
+                              { label: 'Worked', value: formatDuration(workedMs), color: 'text-emerald-400', borderColor: 'border-emerald-500/20', bgColor: 'bg-emerald-500/5' },
+                              { label: 'Break Time', value: formatDuration(breakMs), color: 'text-orange-400', borderColor: 'border-orange-500/20', bgColor: 'bg-orange-500/5' },
+                              { label: 'BRB Time', value: formatDuration(brbMs), color: 'text-sky-400', borderColor: 'border-sky-500/20', bgColor: 'bg-sky-500/5' },
                             ].map(s => (
-                              <div key={s.label} className={`bg-white/[0.03] border ${s.border} rounded-xl p-3 text-center`}>
-                                <p className={`text-base font-black font-mono tabular-nums ${s.color}`}>{s.value}</p>
-                                <p className="text-[10px] uppercase font-bold tracking-widest text-slate-600 mt-1">{s.label}</p>
+                              <div key={s.label} className={`border ${s.borderColor} ${s.bgColor} rounded-xl p-3 text-center`}>
+                                <p className={`text-base font-bold font-mono tabular-nums ${s.color}`}>{s.value}</p>
+                                <p className="text-[10px] uppercase font-semibold tracking-widest text-slate-600 mt-0.5">{s.label}</p>
                               </div>
                             ))}
                           </div>

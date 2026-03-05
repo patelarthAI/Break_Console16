@@ -63,14 +63,22 @@ export default function AuthModal({ onLogin }: Props) {
         try {
             if (isMasterAttempt) {
                 let user = await getUserByNameAndClient('Master Admin', '__master__');
-                if (!user) user = await upsertUser({ id: generateUUID(), name: 'Master Admin', clientName: '__master__', isMaster: true, isApproved: true });
+                if (!user) user = await upsertUser({
+                    id: generateUUID(), name: 'Master Admin', clientName: '__master__',
+                    isMaster: true, isApproved: true,
+                    shiftStart: '08:00', shiftEnd: '17:00', timezone: 'America/Chicago'
+                });
                 else user = await upsertUser({ ...user, isMaster: true, isApproved: true });
                 setCurrentUser(user);
                 onLogin(user);
             } else {
                 let user = await getUserByNameAndClient(name.trim(), clientName.trim());
                 if (!user) {
-                    user = await upsertUser({ id: generateUUID(), name: name.trim(), clientName: clientName.trim(), isMaster: false, isApproved: false });
+                    user = await upsertUser({
+                        id: generateUUID(), name: name.trim(), clientName: clientName.trim(),
+                        isMaster: false, isApproved: false,
+                        shiftStart: '08:00', shiftEnd: '17:00', timezone: 'America/Chicago'
+                    });
                 } else if (user.name !== name.trim()) {
                     user = await upsertUser({ ...user, name: name.trim() });
                 }

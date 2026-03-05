@@ -1,263 +1,319 @@
 'use client';
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     RefreshCw, Coffee, RotateCcw, Briefcase, XCircle,
     AlertTriangle, Clock, Users, Wifi, UserCheck, UserX, Trash2, Calendar,
-    TrendingUp, Activity, CheckCircle2, ChevronDown, Search, Filter
+    TrendingUp, Activity, CheckCircle2, ChevronDown, Search, Filter, Bell, X
 } from 'lucide-react';
 import {
     getAllUsersStatus, UserStatusRecord, masterOverride,
-    getPendingUsers, approveUser, deleteUser, getClients, ClientRow, getLeaves
+    getPendingUsers, approveUser, deleteUser, getClients, ClientRow, getLeaves,
+    get7DayBreakStats, getLogs, deleteTimeLog, insertLog
 } from '@/lib/store';
+
 import { supabase } from '@/lib/supabase';
-import { formatDuration, formatTime, dateStr } from '@/lib/timeUtils';
-import { User, LeaveRecord } from '@/types';
+import { formatDuration, formatTime, dateStr, getTodayKey, generateUUID } from '@/lib/timeUtils';
+import { User, LeaveRecord, TimeLog, AppStatus } from '@/types';
 import ViolatorsPanel from '@/components/ViolatorsPanel';
+import StarPerformers from '@/components/StarPerformers';
+import TimelineLog from '@/components/TimelineLog';
 
-function LiveTimer({ since, color }: { since: number; color: string }) {
-    const [e, setE] = useState(Math.max(0, Date.now() - since));
-    useEffect(() => { const id = setInterval(() => setE(Math.max(0, Date.now() - since)), 1000); return () => clearInterval(id); }, [since]);
-    return <span className={`font-mono font-bold tabular-nums ${color}`}>{formatDuration(e)}</span>;
-}
-
-const STATUS = {
-    idle: { label: 'Not Started', dot: 'bg-slate-600', ring: 'ring-slate-600/0', text: 'text-slate-400', rowBg: 'bg-slate-900/20 border-slate-700/20', badge: 'bg-slate-800/60 border-slate-700/40' },
-    working: { label: 'Working', dot: 'bg-emerald-400 animate-pulse', ring: 'ring-emerald-400/30', text: 'text-emerald-400', rowBg: 'bg-emerald-900/10 border-emerald-500/20', badge: 'bg-emerald-900/20 border-emerald-500/30' },
-    on_break: { label: 'On Break', dot: 'bg-amber-400 animate-pulse', ring: 'ring-amber-400/30', text: 'text-amber-400', rowBg: 'bg-amber-900/10 border-amber-500/20', badge: 'bg-amber-900/20 border-amber-500/30' },
-    on_brb: { label: 'BRB', dot: 'bg-blue-400 animate-pulse', ring: 'ring-blue-400/30', text: 'text-blue-400', rowBg: 'bg-blue-900/10 border-blue-500/20', badge: 'bg-blue-900/20 border-blue-500/30' },
-    punched_out: { label: 'Logged Out', dot: 'bg-slate-500', ring: 'ring-slate-400/0', text: 'text-slate-500', rowBg: 'bg-slate-900/10 border-slate-700/10', badge: 'bg-slate-900/40 border-slate-700/20' },
-    on_leave: { label: 'On Leave', dot: 'bg-violet-400', ring: 'ring-violet-400/30', text: 'text-violet-400', rowBg: 'bg-violet-900/10 border-violet-500/20', badge: 'bg-violet-900/20 border-violet-500/30' },
-};
-
-interface Props { currentUserId: string; isMaster: boolean; }
-
-// ── Interactive 7-Day Leave Calendar ─────────────────────────────────
-function WeekLeaveCalendar({ leaves, selectedClients }: { leaves: LeaveRecord[]; selectedClients: string[] }) {
-    const today = new Date();
-    const [selectedIdx, setSelectedIdx] = useState<number | null>(0);
-
-    const days = Array.from({ length: 7 }, (_, i) => {
-        const d = new Date(today);
-        d.setDate(today.getDate() + i);
-        return d;
-    });
-
-    const filtered = leaves.filter(l =>
-        selectedClients.length === 0 || selectedClients.includes(l.client_name)
-    );
-
-    const dayLeaves = (d: Date) => filtered.filter(l => l.date === dateStr(d));
-    const selectedLeaves = selectedIdx !== null ? dayLeaves(days[selectedIdx]) : [];
-    const selectedDay = selectedIdx !== null ? days[selectedIdx] : null;
-
-    // Client color map for badges
-    const CLIENT_COLORS = [
-        'bg-blue-500/20 text-blue-300 border-blue-500/30',
-        'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
-        'bg-amber-500/20 text-amber-300 border-amber-500/30',
-        'bg-rose-500/20 text-rose-300 border-rose-500/30',
-        'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
-        'bg-purple-500/20 text-purple-300 border-purple-500/30',
-    ];
-    const clientColorCache = useRef<Record<string, string>>({});
-    const getClientColor = (client: string) => {
-        if (!clientColorCache.current[client]) {
-            const keys = Object.keys(clientColorCache.current);
-            clientColorCache.current[client] = CLIENT_COLORS[keys.length % CLIENT_COLORS.length];
+// ─── Custom Time Picker ───────────────────────────────────────────────────────
+function CustomTimePicker({ value, onChange }: { value: string, onChange: (v: string) => void }) {
+    const [open, setOpen] = useState(false);
+    const options = [];
+    for (let i = 0; i < 24; i++) {
+        for (let j = 0; j < 60; j += 30) {
+            const h = i.toString().padStart(2, '0');
+            const m = j.toString().padStart(2, '0');
+            options.push(`${h}:${m}`);
         }
-        return clientColorCache.current[client];
+    }
+    const formatDisplay = (h24: string) => {
+        if (!h24) return '--:-- AM';
+        const [h, m] = h24.split(':');
+        let hr = parseInt(h, 10);
+        const ampm = hr >= 12 ? 'PM' : 'AM';
+        if (hr > 12) hr -= 12;
+        if (hr === 0) hr = 12;
+        return `${hr.toString().padStart(2, '0')}:${m} ${ampm}`;
     };
-
     return (
-        <div className="space-y-3">
-            {/* Day strip */}
-            <div className="grid grid-cols-7 gap-1">
-                {days.map((d, i) => {
-                    const leaveList = dayLeaves(d);
-                    const isToday = i === 0;
-                    const isSelected = selectedIdx === i;
-                    const hasLeaves = leaveList.length > 0;
-                    return (
-                        <button key={i}
-                            onClick={() => setSelectedIdx(isSelected ? null : i)}
-                            className={`relative rounded-xl p-2 min-h-[76px] border text-left transition-all hover:brightness-110 focus:outline-none
-                                ${isSelected
-                                    ? 'border-amber-500/60 bg-amber-900/20 shadow-[0_0_12px_rgba(245,158,11,0.15)]'
-                                    : isToday
-                                        ? 'border-amber-500/30 bg-amber-900/8'
-                                        : hasLeaves
-                                            ? 'border-violet-500/30 bg-violet-900/10 hover:border-violet-500/50'
-                                            : 'border-white/5 bg-white/[0.01] hover:border-white/10'}`}>
-                            {/* Day label */}
-                            <p className={`text-[8px] font-black uppercase tracking-widest
-                                ${isSelected || isToday ? 'text-amber-400' : 'text-slate-600'}`}>
-                                {d.toLocaleDateString('en-US', { weekday: 'short' })}
-                            </p>
-                            <p className={`text-lg font-black leading-tight
-                                ${isSelected ? 'text-amber-300' : isToday ? 'text-amber-400/80' : 'text-slate-400'}`}>
-                                {d.getDate()}
-                            </p>
-                            {/* Leave count dot or avatars */}
-                            {hasLeaves && (
-                                <div className="mt-1 flex flex-col gap-0.5">
-                                    {leaveList.slice(0, 2).map((l, li) => (
-                                        <div key={li} className="text-[7px] font-bold bg-violet-500/25 text-violet-300 rounded px-1 py-0.5 truncate border border-violet-500/20">
-                                            {l.employee_name.split(' ')[0]}
-                                        </div>
-                                    ))}
-                                    {leaveList.length > 2 && (
-                                        <p className="text-[7px] text-violet-400/70 font-bold">+{leaveList.length - 2}</p>
-                                    )}
-                                </div>
-                            )}
-                        </button>
-                    );
-                })}
-            </div>
-
-            {/* Detail panel — appears when a day is selected */}
+        <div className="relative">
+            <button type="button" onClick={() => setOpen(!open)} className="w-full flex items-center justify-between bg-white/[0.04] border border-white/10 rounded-xl py-2.5 px-3 text-white text-sm focus:outline-none focus:border-blue-500/50 transition-all hover:bg-white/[0.06]">
+                <span className="font-semibold">{value ? formatDisplay(value) : '--:-- AM'}</span>
+                <Clock size={13} className="text-slate-500" />
+            </button>
             <AnimatePresence>
-                {selectedIdx !== null && (
-                    <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="overflow-hidden">
-                        <div className="rounded-xl border border-white/8 bg-black/30 p-3 space-y-2">
-                            {/* Header */}
-                            <div className="flex items-center justify-between mb-1">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                                    {selectedDay?.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
-                                </p>
-                                <span className={`text-[10px] font-black ${selectedLeaves.length > 0 ? 'text-violet-400' : 'text-slate-700'}`}>
-                                    {selectedLeaves.length} on leave
-                                </span>
+                {open && (
+                    <>
+                        <div className="fixed inset-0 z-[150]" onClick={() => setOpen(false)} />
+                        <motion.div initial={{ opacity: 0, scale: 0.95, y: -5 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: -5 }} className="absolute bottom-full mb-1 left-0 right-0 max-h-48 overflow-y-auto bg-[#131326] border border-blue-500/30 rounded-xl shadow-2xl z-[200] scrollbar-thin">
+                            <div className="flex flex-col py-1 mt-1 flex-col-reverse"> {/* Reverse layout so popover goes up */}
+                                {options.map(opt => (
+                                    <button key={opt} type="button" onClick={() => { onChange(opt); setOpen(false); }} className={`text-left rounded-lg px-3 py-1.5 mx-1 text-[13px] font-semibold transition-colors ${value === opt ? 'bg-blue-500/20 text-blue-400' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}>
+                                        {formatDisplay(opt)}
+                                    </button>
+                                ))}
                             </div>
-
-                            {selectedLeaves.length === 0 ? (
-                                <p className="text-xs text-slate-700 py-2 text-center">✓ No leaves scheduled</p>
-                            ) : (
-                                selectedLeaves.map((l, i) => (
-                                    <div key={i} className="flex items-center gap-2.5 bg-white/[0.02] rounded-lg px-2.5 py-2 border border-white/5">
-                                        <div className="w-7 h-7 rounded-lg bg-violet-500/20 border border-violet-500/30 flex items-center justify-center text-[11px] font-black text-violet-300 flex-shrink-0">
-                                            {l.employee_name[0].toUpperCase()}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-xs font-bold text-white truncate">{l.employee_name}</p>
-                                            <p className="text-[9px] text-slate-500">{l.leave_type} · {l.day_count === 1 ? 'Full Day' : 'Half Day'}</p>
-                                        </div>
-                                        <span className={`text-[9px] font-black px-2 py-0.5 rounded-md border flex-shrink-0 ${getClientColor(l.client_name)}`}>
-                                            {l.client_name}
-                                        </span>
-                                    </div>
-                                ))
-                            )}
-                        </div>
-                    </motion.div>
+                        </motion.div>
+                    </>
                 )}
             </AnimatePresence>
         </div>
     );
 }
 
-// ── Single recruiter row ──────────────────────────────────────────────────────
-function RecruiterRow({ r, isMaster, onEndBreak, onEndBrb, onPunchOut, confirmingEnd, onConfirmEnd, onCancelEnd, confirmingDelete, onConfirmDelete, onCancelDelete, onDeleteRequest }: {
-    r: UserStatusRecord; isMaster: boolean;
-    onEndBreak: () => void; onEndBrb: () => void; onPunchOut: () => void;
-    confirmingEnd: boolean; onConfirmEnd: () => void; onCancelEnd: () => void;
-    confirmingDelete: boolean; onConfirmDelete: () => void; onCancelDelete: () => void; onDeleteRequest: () => void;
-}) {
+// ─── Activity Notification Toast ──────────────────────────────────────────────
+type ActivityNote = { id: string; name: string; event: string; color: string; icon: 'break' | 'brb' | 'back' | 'out'; ts: number };
+
+const EVENT_META: Record<string, { label: string; color: string; icon: ActivityNote['icon'] }> = {
+    // Only fire toasts for return/exit events — starts are noise
+    break_end: { label: 'returned from break', color: 'emerald', icon: 'back' },
+    brb_end: { label: 'returned from BRB', color: 'emerald', icon: 'back' },
+    punch_out: { label: 'logged out', color: 'slate', icon: 'out' },
+};
+
+const COLOR_MAP: Record<string, string> = {
+    amber: 'border-amber-500/40 bg-amber-900/20 shadow-amber-500/10',
+    emerald: 'border-emerald-500/40 bg-emerald-900/20 shadow-emerald-500/10',
+    blue: 'border-blue-500/40 bg-blue-900/20 shadow-blue-500/10',
+    slate: 'border-slate-500/30 bg-slate-900/30 shadow-black/20',
+};
+const ICON_COLOR: Record<string, string> = {
+    amber: 'text-amber-400', emerald: 'text-emerald-400', blue: 'text-blue-400', slate: 'text-slate-400',
+};
+const IconFor = ({ icon, color }: { icon: ActivityNote['icon']; color: string }) => {
+    const cls = `${ICON_COLOR[color]} flex-shrink-0`;
+    if (icon === 'break') return <Coffee size={15} className={cls} />;
+    if (icon === 'brb') return <RotateCcw size={15} className={cls} />;
+    if (icon === 'back') return <CheckCircle2 size={15} className={cls} />;
+    return <XCircle size={15} className={cls} />;
+};
+
+function ActivityToast({ note, onDismiss }: { note: ActivityNote; onDismiss: () => void }) {
+    useEffect(() => {
+        const t = setTimeout(onDismiss, 6000);
+        return () => clearTimeout(t);
+    }, [onDismiss]);
+    return (
+        <motion.div
+            layout
+            initial={{ opacity: 0, x: 60, scale: 0.92 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: 60, scale: 0.9 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+            className={`flex items-start gap-3 px-4 py-3 rounded-xl border shadow-xl w-72 backdrop-blur-xl cursor-default ${COLOR_MAP[note.color]}`}
+        >
+            <IconFor icon={note.icon} color={note.color} />
+            <div className="flex-1 min-w-0">
+                <p className="text-xs font-black text-white truncate">{note.name}</p>
+                <p className={`text-[11px] font-semibold ${ICON_COLOR[note.color]}`}>{note.event}</p>
+            </div>
+            <button onClick={onDismiss} className="text-slate-600 hover:text-white transition-colors mt-0.5 flex-shrink-0">
+                <X size={12} />
+            </button>
+        </motion.div>
+    );
+}
+
+// Break/BRB duration thresholds (ms)
+const WARN_MS = 15 * 60 * 1000; // amber at 15m
+const DANGER_MS = 30 * 60 * 1000; // red at 30m
+
+function LiveTimer({ since, isBreakOrBrb = false }: { since: number; isBreakOrBrb?: boolean }) {
+    const [e, setE] = useState(Math.max(0, Date.now() - since));
+    useEffect(() => { const id = setInterval(() => setE(Math.max(0, Date.now() - since)), 1000); return () => clearInterval(id); }, [since]);
+    const color = isBreakOrBrb
+        ? (e >= DANGER_MS ? 'text-rose-400' : e >= WARN_MS ? 'text-amber-400' : 'text-emerald-400')
+        : 'text-emerald-400';
+    const prefix = isBreakOrBrb && e >= DANGER_MS ? '⚠ ' : '';
+    return <span className={`font-mono font-bold tabular-nums ${color}`}>{prefix}{formatDuration(e)}</span>;
+}
+
+const STATUS = {
+    idle: { label: 'Offline', dot: 'bg-slate-500', ring: 'ring-slate-500/0', text: 'text-slate-400', cardBg: 'bg-[#0a0a18] border-white/5 hover:bg-white/[0.04]', badgeBg: 'bg-slate-800/80 border-slate-700/50 text-slate-400' },
+    working: { label: 'Working', dot: 'bg-emerald-400 animate-pulse drop-shadow-[0_0_5px_currentColor]', ring: 'ring-emerald-400/30', text: 'text-emerald-400', cardBg: 'bg-emerald-950/10 border-emerald-500/20 shadow-[inset_0_1px_1px_rgba(255,255,255,0.05),0_0_15px_rgba(16,185,129,0.05)] hover:bg-emerald-900/30 hover:border-emerald-500/40', badgeBg: 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300' },
+    on_break: { label: 'On Break', dot: 'bg-amber-400 animate-pulse drop-shadow-[0_0_5px_currentColor]', ring: 'ring-amber-400/30', text: 'text-amber-400', cardBg: 'bg-amber-950/10 border-amber-500/20 shadow-[inset_0_1px_1px_rgba(255,255,255,0.05),0_0_15px_rgba(245,158,11,0.05)] hover:bg-amber-900/30 hover:border-amber-500/40', badgeBg: 'bg-amber-500/15 border-amber-500/30 text-amber-300' },
+    on_brb: { label: 'BRB', dot: 'bg-blue-400 animate-pulse drop-shadow-[0_0_5px_currentColor]', ring: 'ring-blue-400/30', text: 'text-blue-400', cardBg: 'bg-blue-950/10 border-blue-500/20 shadow-[inset_0_1px_1px_rgba(255,255,255,0.05),0_0_15px_rgba(59,130,246,0.05)] hover:bg-blue-900/30 hover:border-blue-500/40', badgeBg: 'bg-blue-500/15 border-blue-500/30 text-blue-300' },
+    punched_out: { label: 'Logged Out', dot: 'bg-slate-500', ring: 'ring-slate-400/0', text: 'text-slate-500', cardBg: 'bg-slate-900/20 border-slate-700/40 hover:bg-slate-800/40', badgeBg: 'bg-slate-800/80 border-slate-700/50 text-slate-400' },
+    on_leave: { label: 'On Leave', dot: 'bg-violet-400', ring: 'ring-violet-400/30', text: 'text-violet-400', cardBg: 'bg-violet-950/10 border-violet-500/20', badgeBg: 'bg-violet-500/15 border-violet-500/30 text-violet-300' },
+};
+
+function EmployeeRow({ r, isMaster, isClean, onEndBreak, onEndBrb, onPunchOut, confirmingEnd, onConfirmEnd, onCancelEnd, confirmingDelete, onConfirmDelete, onCancelDelete, onDeleteRequest, onClickRow }: any) {
     const cfg = STATUS[r.status as keyof typeof STATUS] ?? STATUS.idle;
-    const isDone = r.status === 'punched_out';
+    const isDone = r.status === 'punched_out' || r.status === 'idle';
     const isLeave = r.status === 'on_leave';
     const isBreak = r.status === 'on_break';
     const isBrb = r.status === 'on_brb';
     const isWorking = r.status === 'working';
-
-    // Duration label — what to show next to status
-    const durationLabel = isLeave ? null
-        : isDone ? null
-            : isBreak ? 'Break for'
-                : isBrb ? 'BRB for'
-                    : isWorking ? 'Working for'
-                        : null;
-
-    // Worked total for done users
-    const doneMs = isDone && r.punchIn && r.punchOut ? r.punchOut - r.punchIn : 0;
+    // workedMs from store (pure work time, no breaks/BRB). Fallback for legacy records.
+    const workedMs = r.workedMs ?? (r.punchIn && r.punchOut ? r.punchOut - r.punchIn : 0);
 
     return (
-        <div className={`flex items-center gap-4 px-4 py-3 rounded-xl border transition-all group ${cfg.rowBg}`}>
-            {/* Avatar */}
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-black flex-shrink-0 ring-2 ${cfg.ring} ${isDone || isLeave ? 'bg-white/5 text-slate-400' : cfg.text.replace('text-', 'bg-').replace('-400', '-500/15') + ' ' + cfg.text}`}>
-                {r.user.name[0].toUpperCase()}
+        <div onClick={onClickRow} className={`flex items-center p-3 rounded-xl border border-white/5 ${cfg.cardBg} group transition-all duration-300 hover:border-white/20 cursor-pointer`}>
+            {/* Left: Avatar + Info */}
+            <div className="flex items-center gap-4 min-w-[200px] w-1/4">
+                <div className={`w-10 h-10 rounded-[10px] flex items-center justify-center text-[15px] font-black shrink-0 ${isDone || isLeave ? 'bg-slate-800 text-slate-400 border border-slate-700/50' : cfg.text.replace('text-', 'bg-').replace('-400', '-500/15') + ' border border-current shadow-[0_0_12px_currentColor] drop-shadow-lg ' + cfg.text}`}>
+                    {r.user.name[0].toUpperCase()}
+                </div>
+                <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                        <h3 className={`text-[14px] font-bold tracking-tight truncate ${isDone ? 'text-slate-400' : 'text-slate-100'}`}>{r.user.name}</h3>
+                        {isClean && <span className="text-[9px] bg-yellow-500/15 text-yellow-400 px-1 py-0.5 rounded border border-yellow-500/30 flex-shrink-0" title="Perfect 7-day compliance">⭐</span>}
+                    </div>
+                </div>
             </div>
-            {/* Name */}
-            <div className="flex-1 min-w-0">
-                <p className={`text-sm font-bold truncate ${isDone ? 'text-slate-500' : 'text-white'}`}>{r.user.name}</p>
+
+            {/* Middle: Status Badge */}
+            <div className="min-w-[120px] w-1/6">
+                <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[10px] font-black uppercase tracking-widest ${cfg.badgeBg}`}>
+                    {(!isDone && !isLeave) && <div className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />}
+                    {cfg.label}
+                </div>
             </div>
-            {/* Status badge */}
-            <span className={`text-[10px] font-black tracking-widest uppercase flex-shrink-0 ${cfg.text}`}>{cfg.label}</span>
-            {/* Duration / time info */}
-            <div className="flex-shrink-0 text-right min-w-[120px]">
-                {isLeave && (
-                    <span className="text-[11px] font-bold text-violet-400">On Leave Today</span>
-                )}
-                {isDone && doneMs > 0 && (
-                    <div>
-                        <p className="text-[9px] text-slate-700 uppercase tracking-wider font-bold">Total Worked</p>
-                        <span className="font-mono text-slate-400 font-bold text-[12px]">{formatDuration(doneMs)}</span>
+
+            {/* Middle: Timer section */}
+            <div className="min-w-[150px] w-1/4 flex items-center">
+                {isLeave && <p className="text-sm font-semibold text-violet-400/80">Scheduled Leave</p>}
+                {isDone && workedMs > 0 && (
+                    <div className="flex items-center gap-2">
+                        <p className="text-xs text-slate-500 uppercase tracking-widest font-bold">Worked:</p>
+                        <span className="font-mono text-slate-300 font-bold text-sm">{formatDuration(workedMs)}</span>
                     </div>
                 )}
-                {isDone && !doneMs && (
-                    <span className="text-[11px] text-slate-700">—</span>
-                )}
-                {!isLeave && !isDone && durationLabel && (
-                    <div>
-                        <p className="text-[9px] text-slate-600 uppercase tracking-wider font-bold">{durationLabel}</p>
-                        {isBreak && r.breakStart && <LiveTimer since={r.breakStart} color={cfg.text} />}
-                        {isBrb && r.brbStart && <LiveTimer since={r.brbStart} color={cfg.text} />}
-                        {isWorking && r.punchIn && <LiveTimer since={r.punchIn} color={cfg.text} />}
+                {isDone && !workedMs && !isLeave && <p className="text-xs text-slate-600 font-medium whitespace-nowrap">No activity recorded</p>}
+                {!isLeave && !isDone && (
+                    <div className="flex items-center gap-2 w-full">
+                        {isWorking && r.workStart && (
+                            <>
+                                <span className="text-xs text-emerald-500/70 uppercase tracking-widest font-bold">Working:</span>
+                                <div className="text-lg tracking-tight text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.3)]"><LiveTimer since={r.workStart} /></div>
+                            </>
+                        )}
+                        {isBreak && r.breakStart && (
+                            <>
+                                <span className="text-xs text-amber-500/70 uppercase tracking-widest font-bold">Break:</span>
+                                <div className="text-lg tracking-tight text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.3)]"><LiveTimer since={r.breakStart} isBreakOrBrb /></div>
+                            </>
+                        )}
+                        {isBrb && r.brbStart && (
+                            <>
+                                <span className="text-xs text-blue-500/70 uppercase tracking-widest font-bold">BRB:</span>
+                                <div className="text-lg tracking-tight text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.3)]"><LiveTimer since={r.brbStart} isBreakOrBrb /></div>
+                            </>
+                        )}
                     </div>
                 )}
-                {!isLeave && !isDone && !durationLabel && (
-                    <span className="text-[11px] text-slate-700">—</span>
-                )}
             </div>
-            {/* Master actions */}
-            {isMaster && (
-                <div className="flex items-center gap-1.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+
+            {/* Right: Actions */}
+            {isMaster ? (
+                <div className="flex items-center justify-end gap-2 min-w-[200px] flex-1" onClick={e => e.stopPropagation()}>
                     {isBreak && !confirmingEnd && (
-                        <button onClick={onEndBreak} className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-amber-500/15 text-amber-400 border border-amber-500/20 hover:bg-amber-500/25 transition-all">End Break</button>
+                        <button onClick={onEndBreak} className="px-4 py-2 text-xs uppercase tracking-wider font-bold rounded-lg bg-amber-500 text-amber-950 hover:bg-amber-400 transition-all shadow-[0_2px_10px_rgba(245,158,11,0.2)]">End Break</button>
                     )}
                     {isBrb && !confirmingEnd && (
-                        <button onClick={onEndBrb} className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-blue-500/15 text-blue-400 border border-blue-500/20 hover:bg-blue-500/25 transition-all">End BRB</button>
+                        <button onClick={onEndBrb} className="px-4 py-2 text-xs uppercase tracking-wider font-bold rounded-lg bg-blue-500 text-blue-950 hover:bg-blue-400 transition-all shadow-[0_2px_10px_rgba(59,130,246,0.2)]">End BRB</button>
                     )}
                     {!['idle', 'punched_out', 'on_leave'].includes(r.status) && (
                         confirmingEnd
-                            ? <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] text-rose-400 font-bold">Log out?</span>
-                                <button onClick={onConfirmEnd} className="text-[10px] font-bold px-2 py-1 rounded bg-rose-500 text-white hover:bg-rose-400">Yes</button>
-                                <button onClick={onCancelEnd} className="text-[10px] font-bold px-2 py-1 rounded bg-white/10 text-slate-400">No</button>
+                            ? <div className="flex items-center gap-2">
+                                <button onClick={onConfirmEnd} className="px-4 py-2 text-xs font-bold shadow-inner rounded-lg bg-rose-500 text-white hover:bg-rose-400 uppercase tracking-wider">Yes, Out</button>
+                                <button onClick={onCancelEnd} className="px-4 py-2 text-xs font-bold rounded-lg bg-white/10 text-slate-300 hover:bg-white/20 uppercase tracking-wider border border-white/5">Cancel</button>
                             </div>
-                            : <button onClick={onPunchOut} className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 transition-all">Log Out</button>
+                            : (!isBreak && !isBrb) && <button onClick={onPunchOut} className="px-4 py-2 text-xs rounded-lg bg-transparent text-slate-400 border border-slate-700 hover:bg-white/5 hover:text-white transition-all opacity-0 group-hover:opacity-100 uppercase tracking-widest font-bold">Clock Out</button>
                     )}
-                    {confirmingDelete
-                        ? <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] text-rose-400 font-bold">Delete?</span>
-                            <button onClick={onConfirmDelete} className="text-[10px] font-bold px-2 py-1 rounded bg-rose-600 text-white">Yes</button>
-                            <button onClick={onCancelDelete} className="text-[10px] font-bold px-2 py-1 rounded bg-white/10 text-slate-400">No</button>
-                        </div>
-                        : <button onClick={onDeleteRequest} className="p-1.5 rounded-lg text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all"><Trash2 size={12} /></button>
-                    }
+
+                    <div className="ml-2 pl-2 flex items-center">
+                        {confirmingDelete
+                            ? <div className="flex items-center gap-2 bg-rose-500/10 p-1.5 rounded-lg border border-rose-500/20">
+                                <button onClick={onConfirmDelete} className="text-xs font-bold px-3 py-1.5 rounded bg-rose-600 text-white hover:bg-rose-500">Delete</button>
+                                <button onClick={onCancelDelete} className="text-xs font-bold px-3 py-1.5 rounded bg-white/10 text-slate-300 hover:bg-white/20">Cancel</button>
+                            </div>
+                            : <button onClick={onDeleteRequest} className="p-2 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all opacity-0 group-hover:opacity-100"><Trash2 size={16} /></button>
+                        }
+                    </div>
                 </div>
-            )}
+            ) : <div className="w-[30%]" />}
+        </div>
+    );
+}
+
+// ── Week Leave Calendar ────────────────────────────────────────────────────────
+function WeekLeaveCalendar({ leaves, selectedClients }: { leaves: LeaveRecord[], selectedClients: string[] }) {
+    const [expandedDay, setExpandedDay] = useState<string | null>(null);
+    const days = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date();
+        d.setDate(d.getDate() + i);
+        return d;
+    });
+
+    return (
+        <div className="flex flex-col gap-2">
+            <div className="flex justify-between gap-1">
+                {days.map((d, i) => {
+                    const ds = dateStr(d);
+                    const dayLeaves = leaves.filter(l => l.date === ds && (selectedClients.length === 0 || selectedClients.includes(l.client_name)));
+                    const count = dayLeaves.length;
+                    const isToday = i === 0;
+                    const isExpanded = expandedDay === ds;
+                    return (
+                        <div key={ds} className="flex flex-col items-center gap-1 flex-1">
+                            <span className={`text-[9px] font-bold uppercase ${isToday ? 'text-violet-400' : 'text-slate-500'}`}>
+                                {d.toLocaleDateString('en-US', { weekday: 'short' })}
+                            </span>
+                            <button
+                                onClick={() => count > 0 && setExpandedDay(isExpanded ? null : ds)}
+                                className={`w-full py-1.5 rounded-lg border flex flex-col items-center justify-center gap-0.5 transition-all ${count > 0
+                                    ? (isToday ? 'bg-violet-500/20 text-violet-300 border-violet-500/30 hover:bg-violet-500/30 cursor-pointer' : 'bg-slate-700/50 text-white border-slate-600 hover:bg-slate-600/60 cursor-pointer')
+                                    : 'bg-white/[0.02] text-slate-600 border-white/5 cursor-default'
+                                    } ${isExpanded ? 'ring-1 ring-violet-500/50' : ''}`}
+                            >
+                                <span className={`text-[12px] leading-none ${count > 0 ? 'font-black' : 'font-medium'}`}>{d.getDate()}</span>
+                                {count > 0 && (
+                                    <div className="w-1 h-1 rounded-full bg-violet-400 shadow-[0_0_5px_theme(colors.violet.400)]" />
+                                )}
+                            </button>
+                        </div>
+                    );
+                })}
+            </div>
+            {/* Expanded day names */}
+            {expandedDay && (() => {
+                const dayLeaves = leaves.filter(l => l.date === expandedDay && (selectedClients.length === 0 || selectedClients.includes(l.client_name)));
+                if (dayLeaves.length === 0) return null;
+                const expandedDate = new Date(expandedDay + 'T00:00:00');
+                return (
+                    <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-3 space-y-1.5">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-violet-400 mb-2">
+                            {expandedDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })} — {dayLeaves.length} on leave
+                        </p>
+                        {dayLeaves.map((l, idx) => (
+                            <div key={idx} className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <div className="w-5 h-5 rounded-md bg-violet-500/20 flex items-center justify-center text-[9px] font-black text-violet-300 flex-shrink-0">
+                                        {l.employee_name[0]?.toUpperCase()}
+                                    </div>
+                                    <p className="text-[11px] font-bold text-slate-200 leading-tight">{l.employee_name}</p>
+                                </div>
+                                <div className="flex items-center gap-1.5 flex-shrink-0">
+                                    <span className="text-[9px] text-slate-500 font-medium">{l.client_name}</span>
+                                    <span className="text-[8px] font-bold uppercase text-violet-400 bg-violet-500/10 border border-violet-500/20 px-1.5 py-0.5 rounded">{l.leave_type}</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                );
+            })()}
         </div>
     );
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
-export default function MasterConsole({ currentUserId, isMaster }: Props) {
+export default function MasterConsole({ currentUserId, isMaster }: { currentUserId: string, isMaster: boolean }) {
     const [records, setRecords] = useState<UserStatusRecord[]>([]);
     const [pending, setPending] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
@@ -271,6 +327,62 @@ export default function MasterConsole({ currentUserId, isMaster }: Props) {
     const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
     const mountedRef = useRef(true);
     const filterDropdownRef = useRef<HTMLDivElement>(null);
+    const recordsRef = useRef<UserStatusRecord[]>([]); // always mirrors records state
+    const [notifications, setNotifications] = useState<ActivityNote[]>([]);
+    const [cleanIds, setCleanIds] = useState<Set<string>>(new Set());
+
+    // Admin Details Slider State
+    const [selectedUserDetail, setSelectedUserDetail] = useState<UserStatusRecord | null>(null);
+    const [detailLogs, setDetailLogs] = useState<TimeLog[]>([]);
+    const [addLogType, setAddLogType] = useState('punch_in');
+    const [addLogTime, setAddLogTime] = useState('08:00 AM');
+    const [addLogDate, setAddLogDate] = useState(getTodayKey());
+
+    // Subscribe to detail logs when admin opens slide-over
+    useEffect(() => {
+        if (selectedUserDetail) {
+            getLogs(selectedUserDetail.user.id, dateStr(new Date())).then(setDetailLogs);
+        }
+    }, [selectedUserDetail]);
+
+    async function handleAdminDeleteLog(id: string) {
+        if (!confirm('Permanently delete this timeline action?')) return;
+        try {
+            await deleteTimeLog(id);
+            setDetailLogs(prev => prev.filter(l => l.id !== id));
+        } catch (e: any) { alert(e.message); }
+    }
+
+    async function handleAdminAddLog(e: React.FormEvent) {
+        e.preventDefault();
+        if (!selectedUserDetail) return;
+        // Parse the selected date and time strings to create absolute timestamp in local time
+        const [datePart] = addLogDate.split('T');
+        const d = new Date(`${datePart}T00:00:00`);
+        const isPM = addLogTime.includes('PM');
+        let [hStr, mStr] = addLogTime.replace(/ [AP]M/, '').split(':');
+        let h = parseInt(hStr, 10);
+        if (isPM && h !== 12) h += 12;
+        if (!isPM && h === 12) h = 0;
+        d.setHours(h, parseInt(mStr, 10), 0, 0);
+
+        const newLog: TimeLog = {
+            id: generateUUID(),
+            eventType: addLogType as TimeLog['eventType'],
+            timestamp: d.getTime(), // Use the constructed Date's timestamp
+            date: addLogDate,       // Use the selected date string
+            addedBy: currentUserId
+        };
+        try {
+            await insertLog(selectedUserDetail.user.id, newLog);
+            const latest = await getLogs(selectedUserDetail.user.id, dateStr(d)); // Use 'd' for dateStr
+            setDetailLogs(latest);
+        } catch (e: any) { alert(e.message); }
+    }
+
+    const dismissNote = useCallback((id: string) => {
+        setNotifications(prev => prev.filter(n => n.id !== id));
+    }, []);
 
     // Close dropdown on outside click
     useEffect(() => {
@@ -284,16 +396,56 @@ export default function MasterConsole({ currentUserId, isMaster }: Props) {
         return () => document.removeEventListener('mousedown', handleOutside);
     }, [clientFilterOpen]);
 
+    // ── Popup channel — separate from the main refresh channel ──────────────
+    useEffect(() => {
+        const ch = supabase
+            .channel('mc_activity_popups')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'time_logs' }, (payload) => {
+                const { user_id, event_type } = payload.new as { user_id: string; event_type: string };
+                const meta = EVENT_META[event_type];
+                if (!meta) return;
+                // Read from ref — no state updater side-effects, never runs twice
+                const rec = recordsRef.current.find(r => r.user.id === user_id);
+                if (!rec) return;
+                const note: ActivityNote = {
+                    id: `${user_id}-${event_type}-${Date.now()}`,
+                    name: rec.user.name,
+                    event: meta.label,
+                    color: meta.color,
+                    icon: meta.icon,
+                    ts: Date.now(),
+                };
+                setNotifications(p => [note, ...p].slice(0, 5));
+            })
+            .subscribe();
+        return () => { ch.unsubscribe(); };
+    }, []);
+
     const refresh = useCallback(async () => {
         const [data, pData, clientsData, leavesData] = await Promise.all([
             getAllUsersStatus(), getPendingUsers(), getClients(), getLeaves()
         ]);
         if (!mountedRef.current) return;
         setRecords(data);
+        recordsRef.current = data;
         setPending(pData);
         setClients(clientsData);
         setLeaves(leavesData);
         setLoading(false);
+        // Load discipline IDs in background (non-blocking)
+        get7DayBreakStats().then(stats => {
+            const ids = new Set(
+                stats
+                    .filter(s =>
+                        s.daysChecked >= 3 &&
+                        s.breakViolDays === 0 &&
+                        s.brbViolDays === 0 &&
+                        s.avgBreakMs < 75 * 60 * 1000 * 0.80
+                    )
+                    .map(s => s.user.id)
+            );
+            if (mountedRef.current) setCleanIds(ids);
+        }).catch(() => { });
     }, []);
 
     useEffect(() => {
@@ -360,10 +512,12 @@ export default function MasterConsole({ currentUserId, isMaster }: Props) {
         onBrb: augmented.filter(r => r.status === 'on_brb').length,
         onLeave: augmented.filter(r => r.status === 'on_leave').length,
         done: augmented.filter(r => r.status === 'punched_out').length,
+        idle: augmented.filter(r => r.status === 'idle').length,
     }), [augmented]);
 
+
     return (
-        <div className="flex flex-col gap-6">
+        <>
 
             {/* ── PENDING APPROVALS ─────────────────────────────────────────── */}
             <AnimatePresence>
@@ -390,59 +544,66 @@ export default function MasterConsole({ currentUserId, isMaster }: Props) {
                 )}
             </AnimatePresence>
 
-            {/* ── STATS BAR (clickable filter buttons) ─────────────────────── */}
-            <div className="grid grid-cols-5 gap-px bg-white/5 rounded-2xl overflow-hidden border border-white/8">
-                {[
-                    { label: 'Working', val: stats.working, key: 'working', color: 'text-emerald-400', activeBg: 'bg-emerald-900/20' },
-                    { label: 'On Break', val: stats.onBreak, key: 'on_break', color: 'text-amber-400', activeBg: 'bg-amber-900/20' },
-                    { label: 'BRB', val: stats.onBrb, key: 'on_brb', color: 'text-blue-400', activeBg: 'bg-blue-900/20' },
-                    { label: 'On Leave', val: stats.onLeave, key: 'on_leave', color: 'text-violet-400', activeBg: 'bg-violet-900/20' },
-                    { label: 'Logged Out', val: stats.done, key: 'punched_out', color: 'text-slate-400', activeBg: 'bg-slate-900/30' },
-                ].map(s => {
-                    const isActive = statusFilter === s.key;
-                    return (
-                        <button key={s.label}
-                            onClick={() => setStatusFilter(isActive ? null : s.key)}
-                            className={`px-5 py-4 flex flex-col gap-1 text-left transition-all hover:brightness-110 relative
-                                ${isActive ? s.activeBg : 'bg-[#0a0a18] hover:bg-white/[0.03]'}`}>
-                            {isActive && <div className={`absolute top-0 inset-x-0 h-0.5 ${s.color.replace('text-', 'bg-')}`} />}
-                            <p className={`text-2xl font-black tabular-nums ${s.color}`}>{s.val}</p>
-                            <p className={`text-[10px] font-bold uppercase tracking-widest ${isActive ? s.color : 'text-slate-600'}`}>{s.label}</p>
-                        </button>
-                    );
-                })}
-            </div>
 
             {/* ── MAIN GRID: People Table + Week Calendar ────────────────────── */}
-            <div className="grid grid-cols-[1fr_280px] gap-5 items-start">
+            <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 min-h-0 items-start">
 
-                {/* LEFT: Recruiter List */}
-                <div className="flex flex-col gap-3 min-h-0">
+                {/* LEFT: Dashboard Data Map */}
+                <div className="xl:col-span-3 flex flex-col gap-6 min-h-0">
+
+                    {/* MANAGER OVERVIEW PANEL / FILTERS */}
+                    {!loading && (() => {
+                        const total = augmented.length || 1;
+                        const tiles = [
+                            { label: 'All', k: null, val: total, color: 'text-slate-200', bg: 'bg-[#11111a] border-white/10 hover:bg-white/5', acc: 'bg-slate-500' },
+                            { label: 'Working', k: 'working', val: stats.working, color: 'text-emerald-400', bg: 'bg-[#0a0a1a] border-white/5 hover:bg-emerald-950/40', acc: 'bg-emerald-500' },
+                            { label: 'On Break', k: 'on_break', val: stats.onBreak, color: 'text-amber-400', bg: 'bg-[#0a0a1a] border-white/5 hover:bg-amber-950/40', acc: 'bg-amber-500' },
+                            { label: 'BRB', k: 'on_brb', val: stats.onBrb, color: 'text-indigo-400', bg: 'bg-[#0a0a1a] border-white/5 hover:bg-indigo-950/40', acc: 'bg-indigo-500' },
+                            { label: 'On Leave', k: 'on_leave', val: stats.onLeave, color: 'text-violet-400', bg: 'bg-[#0a0a1a] border-white/5 hover:bg-violet-950/40', acc: 'bg-violet-500' },
+                            { label: 'Logged Out', k: 'punched_out', val: stats.done + stats.idle, color: 'text-slate-400', bg: 'bg-[#0a0a1a] border-white/5 hover:bg-slate-900/50', acc: 'bg-slate-600' },
+                        ];
+                        return (
+                            <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-2">
+                                {tiles.map(s => (
+                                    <button
+                                        key={s.label}
+                                        onClick={() => setStatusFilter(s.k)}
+                                        className={`p-4 rounded-xl flex flex-col text-left border relative overflow-hidden group transition-all duration-300 ${s.bg} ${statusFilter === s.k ? 'ring-2 ring-white/20 scale-[1.02] shadow-lg' : ''}`}
+                                    >
+                                        <div className={`absolute top-0 left-0 right-0 h-1 ${s.acc} shadow-[0_0_10px_currentColor]`} />
+                                        <p className={`text-3xl font-black tabular-nums tracking-tighter leading-none mt-2 ${s.color}`}>{s.val}</p>
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mt-2">{s.label}</p>
+                                    </button>
+                                ))}
+                            </div>
+                        );
+                    })()}
+
                     {/* Filter row */}
-                    <div className="flex z-10 items-center justify-between bg-[#0A0A0A] p-2.5 rounded-xl border border-white/[0.06] shadow-lg relative">
-                        <div className="flex items-center gap-3 flex-1">
-                            <Wifi size={14} className="text-emerald-400 animate-pulse flex-shrink-0 ml-1" />
-                            <span className="text-[11px] font-bold uppercase tracking-widest text-emerald-400">Live</span>
+                    <div className="flex z-10 items-center justify-between bg-black/60 backdrop-blur-md p-3 rounded-2xl border border-white/10 shadow-lg relative">
+                        <div className="flex items-center gap-3 flex-1 flex-wrap">
+                            <Wifi size={16} className="text-emerald-400 animate-pulse flex-shrink-0 ml-1 drop-shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+                            <span className="text-[12px] font-black uppercase tracking-[0.2em] text-emerald-400">Live</span>
 
-                            <div className="w-px h-5 bg-white/10 mx-1" />
+                            <div className="w-px h-6 bg-white/10 mx-2" />
 
                             {/* Search */}
-                            <div className="relative flex-1 max-w-xs">
-                                <Search size={14} className="absolute left-0 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-                                <input type="text" placeholder="Search recruiters…" value={search} onChange={e => setSearch(e.target.value)}
-                                    className="w-full bg-transparent border-none py-1.5 pl-7 pr-3 text-sm text-white placeholder:text-slate-600 focus:outline-none transition-all" />
-                                {search && <button onClick={() => setSearch('')} className="absolute right-0 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"><XCircle size={14} /></button>}
+                            <div className="relative flex-1 max-w-sm ml-auto mr-4">
+                                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                                <input type="text" placeholder="Search employees…" value={search} onChange={e => setSearch(e.target.value)}
+                                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-2 pl-10 pr-3 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-white/20 transition-all font-semibold" />
+                                {search && <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"><XCircle size={16} /></button>}
                             </div>
 
-                            <div className="w-px h-5 bg-white/10" />
+                            <div className="w-px h-6 bg-white/10 mx-1" />
 
                             {/* Multi-select Client Filter */}
                             <div className="relative" ref={filterDropdownRef}>
                                 <button type="button" onClick={() => setClientFilterOpen(!clientFilterOpen)}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-transparent hover:bg-white/[0.04] rounded-lg transition-colors text-sm font-semibold text-slate-300">
-                                    <Filter size={13} className="text-slate-500" />
-                                    {selectedClients.length === 0 ? 'All Clients' : `${selectedClients.length} Selected`}
-                                    <ChevronDown size={12} className={`text-slate-500 transition-transform ${clientFilterOpen ? 'rotate-180' : ''}`} />
+                                    className="flex items-center gap-1.5 px-4 py-2 bg-transparent hover:bg-white/[0.04] rounded-xl transition-colors text-[13px] font-bold text-slate-300">
+                                    <Filter size={14} className="text-slate-500" />
+                                    {selectedClients.length === 0 ? 'All Teams' : `${selectedClients.length} Teams`}
+                                    <ChevronDown size={14} className={`text-slate-500 transition-transform ${clientFilterOpen ? 'rotate-180' : ''}`} />
                                 </button>
 
                                 <AnimatePresence>
@@ -516,75 +677,234 @@ export default function MasterConsole({ currentUserId, isMaster }: Props) {
                         </div>
                     )}
 
+                    {/* ── INSIGHTS STRIP ────────────────────────────── */}
+                    {!loading && (() => {
+                        const now = Date.now();
+                        const overdueBreak = augmented.filter(r =>
+                            r.status === 'on_break' && r.breakStart && (now - r.breakStart) > DANGER_MS
+                        );
+                        if (overdueBreak.length === 0) return null;
+                        return (
+                            <div className="flex flex-col gap-1.5 mb-2 shadow-lg">
+                                <div className="flex items-center gap-2.5 px-4 py-3 rounded-2xl border text-[13px] font-bold text-rose-400 border-rose-500/30 bg-rose-900/20 shadow-[0_4px_20px_rgba(225,29,72,0.15)]">
+                                    <AlertTriangle size={15} className="flex-shrink-0 animate-pulse" />
+                                    {overdueBreak.map(r => r.user.name.split(' ')[0]).join(', ')} {overdueBreak.length === 1 ? 'has' : 'have'} been on break &gt;30m
+                                </div>
+                            </div>
+                        );
+                    })()}
+
+
+                    {/* ── CARD GRID RENDERING ────────────────────────────── */}
                     {!loading && sorted.length > 0 && (() => {
-                        let lastClient = '';
-                        return sorted.map(r => {
-                            const showHeader = selectedClients.length === 0 && r.user.clientName !== lastClient;
-                            if (showHeader) lastClient = r.user.clientName;
+                        // 1. Group by client (Team)
+                        const groups = sorted.reduce((acc, r) => {
+                            if (!acc[r.user.clientName]) acc[r.user.clientName] = [];
+                            acc[r.user.clientName].push(r);
+                            return acc;
+                        }, {} as Record<string, typeof sorted>);
+
+                        const clientNames = selectedClients.length > 0
+                            ? selectedClients.filter(c => groups[c])
+                            : Object.keys(groups).sort();
+
+                        return clientNames.map(cName => {
+                            const groupRows = groups[cName];
+                            if (!groupRows || groupRows.length === 0) return null;
+                            const total = groupRows.length;
+                            const gWorking = groupRows.filter(x => x.status === 'working').length;
+                            const gBreak = groupRows.filter(x => x.status === 'on_break').length;
+                            const gOffline = groupRows.filter(x => x.status === 'punched_out' || x.status === 'idle').length;
+                            const gViol = groupRows.filter(x => (x.status === 'on_break' && x.breakStart && Date.now() - x.breakStart > DANGER_MS) || (x.status === 'on_brb' && x.brbStart && Date.now() - x.brbStart > DANGER_MS)).length;
+
+                            // Calculate avg break across group for currently active (break/brb) people
+                            const gOnBreak = groupRows.filter(x => x.status === 'on_break' && x.breakStart);
+                            const gOnBrb = groupRows.filter(x => x.status === 'on_brb' && x.brbStart);
+                            const gAvgBreakMs = gOnBreak.length > 0 ? gOnBreak.reduce((s, x) => s + (Date.now() - (x.breakStart || 0)), 0) / gOnBreak.length : 0;
+                            const gAvgBrbMs = gOnBrb.length > 0 ? gOnBrb.reduce((s, x) => s + (Date.now() - (x.brbStart || 0)), 0) / gOnBrb.length : 0;
                             return (
-                                <div key={r.user.id}>
-                                    {showHeader && (
-                                        <div className="flex items-center gap-2 pt-2 pb-1">
-                                            <div className="h-px flex-1 bg-white/5" />
-                                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-3">{r.user.clientName}</span>
-                                            <div className="h-px flex-1 bg-white/5" />
+                                <div key={cName} className="mb-6 last:mb-0 bg-white/[0.01] border border-white/[0.03] p-5 rounded-[1.5rem]">
+                                    {/* Team Header */}
+                                    <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+                                        <div className="flex flex-wrap items-center gap-4">
+                                            <h2 className="text-[15px] font-black text-white uppercase tracking-[0.2em]">{cName}</h2>
+                                            <div className="flex flex-wrap gap-2">
+                                                <span className="text-[9px] font-bold uppercase tracking-widest text-slate-500 bg-slate-800/80 px-2.5 py-1 rounded-full border border-slate-700">{total} Reps</span>
+                                                {gWorking > 0 && <span className="text-[9px] font-bold uppercase tracking-widest text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">{gWorking} Active</span>}
+                                                {gBreak > 0 && <span className="text-[9px] font-bold uppercase tracking-widest text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">{gBreak} Break</span>}
+                                                {gOffline > 0 && <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400 bg-slate-500/10 px-2.5 py-1 rounded-full border border-slate-500/20">{gOffline} Offline</span>}
+                                                {gViol > 0 && <span className="text-[9px] font-bold uppercase tracking-widest text-rose-500 bg-rose-500/10 px-2.5 py-1 rounded-full border border-rose-500/20 animate-pulse">⚠ {gViol} Overdue</span>}
+                                            </div>
                                         </div>
-                                    )}
-                                    <RecruiterRow r={r} isMaster={isMaster}
-                                        onEndBreak={() => doOverride(r.user.id, 'break_end')}
-                                        onEndBrb={() => doOverride(r.user.id, 'brb_end')}
-                                        onPunchOut={() => setConfirmEnd(r.user.id)}
-                                        confirmingEnd={confirmEnd === r.user.id}
-                                        onConfirmEnd={() => doOverride(r.user.id, 'punch_out')}
-                                        onCancelEnd={() => setConfirmEnd(null)}
-                                        confirmingDelete={confirmDelete === r.user.id}
-                                        onConfirmDelete={() => doDelete(r.user.id)}
-                                        onCancelDelete={() => setConfirmDelete(null)}
-                                        onDeleteRequest={() => setConfirmDelete(r.user.id)}
-                                    />
+                                        {/* Team avg break/brb stats */}
+                                        {(gOnBreak.length > 0 || gOnBrb.length > 0) && (
+                                            <div className="flex items-center gap-3 text-[9px] font-bold">
+                                                {gOnBreak.length > 0 && (
+                                                    <div className="flex items-center gap-1 text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded-lg">
+                                                        <Coffee size={9} className="flex-shrink-0" />
+                                                        <span>Avg Break: {formatDuration(gAvgBreakMs)}</span>
+                                                    </div>
+                                                )}
+                                                {gOnBrb.length > 0 && (
+                                                    <div className="flex items-center gap-1 text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-1 rounded-lg">
+                                                        <RotateCcw size={9} className="flex-shrink-0" />
+                                                        <span>Avg BRB: {formatDuration(gAvgBrbMs)}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Employee List  (Rows replacing Grid) */}
+                                    <div className="flex flex-col gap-2">
+                                        {groupRows.map(r => (
+                                            <EmployeeRow
+                                                key={r.user.id}
+                                                r={r}
+                                                isMaster={isMaster}
+                                                isClean={cleanIds.has(r.user.id)}
+                                                onEndBreak={() => doOverride(r.user.id, 'break_end')}
+                                                onEndBrb={() => doOverride(r.user.id, 'brb_end')}
+                                                onPunchOut={() => setConfirmEnd(r.user.id)}
+                                                confirmingEnd={confirmEnd === r.user.id}
+                                                onConfirmEnd={() => doOverride(r.user.id, 'punch_out')}
+                                                onCancelEnd={() => setConfirmEnd(null)}
+                                                confirmingDelete={confirmDelete === r.user.id}
+                                                onConfirmDelete={() => doDelete(r.user.id)}
+                                                onCancelDelete={() => setConfirmDelete(null)}
+                                                onDeleteRequest={() => setConfirmDelete(r.user.id)}
+                                                onClickRow={() => setSelectedUserDetail(r)}
+                                            />
+                                        ))}
+                                    </div>
                                 </div>
                             );
                         });
                     })()}
-                </div>
+                </div> {/* End Left Col */}
 
-                {/* RIGHT: Weekly Leave Calendar + Today's leaves */}
+                {/* RIGHT: Weekly Leave Calendar + Violators */}
                 <div className="flex flex-col gap-4">
+
+                    {/* Leave Calendar — compact 7-day number bar */}
                     <div className="rounded-2xl border border-white/8 bg-[#0a0a18] p-4">
-                        <div className="flex items-center gap-2 mb-4">
-                            <Calendar size={14} className="text-violet-400" />
-                            <p className="text-xs font-black uppercase tracking-widest text-slate-500">7-Day Leave View</p>
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-1.5">
+                                <Calendar size={13} className="text-indigo-400" />
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Leave · Next 7 Days</p>
+                            </div>
+                            {(() => {
+                                const todayCount = weekLeaves.filter(l =>
+                                    l.date === dateStr(new Date()) &&
+                                    (selectedClients.length === 0 || selectedClients.includes(l.client_name))
+                                ).length;
+                                return todayCount > 0
+                                    ? <span className="text-[10px] font-bold text-violet-400 bg-violet-500/10 border border-violet-500/20 px-2 py-0.5 rounded-full">{todayCount} today</span>
+                                    : <span className="text-[10px] text-slate-700 font-semibold">All clear today</span>;
+                            })()}
                         </div>
                         <WeekLeaveCalendar leaves={weekLeaves} selectedClients={selectedClients} />
                     </div>
 
-                    {/* Today on leave */}
-                    {todayLeaves.length > 0 && (
-                        <div className="rounded-2xl border border-violet-500/20 bg-violet-900/10 p-4">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-violet-400 mb-3">On Leave Today · {todayLeaves.length}</p>
-                            <div className="flex flex-col gap-2">
-                                {todayLeaves.filter(l => selectedClients.length === 0 || selectedClients.includes(l.client_name)).map(l => (
-                                    <div key={l.id} className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-black/30 border border-violet-500/10">
-                                        <div className="w-7 h-7 rounded-lg bg-violet-500/20 border border-violet-500/30 flex items-center justify-center text-sm font-black text-violet-300 flex-shrink-0">
-                                            {l.employee_name[0].toUpperCase()}
-                                        </div>
-                                        <div className="min-w-0">
-                                            <p className="text-xs font-bold text-white truncate">{l.employee_name}</p>
-                                            <p className="text-[9px] text-slate-500 truncate">{l.leave_type} · {l.day_count === 1 ? 'Full' : 'Half'}</p>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                    {/* Violators Panel */}
+                    {/* Star Performers */}
+                    <div className="rounded-2xl border border-white/8 bg-[#0a0a18] p-4">
+                        <StarPerformers clientFilter={selectedClients} />
+                    </div>
+
+                    {/* Break Violators Panel */}
                     <div className="rounded-2xl border border-white/8 bg-[#0a0a18] p-4">
                         <ViolatorsPanel clientFilter={selectedClients} />
                     </div>
                 </div>
+            </div> {/* End Main Grid */}
+
+            <p className="text-[10px] text-slate-700 text-center tracking-wider uppercase mt-4">Live via Supabase Realtime</p>
+
+            {/* ── Activity Notification Toast Stack ──── */}
+            <div className="fixed bottom-6 right-6 z-[200] flex flex-col-reverse gap-2 pointer-events-none">
+                <AnimatePresence mode="popLayout">
+                    {notifications.map(n => (
+                        <div key={n.id} className="pointer-events-auto">
+                            <ActivityToast note={n} onDismiss={() => dismissNote(n.id)} />
+                        </div>
+                    ))}
+                </AnimatePresence>
             </div>
 
-            <p className="text-[10px] text-slate-700 text-center tracking-wider uppercase">Live via Supabase Realtime</p>
-        </div>
+            {/* Admin Details Modal Slide-over */}
+            {typeof document !== 'undefined' && createPortal(
+                <AnimatePresence>
+                    {selectedUserDetail && (
+                        <>
+                            {/* Backdrop */}
+                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedUserDetail(null)} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100]" />
+
+                            {/* Slide Panel */}
+                            <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }} className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-[#0a0a1a] border-l border-white/10 shadow-2xl z-[150] flex flex-col">
+                                <div className="p-6 border-b border-white/5 flex items-center justify-between">
+                                    <div>
+                                        <h2 className="text-xl font-bold text-white">{selectedUserDetail.user.name}</h2>
+                                        <p className="text-sm text-slate-500">{selectedUserDetail.user.clientName} · {selectedUserDetail.user.shiftStart} to {selectedUserDetail.user.shiftEnd}</p>
+                                    </div>
+                                    <button onClick={() => setSelectedUserDetail(null)} className="p-2 hover:bg-white/5 rounded-full text-slate-400 hover:text-white transition-colors"><X size={20} /></button>
+                                </div>
+
+                                <div className="flex-1 overflow-y-auto p-6 scrollbar-thin space-y-8">
+                                    <div>
+                                        <div className="flex items-center justify-between mb-4">
+                                            <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">Timeline Editor</h3>
+                                            <span className="text-[10px] text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">Admin Override Active</span>
+                                        </div>
+                                        <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-4">
+                                            <TimelineLog logs={detailLogs} isAdmin={true} onDeleteLog={handleAdminDeleteLog} />
+                                        </div>
+                                    </div>
+
+                                    <div className="border-t border-white/5 pt-8">
+                                        <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-4">Add Missing Log Event</h3>
+                                        <form onSubmit={handleAdminAddLog} className="space-y-4">
+                                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                                                <div>
+                                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Event Type</label>
+                                                    <div className="relative">
+                                                        <select value={addLogType} onChange={e => setAddLogType(e.target.value)} className="w-full bg-white/[0.04] border border-white/10 rounded-xl py-2.5 pl-3 pr-8 text-sm font-semibold text-white appearance-none focus:outline-none focus:border-blue-500/50">
+                                                            <option value="punch_in" className="bg-slate-900">Punch In</option>
+                                                            <option value="punch_out" className="bg-slate-900">Punch Out</option>
+                                                            <option value="break_start" className="bg-slate-900">Break Start</option>
+                                                            <option value="break_end" className="bg-slate-900">Break End</option>
+                                                            <option value="brb_start" className="bg-slate-900">BRB Start</option>
+                                                            <option value="brb_end" className="bg-slate-900">BRB End</option>
+                                                        </select>
+                                                        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Date</label>
+                                                    <input
+                                                        type="date"
+                                                        value={addLogDate}
+                                                        onChange={e => setAddLogDate(e.target.value)}
+                                                        className="w-full bg-white/[0.04] border border-white/10 rounded-xl py-2 pl-3 pr-3 text-sm font-semibold text-white focus:outline-none focus:border-blue-500/50 [color-scheme:dark]"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Time</label>
+                                                    <CustomTimePicker value={addLogTime} onChange={setAddLogTime} />
+                                                </div>
+                                            </div>
+                                            <button type="submit" className="w-full py-3 mt-2 rounded-xl bg-blue-500 hover:bg-blue-400 text-black text-xs font-black uppercase tracking-widest shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_8px_20px_rgba(59,130,246,0.2)] transition-all">
+                                                Insert Timeline Event
+                                            </button>
+                                            <p className="text-[10px] text-slate-500 text-center px-4 leading-tight">This will permanently mutate the employee's timeline. Refresh the main console after inserting/deleting events to recalculate their status.</p>
+                                        </form>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        </>
+                    )}
+                </AnimatePresence>,
+                document.body
+            )}
+        </>
     );
 }

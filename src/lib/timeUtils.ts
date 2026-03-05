@@ -1,7 +1,93 @@
 import { DaySession, BreakRecord, BRBRecord, TimeLog } from '@/types';
 
-export const BREAK_LIMIT_MS = 75 * 60 * 1000;  // 1h 15m violation threshold
-export const BRB_LIMIT_MS = 10 * 60 * 1000;  // 10m violation threshold
+// ── Server Time Sync ─────────────────────────────────────────────────────────
+// This stores the difference between the local OS clock and the authoritative Server time.
+let clockOffsetMs = 0;
+
+export function setServerOffset(serverMs: number) {
+    clockOffsetMs = serverMs - Date.now();
+}
+
+/** Returns the local Date adjusted by the server drift. */
+export function getRealDate(): Date {
+    return new Date(Date.now() + clockOffsetMs);
+}
+
+/** Returns the current UTC timestamp adjusted by the server drift. */
+export function getRealNow(): number {
+    return Date.now() + clockOffsetMs;
+}
+
+// ── Shift policy defaults (used when user has no custom shift) ────────────────
+export const BREAK_LIMIT_MS = 75 * 60 * 1000;  // 1h 15m max break/day
+export const BREAK_ALLOWED_MS = 60 * 60 * 1000;  // 1h standard allowance
+export const BRB_LIMIT_MS = 10 * 60 * 1000;  // 10m max BRB/day
+
+// Legacy constants kept for backward compat (reports use BREAK_LIMIT_MS etc.)
+export const SHIFT_START_H = 8;
+export const SHIFT_GRACE_MINS = 5;
+export const SHIFT_END_H = 17;
+
+/**
+ * Convert a UTC timestamp to total minutes past midnight in a given IANA timezone.
+ * Uses Intl.DateTimeFormat which correctly handles DST automatically.
+ * e.g. America/Chicago is CST (-6) in winter and CDT (-5) in summer, transparently.
+ */
+export function toZonedMinutes(ts: number, timezone = 'America/Chicago'): number {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        hour: 'numeric', minute: 'numeric', hour12: false,
+    }).formatToParts(new Date(ts));
+    const h = parseInt(parts.find(p => p.type === 'hour')!.value, 10);
+    const m = parseInt(parts.find(p => p.type === 'minute')!.value, 10);
+    // hour12:false can return 24 for midnight
+    return (h === 24 ? 0 : h) * 60 + m;
+}
+
+/** Convert "HH:MM" string to total minutes past midnight */
+export function parseShiftMins(hhmm: string): number {
+    const [h, m] = hhmm.split(':').map(Number);
+    return (h || 0) * 60 + (m || 0);
+}
+
+/** @deprecated Use toZonedMinutes() instead. Kept for backward compat. */
+export function toCSTTime(ts: number): { h: number; m: number } {
+    const mins = toZonedMinutes(ts, 'America/Chicago');
+    return { h: Math.floor(mins / 60), m: mins % 60 };
+}
+
+/** Total minutes past midnight in the given timezone */
+function cstMinutes(ts: number) {
+    return toZonedMinutes(ts, 'America/Chicago');
+}
+
+export function checkViolations(
+    breakMs: number,
+    brbMs: number,
+    punchIn?: number,
+    punchOut?: number,
+    shiftStart = '08:00',
+    shiftEnd = '17:00',
+    timezone = 'America/Chicago',
+) {
+    const breakViol = breakMs > BREAK_LIMIT_MS;
+    const brbViol = brbMs > BRB_LIMIT_MS;
+
+    // Grace period: 5 minutes after shift start
+    const graceCutoff = parseShiftMins(shiftStart) + 5;  // e.g. 08:00 → 485
+    const shiftEndMin = parseShiftMins(shiftEnd);          // e.g. 17:00 → 1020
+
+    const lateIn = !!punchIn && toZonedMinutes(punchIn, timezone) > graceCutoff;
+    const earlyOut = !!punchOut && toZonedMinutes(punchOut, timezone) < shiftEndMin;
+
+    return {
+        breakViol,
+        brbViol,
+        lateIn,
+        earlyOut,
+        any: breakViol || brbViol || lateIn || earlyOut,
+    };
+}
 
 export function formatDuration(ms: number): string {
     if (ms <= 0) return '00m 00s';
@@ -20,18 +106,44 @@ export function formatTime(ts: number): string {
 }
 
 export function getTodayKey(): string {
-    const d = new Date();
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    return dateStr(getRealDate());
 }
 
-function pad(n: number) { return String(n).padStart(2, '0'); }
+/** Returns the last N dates as ISO strings (YYYY-MM-DD), optionally skipping today */
+export function getPastDaysZoned(count: number, excludeToday: boolean = true): string[] {
+    const days: string[] = [];
+    const offset = excludeToday ? 1 : 0;
+    for (let i = 0; i < count; i++) {
+        const d = getRealDate();
+        d.setDate(d.getDate() - (i + offset));
+        days.push(dateStr(d));
+    }
+    return days.reverse(); // oldest first
+}
+
+function pad(n: string | number) { return String(n).padStart(2, '0'); }
 
 export function dateStr(d: Date): string {
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Chicago',
+        year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(d);
+
+    const y = parts.find(p => p.type === 'year')!.value;
+    const m = parts.find(p => p.type === 'month')!.value;
+    const day = parts.find(p => p.type === 'day')!.value;
+    return `${y}-${m}-${day}`;
 }
 
 export function yearMonthStr(d: Date): string {
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Chicago',
+        year: 'numeric', month: '2-digit'
+    }).formatToParts(d);
+
+    const y = parts.find(p => p.type === 'year')!.value;
+    const m = parts.find(p => p.type === 'month')!.value;
+    return `${y}-${m}`;
 }
 
 export function dayName(dateString: string): string {
@@ -93,11 +205,6 @@ export function generateUUID(): string {
     });
 }
 
-export function checkViolations(breakMs: number, brbMs: number) {
-    const breakViol = breakMs > BREAK_LIMIT_MS;
-    const brbViol = brbMs > BRB_LIMIT_MS;
-    return { breakViol, brbViol, any: breakViol || brbViol };
-}
 
 export function exportCSV(rows: (string | number)[][], filename: string = 'breakthrough-report'): void {
     const csv = rows
@@ -114,15 +221,23 @@ export function exportCSV(rows: (string | number)[][], filename: string = 'break
 }
 
 export function exportExcel(rows: (string | number)[][], filename: string = 'breakthrough-data'): void {
-    const tableRows = rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('');
-    const html = `
-    <html xmlns:x="urn:schemas-microsoft-com:office:excel">
-      <head><meta charset="utf-8"></head>
-      <body><table>${tableRows}</table></body>
-    </html>`;
-    const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+    // Produce a proper CSV — Excel opens these cleanly without any security warnings.
+    const csv = rows
+        .map(r =>
+            r.map(c => {
+                const val = String(c ?? '');
+                // Wrap in quotes if the value contains commas, quotes or newlines
+                return val.includes(',') || val.includes('"') || val.includes('\n')
+                    ? `"${val.replace(/"/g, '""')}"`
+                    : val;
+            }).join(',')
+        )
+        .join('\r\n');
+
+    const bom = '\uFEFF'; // UTF-8 BOM so Excel reads non-ASCII chars correctly
+    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    triggerDownload(url, `${filename}-${getTodayKey()}.xls`);
+    triggerDownload(url, `${filename}-${getTodayKey()}.csv`);
 }
 
 function triggerDownload(url: string, filename: string) {
