@@ -22,6 +22,7 @@ export function getRealNow(): number {
 export const BREAK_LIMIT_MS = 75 * 60 * 1000;  // 1h 15m max break/day
 export const BREAK_ALLOWED_MS = 60 * 60 * 1000;  // 1h standard allowance
 export const BRB_LIMIT_MS = 10 * 60 * 1000;  // 10m max BRB/day
+export const COMBINED_LIMIT_MS = 85 * 60 * 1000;  // 1h 25m total max break
 
 // Legacy constants kept for backward compat (reports use BREAK_LIMIT_MS etc.)
 export const SHIFT_START_H = 8;
@@ -70,21 +71,44 @@ export function checkViolations(
     shiftEnd = '17:00',
     timezone = 'America/Chicago',
 ) {
-    const breakViol = breakMs > BREAK_LIMIT_MS;
-    const brbViol = brbMs > BRB_LIMIT_MS;
+    const breakViolMs = Math.max(0, breakMs - BREAK_LIMIT_MS);
+    const breakViol = breakViolMs > 0;
+    const brbViolMs = Math.max(0, brbMs - BRB_LIMIT_MS);
+    const brbViol = brbViolMs > 0;
 
     // Grace period: 5 minutes after shift start
     const graceCutoff = parseShiftMins(shiftStart) + 5;  // e.g. 08:00 → 485
     const shiftEndMin = parseShiftMins(shiftEnd);          // e.g. 17:00 → 1020
 
-    const lateIn = !!punchIn && toZonedMinutes(punchIn, timezone) > graceCutoff;
-    const earlyOut = !!punchOut && toZonedMinutes(punchOut, timezone) < shiftEndMin;
+    let lateInMs = 0;
+    let lateIn = false;
+    if (punchIn) {
+        const inMins = toZonedMinutes(punchIn, timezone);
+        if (inMins > graceCutoff) {
+            lateIn = true;
+            lateInMs = (inMins - graceCutoff) * 60 * 1000;
+        }
+    }
+
+    let earlyOutMs = 0;
+    let earlyOut = false;
+    if (punchOut) {
+        const outMins = toZonedMinutes(punchOut, timezone);
+        if (outMins < shiftEndMin) {
+            earlyOut = true;
+            earlyOutMs = (shiftEndMin - outMins) * 60 * 1000;
+        }
+    }
 
     return {
         breakViol,
+        breakViolMs,
         brbViol,
+        brbViolMs,
         lateIn,
+        lateInMs,
         earlyOut,
+        earlyOutMs,
         any: breakViol || brbViol || lateIn || earlyOut,
     };
 }

@@ -8,16 +8,8 @@ import { formatDuration } from '@/lib/timeUtils';
 // Thresholds
 const BREAK_LIMIT_MS = 75 * 60 * 1000;  // 1h 15m
 const BRB_LIMIT_MS = 10 * 60 * 1000;  // 10m
-const BREAK_GOOD_PCT = 0.80; // avg break < 80% of limit = genuinely disciplined
+const DISC_LIMIT_MS = 70 * 60 * 1000; // 1h 10m
 const MIN_DAYS = 3;    // must have been active at least 3 days
-
-// Compute a star score: lower avg break/BRB + more clean days = higher score
-function starScore(s: UserBreakStats): number {
-    const breakPct = s.avgBreakMs / BREAK_LIMIT_MS;   // 0–1
-    const brbPct = s.avgBrbMs / BRB_LIMIT_MS;     // 0–1
-    const dayBonus = s.daysChecked / 5;
-    return dayBonus - (breakPct * 0.5 + brbPct * 0.3);
-}
 
 // Medal tier
 function medal(rank: number): { icon: string; color: string; bg: string } {
@@ -45,10 +37,12 @@ export default function StarPerformers({ clientFilter = [] }: Props) {
                     s.daysChecked >= MIN_DAYS &&
                     s.breakViolDays === 0 &&
                     s.brbViolDays === 0 &&
-                    s.avgBreakMs < BREAK_LIMIT_MS * BREAK_GOOD_PCT &&
+                    s.lateInDays === 0 &&
+                    s.earlyOutDays === 0 &&
+                    (s.avgBreakMs + s.avgBrbMs) < DISC_LIMIT_MS &&
                     (clientFilter.length === 0 || clientFilter.includes(s.user.clientName))
                 )
-                .sort((a, b) => starScore(b) - starScore(a))
+                .sort((a, b) => (a.avgBreakMs + a.avgBrbMs) - (b.avgBreakMs + b.avgBrbMs))
                 .slice(0, 8); // top 8
             setStars(performers);
         } finally {
@@ -80,7 +74,7 @@ export default function StarPerformers({ clientFilter = [] }: Props) {
             <div className="flex items-center gap-3 px-3 py-1.5 rounded-lg bg-emerald-500/[0.04] border border-emerald-500/[0.12]">
                 <Sparkles size={10} className="text-emerald-400 flex-shrink-0" />
                 <p className="text-[9px] text-slate-500 font-medium">
-                    On time · Break &lt; <span className="text-emerald-400 font-bold">1h</span> avg · BRB &lt; <span className="text-emerald-400 font-bold">8m</span> avg · 0 violations
+                    On time · Total Break &lt; <span className="text-emerald-400 font-bold">1h 10m</span> avg · 0 violations
                 </p>
             </div>
 

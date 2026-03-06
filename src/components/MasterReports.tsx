@@ -41,7 +41,7 @@ function weekLabel(weekOffset: number): string {
 }
 function monthLabel(d: Date): string { return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }); }
 
-interface DayRow { userId: string; name: string; clientName: string; date: string; punchIn?: number; punchOut?: number; workedMs: number; breakMs: number; brbMs: number; breakCount: number; brbCount: number; breakViol: boolean; brbViol: boolean; lateIn: boolean; earlyOut: boolean; }
+interface DayRow { userId: string; name: string; clientName: string; date: string; punchIn?: number; punchOut?: number; workedMs: number; breakMs: number; brbMs: number; breakCount: number; brbCount: number; breakViol: boolean; breakViolMs: number; brbViol: boolean; brbViolMs: number; lateIn: boolean; lateInMs: number; earlyOut: boolean; earlyOutMs: number; }
 
 async function buildRow(
     userId: string, name: string, clientName: string, date: string,
@@ -53,17 +53,17 @@ async function buildRow(
     const breakMs = computeTotalTime(session.breaks, now);
     const brbMs = computeTotalTime(session.brbs, now);
     const v = checkViolations(breakMs, brbMs, session.punchIn, session.punchOut, shiftStart, shiftEnd, timezone);
-    return { userId, name, clientName, date, punchIn: session.punchIn, punchOut: session.punchOut, workedMs: computeWorkedTime(session, now), breakMs, brbMs, breakCount: countBreaks(logs), brbCount: countBRBs(logs), breakViol: v.breakViol, brbViol: v.brbViol, lateIn: v.lateIn, earlyOut: v.earlyOut };
+    return { userId, name, clientName, date, punchIn: session.punchIn, punchOut: session.punchOut, workedMs: computeWorkedTime(session, now), breakMs, brbMs, breakCount: countBreaks(logs), brbCount: countBRBs(logs), breakViol: v.breakViol, breakViolMs: v.breakViolMs, brbViol: v.brbViol, brbViolMs: v.brbViolMs, lateIn: v.lateIn, lateInMs: v.lateInMs, earlyOut: v.earlyOut, earlyOutMs: v.earlyOutMs };
 }
 
-function ViolBadge({ breakViol, brbViol, lateIn, earlyOut }: { breakViol: boolean; brbViol: boolean; lateIn: boolean; earlyOut: boolean }) {
+function ViolBadge({ breakViol, breakViolMs, brbViol, brbViolMs, lateIn, lateInMs, earlyOut, earlyOutMs }: { breakViol: boolean; breakViolMs: number; brbViol: boolean; brbViolMs: number; lateIn: boolean; lateInMs: number; earlyOut: boolean; earlyOutMs: number; }) {
     if (!breakViol && !brbViol && !lateIn && !earlyOut) return <span className="text-emerald-400"><CheckCircle size={13} /></span>;
     return (
         <div className="flex flex-col gap-0.5">
-            {breakViol && <span className="flex items-center gap-1 text-orange-400 text-[10px] font-bold"><AlertTriangle size={9} />Break</span>}
-            {brbViol && <span className="flex items-center gap-1 text-sky-400 text-[10px] font-bold"><AlertTriangle size={9} />BRB</span>}
-            {lateIn && <span className="flex items-center gap-1 text-amber-400 text-[10px] font-bold"><AlertTriangle size={9} />Late In</span>}
-            {earlyOut && <span className="flex items-center gap-1 text-purple-400 text-[10px] font-bold"><AlertTriangle size={9} />Early Out</span>}
+            {breakViol && <span className="flex items-center gap-1 text-orange-400 text-[10px] font-bold"><AlertTriangle size={9} />Break {breakViolMs > 0 ? `(${Math.round(breakViolMs / 60000)}m)` : ''}</span>}
+            {brbViol && <span className="flex items-center gap-1 text-sky-400 text-[10px] font-bold"><AlertTriangle size={9} />BRB {brbViolMs > 0 ? `(${Math.round(brbViolMs / 60000)}m)` : ''}</span>}
+            {lateIn && <span className="flex items-center gap-1 text-amber-400 text-[10px] font-bold"><AlertTriangle size={9} />Late In {lateInMs > 0 ? `(${Math.round(lateInMs / 60000)}m)` : ''}</span>}
+            {earlyOut && <span className="flex items-center gap-1 text-purple-400 text-[10px] font-bold"><AlertTriangle size={9} />Early Out {earlyOutMs > 0 ? `(${Math.round(earlyOutMs / 60000)}m)` : ''}</span>}
         </div>
     );
 }
@@ -114,7 +114,7 @@ function ReportTable({ rows, showDate, showName }: { rows: DayRow[]; showDate: b
                                 {showDate && <td className="py-3 px-4 text-slate-300 font-mono whitespace-nowrap">{r.date}</td>}
                                 {showDate && <td className="py-3 px-4 text-slate-500 font-medium whitespace-nowrap">{dayName(r.date)}</td>}
                                 <td className="py-3 px-4 text-emerald-400 font-mono font-bold whitespace-nowrap tracking-tight">{r.punchIn ? formatTime(r.punchIn) : <span className="text-slate-600">—</span>}</td>
-                                <td className="py-3 px-4 font-mono font-bold whitespace-nowrap tracking-tight">{r.punchOut ? <span className="text-rose-400">{formatTime(r.punchOut)}</span> : <span className="text-sky-400 animate-pulse font-extrabold text-[10px] uppercase tracking-widest bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/30">Active</span>}</td>
+                                <td className="py-3 px-4 font-mono font-bold whitespace-nowrap tracking-tight">{r.punchOut ? <span className="text-rose-400">{formatTime(r.punchOut)}</span> : r.punchIn ? <span className="text-sky-400 animate-pulse font-extrabold text-[10px] uppercase tracking-widest bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/30">Active</span> : <span className="text-slate-600">—</span>}</td>
                                 <td className="py-3 px-4 text-indigo-400 font-mono font-extrabold whitespace-nowrap tracking-tight">{r.workedMs > 0 ? formatDuration(r.workedMs) : <span className="text-slate-600">—</span>}</td>
                                 <td className="py-3 px-4 text-orange-400 font-bold whitespace-nowrap">{r.breakCount > 0 ? r.breakCount : '—'}</td>
                                 <td className="py-3 px-4 text-orange-400 font-mono font-bold whitespace-nowrap tracking-tight">{r.breakMs > 0 ? formatDuration(r.breakMs) : '—'}</td>
@@ -130,7 +130,7 @@ function ReportTable({ rows, showDate, showName }: { rows: DayRow[]; showDate: b
                                             }`}>{formatDuration(r.breakMs + r.brbMs)}</span>
                                     ) : '—'}
                                 </td>
-                                <td className="py-3 px-4 whitespace-nowrap"><ViolBadge breakViol={r.breakViol} brbViol={r.brbViol} lateIn={r.lateIn} earlyOut={r.earlyOut} /></td>
+                                <td className="py-3 px-4 whitespace-nowrap"><ViolBadge breakViol={r.breakViol} breakViolMs={r.breakViolMs} brbViol={r.brbViol} brbViolMs={r.brbViolMs} lateIn={r.lateIn} lateInMs={r.lateInMs} earlyOut={r.earlyOut} earlyOutMs={r.earlyOutMs} /></td>
                             </tr>
                         );
                     })}
@@ -191,18 +191,30 @@ export default function MasterReports() {
     const [recruiterSearch, setRecruiterSearch] = useState('');
     const [selectedRecruiters, setSelectedRecruiters] = useState<string[]>([]);
     const recruiterRef = useRef<HTMLDivElement>(null);
-    // Violation filter tile
+
+    // Violation filter tile (Legacy)
     const [violationFilter, setViolationFilter] = useState<ViolFilter>(null);
+
+    // New Dynamic Filters
+    const [statusDropFilter, setStatusDropFilter] = useState<string>(''); // 'Active', 'Not Active'
+    const [violDropFilter, setViolDropFilter] = useState<string>(''); // 'BRB Exceed', 'Break Exceed', 'Late In', 'Early Out'
+
+    const [statusDropOpen, setStatusDropOpen] = useState(false);
+    const [violDropOpen, setViolDropOpen] = useState(false);
+
+    const statusRef = useRef<HTMLDivElement>(null);
+    const violRef = useRef<HTMLDivElement>(null);
 
     // Close client dropdown on outside click
     useEffect(() => {
-        if (!clientDropOpen) return;
         function handleOutside(e: MouseEvent) {
             if (clientDropRef.current && !clientDropRef.current.contains(e.target as Node)) setClientDropOpen(false);
+            if (statusRef.current && !statusRef.current.contains(e.target as Node)) setStatusDropOpen(false);
+            if (violRef.current && !violRef.current.contains(e.target as Node)) setViolDropOpen(false);
         }
         document.addEventListener('mousedown', handleOutside);
         return () => document.removeEventListener('mousedown', handleOutside);
-    }, [clientDropOpen]);
+    }, []);
 
     useEffect(() => {
         getClients().then(data => {
@@ -248,12 +260,12 @@ export default function MasterReports() {
 
     const handleCSV = () => {
         const isMultiDay = ['week', 'month'].includes(range);
-        const header = ['Name', 'Client', ...(isMultiDay ? ['Date', 'Day'] : []), 'Punch In', 'Punch Out', 'Worked', 'Breaks #', 'Break Time', 'BRBs #', 'BRB Time', 'Total Break', 'Break Viol', 'BRB Viol', 'Late In', 'Early Out'];
-        const data = filteredRows.map(r => [r.name, r.clientName, ...(isMultiDay ? [r.date, dayName(r.date)] : []), r.punchIn ? formatTime(r.punchIn) : '', r.punchOut ? formatTime(r.punchOut) : '', formatDuration(r.workedMs), r.breakCount, formatDuration(r.breakMs), r.brbCount, formatDuration(r.brbMs), formatDuration(r.breakMs + r.brbMs), r.breakViol ? 'YES' : 'No', r.brbViol ? 'YES' : 'No', r.lateIn ? 'YES' : 'No', r.earlyOut ? 'YES' : 'No']);
+        const header = ['Name', 'Client', 'Status', ...(isMultiDay ? ['Date', 'Day'] : []), 'Punch In', 'Punch Out', 'Worked', 'Breaks #', 'Break Time', 'BRBs #', 'BRB Time', 'Total Break', 'Break Viol', 'BRB Viol', 'Late In', 'Early Out'];
+        const data = filteredRows.map(r => [r.name, r.clientName, (r.punchIn || r.workedMs > 0) ? 'Active' : 'Offline', ...(isMultiDay ? [r.date, dayName(r.date)] : []), r.punchIn ? formatTime(r.punchIn) : '', r.punchOut ? formatTime(r.punchOut) : '', formatDuration(r.workedMs), r.breakCount, formatDuration(r.breakMs), r.brbCount, formatDuration(r.brbMs), formatDuration(r.breakMs + r.brbMs), r.breakViol ? `YES (${Math.round(r.breakViolMs / 60000)}m)` : 'No', r.brbViol ? `YES (${Math.round(r.brbViolMs / 60000)}m)` : 'No', r.lateIn ? `YES (${Math.round(r.lateInMs / 60000)}m)` : 'No', r.earlyOut ? `YES (${Math.round(r.earlyOutMs / 60000)}m)` : 'No']);
         const s = summarize(filteredRows.filter(r => r.workedMs > 0));
         const lateInDays = filteredRows.filter(r => r.lateIn).length;
         const earlyOutDays = filteredRows.filter(r => r.earlyOut).length;
-        exportExcel([header, ...data, [], ['TOTALS', '', ...(isMultiDay ? ['', ''] : []), '', '', formatDuration(s.totalWorked), s.breakCount, formatDuration(s.totalBreak), s.brbCount, formatDuration(s.totalBrb), `${s.breakViolDays} day(s)`, `${s.brbViolDays} day(s)`, `${lateInDays} day(s)`, `${earlyOutDays} day(s)`], [], ['Policy Rules', 'Break allowance: 1h | Max: 1h 15m', 'BRB max: 10m/day', 'Shift: 8:00 AM CST | Grace: 8:05 AM', 'Shift end: 5:00 PM CST']], 'data-report');
+        exportExcel([header, ...data, [], ['TOTALS', '', '', ...(isMultiDay ? ['', ''] : []), '', '', formatDuration(s.totalWorked), s.breakCount, formatDuration(s.totalBreak), s.brbCount, formatDuration(s.totalBrb), `${s.breakViolDays} day(s)`, `${s.brbViolDays} day(s)`, `${lateInDays} day(s)`, `${earlyOutDays} day(s)`], [], ['Policy Rules', 'Break allowance: 1h | Max: 1h 15m', 'BRB max: 10m/day', 'Shift: 8:00 AM CST | Grace: 8:05 AM', 'Shift end: 5:00 PM CST']], 'data-report');
     };
 
 
@@ -275,12 +287,23 @@ export default function MasterReports() {
     const recruiterFiltered = clientFiltered.filter(r => selectedRecruiters.length === 0 || selectedRecruiters.includes(r.name));
 
     // Violation tile filter — also auto-sorted by total break (break + BRB) descending
+    // Apply dynamic filters
     const filteredRows = (violationFilter === null ? recruiterFiltered
         : violationFilter === 'late_in' ? recruiterFiltered.filter(r => r.lateIn)
             : violationFilter === 'break' ? recruiterFiltered.filter(r => r.breakViol)
                 : violationFilter === 'brb' ? recruiterFiltered.filter(r => r.brbViol)
                     : recruiterFiltered.filter(r => r.lateIn || r.breakViol || r.brbViol || r.earlyOut)
-    ).slice().sort((a, b) => (b.breakMs + b.brbMs) - (a.breakMs + a.brbMs));
+    ).filter(r => {
+        if (statusDropFilter === 'Active' && !r.punchIn && r.workedMs === 0) return false;
+        if (statusDropFilter === 'Not Active' && (r.punchIn || r.workedMs > 0)) return false;
+
+        if (violDropFilter === 'Late In' && !r.lateIn) return false;
+        if (violDropFilter === 'Early Out' && !r.earlyOut) return false;
+        if (violDropFilter === 'Break Exceed' && !r.breakViol) return false;
+        if (violDropFilter === 'BRB Exceed' && !r.brbViol) return false;
+
+        return true;
+    }).sort((a, b) => (b.breakMs + b.brbMs) - (a.breakMs + a.brbMs));
 
     // Summary always based on un-violation-filtered data for the tile counts to stay stable
     const baseS = summarize(recruiterFiltered.filter(r => r.workedMs > 0));
@@ -309,7 +332,7 @@ export default function MasterReports() {
             </div>
 
             {/* ── Filter bar — matching Live Dashboard style ─────────────── */}
-            <div className="flex z-10 items-center justify-between bg-black/60 backdrop-blur-md p-2.5 rounded-2xl border border-white/10 shadow-lg relative flex-wrap gap-2">
+            <div className="flex z-40 items-center justify-between bg-black/60 backdrop-blur-md p-2.5 rounded-2xl border border-white/10 shadow-lg relative flex-wrap gap-2">
                 <div className="flex items-center gap-2 flex-1 flex-wrap">
                     {/* Multi-select client dropdown */}
                     <div className="relative" ref={clientDropRef}>
@@ -389,13 +412,81 @@ export default function MasterReports() {
                         </AnimatePresence>
                     </div>
 
-                    {/* Name chips */}
-                    {selectedRecruiters.map(name => (
-                        <span key={name} className="flex items-center gap-1 text-[11px] font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 px-2.5 py-1 rounded-full">
-                            {name}
-                            <button onClick={() => removeRecruiter(name)} className="text-indigo-400 hover:text-white transition-colors"><X size={10} /></button>
-                        </span>
-                    ))}
+                    <div className="w-px h-6 bg-white/10" />
+
+                    {/* Status Dropdown */}
+                    <div className="relative" ref={statusRef}>
+                        <button onClick={() => { setStatusDropOpen(o => !o); setClientDropOpen(false); setViolDropOpen(false); }}
+                            className="flex items-center gap-1.5 px-3 py-2 bg-transparent hover:bg-white/[0.04] rounded-xl transition-colors text-[13px] font-bold text-slate-300">
+                            {statusDropFilter || 'Status'}
+                            <ChevronDown size={13} className={`text-slate-500 transition-transform ${statusDropOpen ? 'rotate-180' : ''}`} />
+                        </button>
+                        <AnimatePresence>
+                            {statusDropOpen && (
+                                <motion.div initial={{ opacity: 0, y: 4, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 4, scale: 0.98 }}
+                                    className="absolute top-full left-0 mt-2 w-48 bg-[#0C0C14] border border-white/10 rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.8)] overflow-hidden z-[100] py-1">
+                                    <div className="px-3 py-2 border-b border-white/[0.06]">
+                                        <span className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Filter by Status</span>
+                                    </div>
+                                    <div className="max-h-64 overflow-y-auto">
+                                        <button onClick={() => { setStatusDropFilter(''); setStatusDropOpen(false); }}
+                                            className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left transition-all ${!statusDropFilter ? 'bg-indigo-500/15 text-white font-bold' : 'text-slate-300 hover:bg-white/5 font-medium'}`}>
+                                            <span className={`w-4 h-4 rounded-md border flex items-center justify-center flex-shrink-0 ${!statusDropFilter ? 'bg-emerald-500 border-emerald-500' : 'border-slate-600'}`}>
+                                                {!statusDropFilter && <span className="text-black text-[10px] font-black">✓</span>}
+                                            </span>
+                                            All Statuses
+                                        </button>
+                                        {['Active', 'Not Active'].map(st => (
+                                            <button key={st} onClick={() => { setStatusDropFilter(st); setStatusDropOpen(false); }}
+                                                className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left transition-all ${statusDropFilter === st ? 'bg-indigo-500/15 text-white font-bold' : 'text-slate-300 hover:bg-white/5 font-medium'}`}>
+                                                <span className={`w-4 h-4 rounded-md border flex items-center justify-center flex-shrink-0 ${statusDropFilter === st ? 'bg-emerald-500 border-emerald-500' : 'border-slate-600'}`}>
+                                                    {statusDropFilter === st && <span className="text-black text-[10px] font-black">✓</span>}
+                                                </span>
+                                                {st}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+
+                    {/* Violations Dropdown */}
+                    <div className="relative" ref={violRef}>
+                        <button onClick={() => { setViolDropOpen(o => !o); setClientDropOpen(false); setStatusDropOpen(false); }}
+                            className="flex items-center gap-1.5 px-3 py-2 bg-transparent hover:bg-white/[0.04] rounded-xl transition-colors text-[13px] font-bold text-slate-300">
+                            {violDropFilter || 'Violations'}
+                            <ChevronDown size={13} className={`text-slate-500 transition-transform ${violDropOpen ? 'rotate-180' : ''}`} />
+                        </button>
+                        <AnimatePresence>
+                            {violDropOpen && (
+                                <motion.div initial={{ opacity: 0, y: 4, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 4, scale: 0.98 }}
+                                    className="absolute top-full left-0 mt-2 w-52 bg-[#0C0C14] border border-white/10 rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.8)] overflow-hidden z-[100] py-1">
+                                    <div className="px-3 py-2 border-b border-white/[0.06]">
+                                        <span className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Filter Violations</span>
+                                    </div>
+                                    <div className="max-h-64 overflow-y-auto">
+                                        <button onClick={() => { setViolDropFilter(''); setViolDropOpen(false); }}
+                                            className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left transition-all ${!violDropFilter ? 'bg-indigo-500/15 text-white font-bold' : 'text-slate-300 hover:bg-white/5 font-medium'}`}>
+                                            <span className={`w-4 h-4 rounded-md border flex items-center justify-center flex-shrink-0 ${!violDropFilter ? 'bg-emerald-500 border-emerald-500' : 'border-slate-600'}`}>
+                                                {!violDropFilter && <span className="text-black text-[10px] font-black">✓</span>}
+                                            </span>
+                                            All Violations
+                                        </button>
+                                        {['BRB Exceed', 'Break Exceed', 'Late In', 'Early Out'].map(st => (
+                                            <button key={st} onClick={() => { setViolDropFilter(st); setViolDropOpen(false); }}
+                                                className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left transition-all ${violDropFilter === st ? 'bg-indigo-500/15 text-white font-bold' : 'text-slate-300 hover:bg-white/5 font-medium'}`}>
+                                                <span className={`w-4 h-4 rounded-md border flex items-center justify-center flex-shrink-0 ${violDropFilter === st ? 'bg-emerald-500 border-emerald-500' : 'border-slate-600'}`}>
+                                                    {violDropFilter === st && <span className="text-black text-[10px] font-black">✓</span>}
+                                                </span>
+                                                {st}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
 
                     {/* Violation filter chip (when active) */}
                     {violationFilter && (
@@ -403,6 +494,13 @@ export default function MasterReports() {
                             {violationFilter === 'late_in' ? '🔴 Late Logins' : violationFilter === 'break' ? '☕ Break Exceeds' : violationFilter === 'brb' ? '🔄 BRB Exceeds' : '⚠️ All Violations'}
                             <button onClick={() => setViolationFilter(null)} className="text-rose-400 hover:text-white transition-colors"><X size={10} /></button>
                         </span>
+                    )}
+
+                    {(selectedClients.length > 0 || selectedRecruiters.length > 0 || statusDropFilter !== '' || violDropFilter !== '' || violationFilter !== null) && (
+                        <button onClick={() => { setSelectedClients([]); setSelectedRecruiters([]); setRecruiterSearch(''); setStatusDropFilter(''); setViolDropFilter(''); setViolationFilter(null); }}
+                            className="flex items-center gap-1 text-[11px] font-bold text-slate-500 hover:text-white transition-colors px-2.5 py-1.5 rounded-lg hover:bg-white/5 mt-1 xl:mt-0">
+                            <X size={11} /> Clear all
+                        </button>
                     )}
                 </div>
 
@@ -466,7 +564,7 @@ export default function MasterReports() {
                                         ${isActive ? t.active : t.idle}
                                         ${t.count === 0 ? 'cursor-default' : 'cursor-pointer'}`}>
                                     {isActive && <div className="absolute top-0 inset-x-0 h-0.5 bg-current opacity-60" />}
-                                    <p className="text-[10px] font-bold tracking-widest uppercase text-slate-500">{t.label}</p>
+                                    <p className="text-[10px] font-bold tracking-wider uppercase text-slate-500">{t.label}</p>
                                     <p className={`text-2xl font-black font-mono tabular-nums ${t.num}`}>{t.count}</p>
                                     {isActive && <p className="text-[9px] text-slate-500 mt-0.5">↓ filtered below</p>}
                                 </button>

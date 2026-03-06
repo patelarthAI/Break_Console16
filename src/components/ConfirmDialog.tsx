@@ -1,6 +1,8 @@
 'use client';
+import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Trash2 } from 'lucide-react';
 
 interface Props {
     open: boolean;
@@ -22,7 +24,10 @@ export default function ConfirmDialog({
 }: Props) {
     const isDanger = variant === 'danger';
 
-    return (
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => setMounted(true), []);
+
+    const content = (
         <AnimatePresence>
             {open && (
                 <>
@@ -80,4 +85,7 @@ export default function ConfirmDialog({
             )}
         </AnimatePresence>
     );
+
+    if (!mounted) return null;
+    return createPortal(content, document.body);
 }

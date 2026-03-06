@@ -6,9 +6,12 @@ import {
     Edit2, X, ChevronDown, CalendarCheck2,
     TrendingDown, AlertCircle, Filter, Search, Users2
 } from 'lucide-react';
-import { getLeaves, addLeave, deleteLeave, updateLeave, getClients, ClientRow, getAllUsers } from '@/lib/store';
-import { LeaveRecord, User as AppUser } from '@/types';
-import { exportExcel, dateStr } from '@/lib/timeUtils';
+import {
+    getAllUsers, getSmartLeaves, getClients, ClientRow,
+    addLeave, updateLeave, deleteLeave, AppUser
+} from '@/lib/store';
+import { supabase } from '@/lib/supabase';
+import { formatDuration, formatTime, dateStr, getPastDaysZoned } from '@/lib/timeUtils';
 import { useToast } from '@/components/Toast';
 import ConfirmDialog from '@/components/ConfirmDialog';
 
@@ -129,7 +132,11 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: AppUs
     async function loadData() {
         setLoading(true);
         try {
-            const [l, c, u] = await Promise.all([getLeaves(), getClients(), getAllUsers()]);
+            const [l, c, u] = await Promise.all([
+                getSmartLeaves(getPastDaysZoned(14, false)), // Last 14 days of smart lookups
+                getClients(),
+                getAllUsers()
+            ]);
             setLeaves(l); setClients(c); setAllUsers(u.filter(u => !u.isMaster));
         } catch (err) { console.error(err); }
         finally { setLoading(false); }
@@ -172,13 +179,17 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: AppUs
         setSaving(true);
         try {
             const payload = { date, client_name: selectedClient, employee_name: employeeName, is_planned: isPlanned, reason: reason || null, approver: currentUser.name, leave_type: leaveType, day_count: dayCount };
-            if (editingId) {
+            if (editingId && !editingId.startsWith('virtual-')) {
                 const updated = await updateLeave(editingId, payload);
                 setLeaves(prev => prev.map(l => l.id === editingId ? updated : l));
                 success('Record updated', `${employeeName}'s leave on ${date} has been saved.`);
             } else {
                 const added = await addLeave(payload);
-                setLeaves(prev => [added, ...prev]);
+                if (editingId && editingId.startsWith('virtual-')) {
+                    setLeaves(prev => prev.map(l => l.id === editingId ? added : l));
+                } else {
+                    setLeaves(prev => [added, ...prev]);
+                }
                 success('Leave recorded', `${employeeName} · ${leaveType} · ${date}`);
             }
             resetForm(); setDrawerOpen(false);
@@ -193,6 +204,17 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: AppUs
         if (editingId === id) cancelEdit();
         setDeleteId(null);
         success('Leave deleted', `${name}'s record has been removed.`);
+    }
+
+    function declineSmartLeave(id: string) {
+        if (!id.startsWith('virtual-')) return;
+        const dec = JSON.parse(localStorage.getItem('declined_smart_leaves') || '[]');
+        if (!dec.includes(id)) {
+            dec.push(id);
+            localStorage.setItem('declined_smart_leaves', JSON.stringify(dec));
+        }
+        setLeaves(prev => prev.filter(l => l.id !== id));
+        success('Leave Declined', 'The auto-generated record has been dismissed.');
     }
 
     // Available periods derived from leave data
@@ -529,29 +551,49 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: AppUs
                                             <td className="py-3.5 px-4">
                                                 <span className="text-[10px] font-black uppercase tracking-wide text-slate-500 bg-white/[0.04] border border-white/8 px-2 py-1 rounded-md whitespace-nowrap">{l.client_name}</span>
                                             </td>
-                                            <td className="py-3.5 px-4"><TypeBadge type={l.leave_type} /></td>
+                                            <td className="py-3.5 px-4"><TypeBadge type={l.leave_type} isSmart={(l as any).is_smart} /></td>
                                             <td className="py-3.5 px-4">
                                                 <span className={`text-xs font-black tabular-nums ${l.day_count === 1 ? 'text-blue-400' : 'text-amber-400'}`}>
                                                     {l.day_count === 1 ? 'Full Day' : 'Half Day'}
                                                 </span>
                                             </td>
                                             <td className="py-3.5 px-4">
-                                                {l.is_planned
+                                                {(l as any).is_smart ? (
+                                                    <span className="inline-flex items-center gap-1 text-amber-500 text-[10px] uppercase tracking-widest font-black"><AlertCircle size={10} /> Auto</span>
+                                                ) : l.is_planned
                                                     ? <span className="inline-flex items-center gap-1 text-emerald-400 text-xs font-bold"><CheckCircle size={11} /> Yes</span>
                                                     : <span className="inline-flex items-center gap-1 text-rose-400 text-xs font-bold"><AlertCircle size={11} /> No</span>}
                                             </td>
-                                            <td className="py-3.5 px-4 text-slate-500 text-xs max-w-[130px] truncate" title={l.reason || ''}>{l.reason || <span className="text-slate-700">—</span>}</td>
-                                            <td className="py-3.5 px-4 text-slate-600 text-xs whitespace-nowrap">{l.approver}</td>
+                                            <td className="py-3.5 px-4 text-slate-500 text-xs max-w-[130px] truncate" title={l.reason || ''}>
+                                                {(l as any).is_smart ? <span className="text-amber-500/80 text-[10px] font-bold uppercase">{l.reason}</span> : (l.reason || <span className="text-slate-700">—</span>)}
+                                            </td>
+                                            <td className="py-3.5 px-4 text-slate-600 text-xs whitespace-nowrap">{(l as any).is_smart ? <span className="text-slate-500 italic">System Gen</span> : l.approver}</td>
                                             <td className="py-3.5 px-4 pr-4">
                                                 <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all justify-end">
-                                                    <button onClick={() => startEdit(l)} title="Edit"
-                                                        className="p-1.5 rounded-md text-slate-600 hover:text-amber-400 hover:bg-amber-500/10 transition-all">
-                                                        <Edit2 size={13} />
-                                                    </button>
-                                                    <button onClick={() => setDeleteId(l.id)} title="Delete"
-                                                        className="p-1.5 rounded-md text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all">
-                                                        <Trash2 size={13} />
-                                                    </button>
+                                                    {(l as any).is_smart && (
+                                                        <>
+                                                            <button onClick={() => startEdit(l)} title="Approve & Save"
+                                                                className="flex items-center gap-1.5 px-2 py-1 mr-2 rounded-md bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-black font-bold text-[10px] uppercase tracking-wider transition-all">
+                                                                <CheckCircle size={12} /> Approve
+                                                            </button>
+                                                            <button onClick={() => declineSmartLeave(l.id)} title="Decline"
+                                                                className="flex items-center gap-1.5 px-2 py-1 mr-2 rounded-md bg-rose-500/10 text-rose-400 hover:bg-rose-500 hover:text-white font-bold text-[10px] uppercase tracking-wider transition-all">
+                                                                <X size={12} /> Decline
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                    {!(l as any).is_smart && (
+                                                        <button onClick={() => startEdit(l)} title="Edit"
+                                                            className="p-1.5 rounded-md text-slate-600 hover:text-amber-400 hover:bg-amber-500/10 transition-all">
+                                                            <Edit2 size={13} />
+                                                        </button>
+                                                    )}
+                                                    {!(l as any).is_smart && (
+                                                        <button onClick={() => setDeleteId(l.id)} title="Delete"
+                                                            className="p-1.5 rounded-md text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all">
+                                                            <Trash2 size={13} />
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </td>
                                         </motion.tr>

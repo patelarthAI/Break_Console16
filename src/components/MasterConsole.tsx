@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import {
     getAllUsersStatus, UserStatusRecord, masterOverride,
-    getPendingUsers, approveUser, deleteUser, getClients, ClientRow, getLeaves,
+    getPendingUsers, approveUser, deleteUser, deleteUserLogsForToday, getClients, ClientRow, getLeaves,
     get7DayBreakStats, getLogs, deleteTimeLog, insertLog
 } from '@/lib/store';
 
@@ -19,6 +19,7 @@ import { User, LeaveRecord, TimeLog, AppStatus } from '@/types';
 import ViolatorsPanel from '@/components/ViolatorsPanel';
 import StarPerformers from '@/components/StarPerformers';
 import TimelineLog from '@/components/TimelineLog';
+import ConfirmDialog from '@/components/ConfirmDialog';
 
 // ─── Custom Time Picker ───────────────────────────────────────────────────────
 function CustomTimePicker({ value, onChange }: { value: string, onChange: (v: string) => void }) {
@@ -337,6 +338,7 @@ export default function MasterConsole({ currentUserId, isMaster }: { currentUser
     const [addLogType, setAddLogType] = useState('punch_in');
     const [addLogTime, setAddLogTime] = useState('08:00 AM');
     const [addLogDate, setAddLogDate] = useState(getTodayKey());
+    const [timelineDeleteConfirmId, setTimelineDeleteConfirmId] = useState<string | null>(null);
 
     // Subscribe to detail logs when admin opens slide-over
     useEffect(() => {
@@ -346,11 +348,16 @@ export default function MasterConsole({ currentUserId, isMaster }: { currentUser
     }, [selectedUserDetail]);
 
     async function handleAdminDeleteLog(id: string) {
-        if (!confirm('Permanently delete this timeline action?')) return;
+        setTimelineDeleteConfirmId(id);
+    }
+
+    async function confirmAdminDeleteLog() {
+        if (!timelineDeleteConfirmId) return;
         try {
-            await deleteTimeLog(id);
-            setDetailLogs(prev => prev.filter(l => l.id !== id));
+            await deleteTimeLog(timelineDeleteConfirmId);
+            setDetailLogs(prev => prev.filter(l => l.id !== timelineDeleteConfirmId));
         } catch (e: any) { alert(e.message); }
+        setTimelineDeleteConfirmId(null);
     }
 
     async function handleAdminAddLog(e: React.FormEvent) {
@@ -466,7 +473,8 @@ export default function MasterConsole({ currentUserId, isMaster }: { currentUser
     };
 
     const doApprove = async (userId: string) => { await approveUser(userId); await refresh(); };
-    const doDelete = async (userId: string) => { await deleteUser(userId); setConfirmDelete(null); await refresh(); };
+    const doReject = async (userId: string) => { await deleteUser(userId); await refresh(); };
+    const doClearLogs = async (userId: string) => { await deleteUserLogsForToday(userId); setConfirmDelete(null); await refresh(); };
 
     const todayStr = useMemo(() => dateStr(new Date()), []);
 
@@ -536,7 +544,7 @@ export default function MasterConsole({ currentUserId, isMaster }: { currentUser
                                 </div>
                                 <div className="flex gap-2">
                                     <button onClick={() => doApprove(p.id)} className="px-3 py-1.5 rounded-lg bg-blue-500 text-white text-xs font-bold hover:bg-blue-400 transition-colors">Approve</button>
-                                    <button onClick={() => doDelete(p.id)} className="px-3 py-1.5 rounded-lg bg-rose-500/10 text-rose-400 text-xs font-bold border border-rose-500/20 hover:bg-rose-500/20 transition-colors">Reject</button>
+                                    <button onClick={() => doReject(p.id)} className="px-3 py-1.5 rounded-lg bg-rose-500/10 text-rose-400 text-xs font-bold border border-rose-500/20 hover:bg-rose-500/20 transition-colors">Reject</button>
                                 </div>
                             </div>
                         ))}
@@ -560,10 +568,11 @@ export default function MasterConsole({ currentUserId, isMaster }: { currentUser
                             { label: 'On Break', k: 'on_break', val: stats.onBreak, color: 'text-amber-400', bg: 'bg-[#0a0a1a] border-white/5 hover:bg-amber-950/40', acc: 'bg-amber-500' },
                             { label: 'BRB', k: 'on_brb', val: stats.onBrb, color: 'text-indigo-400', bg: 'bg-[#0a0a1a] border-white/5 hover:bg-indigo-950/40', acc: 'bg-indigo-500' },
                             { label: 'On Leave', k: 'on_leave', val: stats.onLeave, color: 'text-violet-400', bg: 'bg-[#0a0a1a] border-white/5 hover:bg-violet-950/40', acc: 'bg-violet-500' },
-                            { label: 'Logged Out', k: 'punched_out', val: stats.done + stats.idle, color: 'text-slate-400', bg: 'bg-[#0a0a1a] border-white/5 hover:bg-slate-900/50', acc: 'bg-slate-600' },
+                            { label: 'Logged Out', k: 'punched_out', val: stats.done, color: 'text-slate-400', bg: 'bg-[#0a0a1a] border-white/5 hover:bg-slate-900/50', acc: 'bg-slate-500' },
+                            { label: 'Offline', k: 'idle', val: stats.idle, color: 'text-slate-500', bg: 'bg-[#0a0a1a] border-white/5 hover:bg-slate-900/30', acc: 'bg-slate-700' },
                         ];
                         return (
-                            <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-2">
+                            <div className="grid grid-cols-3 md:grid-cols-7 gap-3 mb-2">
                                 {tiles.map(s => (
                                     <button
                                         key={s.label}
@@ -770,7 +779,7 @@ export default function MasterConsole({ currentUserId, isMaster }: { currentUser
                                                 onConfirmEnd={() => doOverride(r.user.id, 'punch_out')}
                                                 onCancelEnd={() => setConfirmEnd(null)}
                                                 confirmingDelete={confirmDelete === r.user.id}
-                                                onConfirmDelete={() => doDelete(r.user.id)}
+                                                onConfirmDelete={() => doClearLogs(r.user.id)}
                                                 onCancelDelete={() => setConfirmDelete(null)}
                                                 onDeleteRequest={() => setConfirmDelete(r.user.id)}
                                                 onClickRow={() => setSelectedUserDetail(r)}
@@ -905,6 +914,15 @@ export default function MasterConsole({ currentUserId, isMaster }: { currentUser
                 </AnimatePresence>,
                 document.body
             )}
+
+            <ConfirmDialog
+                open={!!timelineDeleteConfirmId}
+                title="Delete Timeline Event"
+                message="Are you sure you want to permanently delete this timeline action? This cannot be undone."
+                confirmLabel="Delete"
+                onConfirm={confirmAdminDeleteLog}
+                onCancel={() => setTimelineDeleteConfirmId(null)}
+            />
         </>
     );
 }

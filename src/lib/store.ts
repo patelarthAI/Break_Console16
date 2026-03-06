@@ -1,6 +1,6 @@
 import { supabase, UserRow, LogRow } from './supabase';
 import { User, TimeLog, AppStatus, LeaveRecord, AppNotification } from '@/types';
-import { getTodayKey, generateUUID, getPastDaysZoned } from './timeUtils';
+import { getTodayKey, generateUUID, getPastDaysZoned, checkViolations, COMBINED_LIMIT_MS, BREAK_LIMIT_MS, BRB_LIMIT_MS } from './timeUtils';
 
 export interface ClientRow {
     id: string;
@@ -44,6 +44,104 @@ export async function updateLeave(id: string, updates: Partial<LeaveRecord>): Pr
     const { data, error } = await supabase.from('leaves').update(updates).eq('id', id).select().single();
     if (error) throw error;
     return data as LeaveRecord;
+}
+
+export interface SmartLeaveRecord extends LeaveRecord {
+    is_smart?: boolean;
+}
+
+export async function getSmartLeaves(dates: string[]): Promise<SmartLeaveRecord[]> {
+    if (!dates.length) return [];
+
+    // 1. Fetch real leaves for these dates
+    const { data: realLeavesData } = await supabase
+        .from('leaves')
+        .select('*')
+        .in('date', dates)
+        .order('date', { ascending: false });
+    const realLeaves = (realLeavesData ?? []) as SmartLeaveRecord[];
+
+    // 2. Fetch all active users
+    const users = await getAllUsers();
+
+    // 3. Fetch logs for these users on these dates
+    const { data: logsData } = await supabase
+        .from('time_logs')
+        .select('*')
+        .in('user_id', users.map(u => u.id))
+        .in('date', dates);
+    const allLogs = (logsData ?? []).map(rowToLog);
+
+    const smartLeaves: SmartLeaveRecord[] = [...realLeaves];
+    const realLeaveSet = new Set(realLeaves.map(l => `${l.employee_name}-${l.client_name}-${l.date}`));
+
+    // 4. Compute virtual leaves for missing / half-day logs
+    for (const date of dates) {
+        // Skip future dates
+        if (date > getTodayKey()) continue;
+
+        for (const user of users) {
+            // If a real leave already exists, skip
+            const key = `${user.name}-${user.clientName}-${date}`;
+            if (realLeaveSet.has(key)) continue;
+
+            const userLogs = allLogs.filter(l => l.addedBy === user.id && l.date === date); // The store uses 'user_id', wait I need to map it properly.
+            // Wait, rowToLog drops user_id. Let's filter logs by querying directly or map them.
+            // Since I need userId, let's filter logsData directly.
+            const rawUserLogs = (logsData ?? []).filter((r: any) => r.user_id === user.id && r.date === date).map(rowToLog);
+
+            const virtualId = `virtual-${user.id}-${date}`;
+
+            // Check if declined in localstorage
+            let isDeclined = false;
+            if (typeof window !== 'undefined') {
+                const dec = JSON.parse(localStorage.getItem('declined_smart_leaves') || '[]');
+                if (dec.includes(virtualId)) isDeclined = true;
+            }
+            if (isDeclined) continue;
+
+            if (rawUserLogs.length === 0) {
+                // Offline entirely
+                smartLeaves.push({
+                    id: virtualId,
+                    date,
+                    client_name: user.clientName,
+                    employee_name: user.name,
+                    is_planned: false,
+                    reason: 'System Auto-Generated: No punch-in recorded',
+                    approver: null,
+                    leave_type: 'System: Absent',
+                    day_count: 1,
+                    is_smart: true
+                });
+            } else {
+                // Check if workedMs < 4 hours (4 * 60 * 60 * 1000 = 14400000 ms)
+                const status = deriveStatus(rawUserLogs);
+                if (status.workedMs > 0 && status.workedMs < 14400000) {
+                    smartLeaves.push({
+                        id: virtualId,
+                        date,
+                        client_name: user.clientName,
+                        employee_name: user.name,
+                        is_planned: false,
+                        reason: `System Auto-Generated: Half-Day (${Math.round(status.workedMs / 60000)}m logged)`,
+                        approver: null,
+                        leave_type: 'System: Half-Day',
+                        day_count: 0.5,
+                        is_smart: true
+                    });
+                }
+            }
+        }
+    }
+
+    // Sort combined leaves
+    smartLeaves.sort((a, b) => {
+        if (a.date !== b.date) return b.date.localeCompare(a.date);
+        return a.employee_name.localeCompare(b.employee_name);
+    });
+
+    return smartLeaves;
 }
 
 const CURRENT_USER_KEY = 'rp_current_user';
@@ -182,6 +280,11 @@ export async function deleteTimeLog(id: string): Promise<void> {
     if (error) throw error;
 }
 
+export async function deleteUserLogsForToday(userId: string): Promise<void> {
+    const { error } = await supabase.from('time_logs').delete().eq('user_id', userId).eq('date', getTodayKey());
+    if (error) throw error;
+}
+
 export async function getLogDatesForMonth(userId: string, yearMonth: string): Promise<string[]> {
     const { data } = await supabase
         .from('time_logs').select('date')
@@ -268,6 +371,8 @@ export interface UserBreakStats {
     breakViolDays: number; // legacy individual metric
     brbViolDays: number; // legacy individual metric
     combinedViolDays: number; // new: days where Break + BRB > 85m
+    lateInDays: number;
+    earlyOutDays: number;
     daysChecked: number;
     breakCounts: number[];   // per-day count
     brbCounts: number[];
@@ -295,6 +400,7 @@ export async function get7DayBreakStats(): Promise<UserBreakStats[]> {
     return usersData.map((row: UserRow) => {
         const user = rowToUser(row);
         let totalBreakMs = 0, totalBrbMs = 0, breakViolDays = 0, brbViolDays = 0, combinedViolDays = 0, daysChecked = 0;
+        let lateInDays = 0, earlyOutDays = 0;
         const breakCounts: number[] = [];
         const brbCounts: number[] = [];
 
@@ -303,31 +409,37 @@ export async function get7DayBreakStats(): Promise<UserBreakStats[]> {
             if (!dayLogs.length) continue;
             daysChecked++;
 
-            // Compute break/BRB for this day
+            // Compute break/BRB/punch for this day
             let breakStart: number | null = null, brbStart: number | null = null;
+            let dayPunchIn: number | undefined, dayPunchOut: number | undefined;
             let dayBreakMs = 0, dayBrbMs = 0, dayBreakCount = 0, dayBrbCount = 0;
+
             for (const log of dayLogs) {
+                if (log.eventType === 'punch_in' && !dayPunchIn) dayPunchIn = log.timestamp;
+                if (log.eventType === 'punch_out') dayPunchOut = log.timestamp;
                 if (log.eventType === 'break_start') { breakStart = log.timestamp; dayBreakCount++; }
                 if (log.eventType === 'break_end' && breakStart) { dayBreakMs += (log.timestamp - breakStart); breakStart = null; }
                 if (log.eventType === 'brb_start') { brbStart = log.timestamp; dayBrbCount++; }
                 if (log.eventType === 'brb_end' && brbStart) { dayBrbMs += (log.timestamp - brbStart); brbStart = null; }
             }
-            // Note: Since we are excluding today, we don't need to add time for currently open breaks
-            // because historical days should ideally have closed logs or the shift ended.
-            // If someone stayed on break past midnight, we'll just count what happened on that day.
 
+            const v = checkViolations(dayBreakMs, dayBrbMs, dayPunchIn, dayPunchOut, user.shiftStart, user.shiftEnd, user.timezone);
 
             totalBreakMs += dayBreakMs;
             totalBrbMs += dayBrbMs;
-            if (dayBreakMs > BREAK_LIMIT) breakViolDays++;
-            if (dayBrbMs > BRB_LIMIT) brbViolDays++;
+            if (v.breakViol) breakViolDays++;
+            if (v.brbViol) brbViolDays++;
+            if (v.lateIn) lateInDays++;
+            if (v.earlyOut) earlyOutDays++;
             if ((dayBreakMs + dayBrbMs) > COMBINED_LIMIT) combinedViolDays++;
+
             breakCounts.push(dayBreakCount);
             brbCounts.push(dayBrbCount);
         }
 
         return {
-            user, totalBreakMs, totalBrbMs, breakViolDays, brbViolDays, combinedViolDays, daysChecked, breakCounts, brbCounts,
+            user, totalBreakMs, totalBrbMs, breakViolDays, brbViolDays, combinedViolDays,
+            lateInDays, earlyOutDays, daysChecked, breakCounts, brbCounts,
             avgBreakMs: daysChecked > 0 ? totalBreakMs / daysChecked : 0,
             avgBrbMs: daysChecked > 0 ? totalBrbMs / daysChecked : 0,
         };

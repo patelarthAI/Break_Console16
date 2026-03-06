@@ -42,13 +42,12 @@ export default function ViolatorsPanel({ clientFilter = [] }: Props) {
         try {
             const data = await get7DayBreakStats();
             const active = data
-                .filter(s => s.daysChecked > 0 && s.combinedViolDays > 0)
+                .filter(s => s.daysChecked >= 1 && (s.avgBreakMs + s.avgBrbMs) > COMBINED_LIMIT_MS)
                 .filter(s => clientFilter.length === 0 || clientFilter.includes(s.user.clientName))
                 .sort((a, b) => {
-                    if (b.combinedViolDays !== a.combinedViolDays) return b.combinedViolDays - a.combinedViolDays;
-                    const aExcess = Math.max(0, (a.avgBreakMs + a.avgBrbMs) - COMBINED_LIMIT_MS);
-                    const bExcess = Math.max(0, (b.avgBreakMs + b.avgBrbMs) - COMBINED_LIMIT_MS);
-                    return bExcess - aExcess;
+                    const aAvg = a.avgBreakMs + a.avgBrbMs;
+                    const bAvg = b.avgBreakMs + b.avgBrbMs;
+                    return bAvg - aAvg; // Highest violation at top
                 });
             setStats(active);
         } finally {
@@ -140,11 +139,9 @@ export default function ViolatorsPanel({ clientFilter = [] }: Props) {
                                                     }`}>
                                                     {s.user.name[0].toUpperCase()}
                                                 </div>
-                                                {violDays > 0 && (
-                                                    <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 flex items-center justify-center text-[8px] font-black text-white">
-                                                        {violDays}
-                                                    </div>
-                                                )}
+                                                <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 flex items-center justify-center text-[8px] font-black text-white">
+                                                    !
+                                                </div>
                                             </div>
 
                                             {/* Name + client — full width, no truncation */}
@@ -196,11 +193,14 @@ export default function ViolatorsPanel({ clientFilter = [] }: Props) {
                                                         <StatCell label="Violated Days" value={`${s.combinedViolDays} / ${s.daysChecked}`} viol={s.combinedViolDays > 0} color="text-slate-300" />
                                                     </div>
 
-                                                    {anyViol && (
-                                                        <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-1 rounded-md">
-                                                            <AlertTriangle size={9} /> Total Limit Exceeded
-                                                        </span>
-                                                    )}
+                                                    {anyViol && (() => {
+                                                        const excessMs = combinedAvg - COMBINED_LIMIT_MS;
+                                                        return (
+                                                            <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-1 rounded-md">
+                                                                <AlertTriangle size={9} /> Limit Exceeded By {Math.round(excessMs / 60000)}m / Day
+                                                            </span>
+                                                        );
+                                                    })()}
 
                                                     <p className="text-[9px] text-slate-700">
                                                         Active {s.daysChecked}/5 days {'·'} Total break: {formatDuration(s.totalBreakMs)} {'·'} Total BRB: {formatDuration(s.totalBrbMs)}
