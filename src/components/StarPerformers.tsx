@@ -74,7 +74,7 @@ export default function StarPerformers({ clientFilter = [] }: Props) {
             <div className="flex items-center gap-3 px-3 py-1.5 rounded-lg bg-emerald-500/[0.04] border border-emerald-500/[0.12]">
                 <Sparkles size={10} className="text-emerald-400 flex-shrink-0" />
                 <p className="text-[9px] text-slate-500 font-medium">
-                    On time · Total Break &lt; <span className="text-emerald-400 font-bold">1h 10m</span> avg · 0 violations
+                    Strict Compliance · Total Break &lt; <span className="text-emerald-400 font-bold">1h 10m</span> avg · 0 violations
                 </p>
             </div>
 
@@ -83,72 +83,57 @@ export default function StarPerformers({ clientFilter = [] }: Props) {
                     <div className="w-4 h-4 border-2 border-slate-800 border-t-yellow-500 rounded-full animate-spin" />
                 </div>
             ) : stars.length === 0 ? (
-                <div className="flex flex-col items-center gap-2 py-8 text-center">
-                    <Trophy size={22} className="text-slate-700" />
-                    <p className="text-xs text-slate-600 font-medium">Not enough data yet</p>
-                    <p className="text-[10px] text-slate-700">Check back after 3+ work days of clean records</p>
+                <div className="flex flex-col items-center gap-2 py-8 text-center text-slate-700">
+                    <Trophy size={22} className="opacity-20" />
+                    <p className="text-xs font-bold">Elite Status Pending</p>
+                    <p className="text-[10px]">Require 3+ days of perfect compliance records.</p>
                 </div>
             ) : (
-                <div className="flex flex-col gap-1.5">
+                <div className="flex flex-col gap-2">
                     <AnimatePresence initial={false}>
                         {stars.map((s, i) => {
                             const m = medal(i);
-                            const breakPct = Math.min(100, (s.avgBreakMs / BREAK_LIMIT_MS) * 100);
-                            const brbPct = Math.min(100, (s.avgBrbMs / BRB_LIMIT_MS) * 100);
+                            const totalBreakMs = s.avgBreakMs + s.avgBrbMs;
+                            const totalPct = Math.min(100, (totalBreakMs / DISC_LIMIT_MS) * 100);
+                            
                             return (
                                 <motion.div key={s.user.id}
-                                    initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: i * 0.04 }}
-                                    className={`rounded-xl border px-3 py-2.5 flex items-center gap-3 ${m.bg}`}>
+                                    initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
+                                    transition={{ delay: i * 0.05 }}
+                                    className={`relative group rounded-xl border px-3 py-3 flex items-center gap-4 transition-all duration-300 hover:scale-[1.02] ${m.bg}`}>
+                                    
+                                    <div className="absolute inset-0 bg-white/[0.01] group-hover:bg-white/[0.03] transition-colors pointer-events-none rounded-xl" />
 
-                                    {/* Rank + avatar */}
-                                    <div className="flex flex-col items-center gap-0.5 flex-shrink-0 w-7">
-                                        <span className="text-base leading-none">{m.icon}</span>
-                                        <span className={`text-[8px] font-black ${m.color}`}>#{i + 1}</span>
+                                    {/* Rank + Medal */}
+                                    <div className="flex flex-col items-center justify-center flex-shrink-0 w-10 h-10 rounded-full bg-black/20 border border-white/5 shadow-inner">
+                                        <span className="text-xl leading-none">{m.icon}</span>
                                     </div>
 
-                                    {/* Name + client + mini bars */}
+                                    {/* Name + Stats */}
                                     <div className="flex-1 min-w-0">
-                                        <div className="flex flex-col">
-                                            <p className="text-[13px] font-bold text-white leading-snug">{s.user.name}</p>
-                                            <span className="text-[9px] text-slate-500 font-medium leading-none">{s.user.clientName}</span>
-                                        </div>
-                                        {/* Utilisation bars */}
-                                        <div className="flex flex-col gap-0.5 mt-1.5">
-                                            <div className="flex items-center gap-1.5">
-                                                <Coffee size={7} className="text-emerald-500/60 flex-shrink-0" />
-                                                <div className="flex-1 h-1 rounded-full bg-white/[0.05] overflow-hidden">
-                                                    <div className="h-full rounded-full bg-emerald-500/60 transition-all duration-500"
-                                                        style={{ width: `${breakPct}%` }} />
-                                                </div>
+                                        <div className="flex items-center justify-between mb-1.5">
+                                            <div className="min-w-0">
+                                                <p className="text-[14px] font-black text-white truncate leading-none">{s.user.name}</p>
+                                                <p className="text-[9px] text-slate-600 font-black uppercase tracking-widest mt-1">{s.user.clientName}</p>
                                             </div>
-                                            <div className="flex items-center gap-1.5">
-                                                <RotateCcw size={7} className="text-sky-500/60 flex-shrink-0" />
-                                                <div className="flex-1 h-1 rounded-full bg-white/[0.05] overflow-hidden">
-                                                    <div className="h-full rounded-full bg-sky-500/60 transition-all duration-500"
-                                                        style={{ width: `${brbPct}%` }} />
-                                                </div>
+                                            <div className="flex flex-col items-end">
+                                                <p className="text-[13px] font-black tabular-nums text-emerald-400 leading-none">{formatDuration(totalBreakMs)}</p>
+                                                <p className="text-[8px] font-bold text-slate-700 uppercase tracking-tighter mt-1">Total Break Avg</p>
                                             </div>
                                         </div>
-                                    </div>
-
-                                    {/* Avg stats */}
-                                    <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
-                                        <div className="flex items-center gap-1">
-                                            <Coffee size={8} className="text-emerald-400/70" />
-                                            <span className="text-[10px] font-bold tabular-nums text-emerald-400">
-                                                {formatDuration(s.avgBreakMs)}
-                                            </span>
+                                        
+                                        {/* Unified Progress Bar */}
+                                        <div className="relative h-1.5 w-full rounded-full bg-black/40 border border-white/5 overflow-hidden">
+                                            <div 
+                                                className="h-full rounded-full bg-gradient-to-r from-emerald-500/40 via-emerald-400 to-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)] transition-all duration-1000"
+                                                style={{ width: `${totalPct}%` }}
+                                            />
                                         </div>
-                                        <div className="flex items-center gap-1">
-                                            <RotateCcw size={8} className="text-sky-400/70" />
-                                            <span className="text-[10px] font-bold tabular-nums text-sky-400">
-                                                {formatDuration(s.avgBrbMs)}
-                                            </span>
+                                        
+                                        <div className="flex items-center justify-between mt-1.5 px-0.5">
+                                            <span className="text-[8px] font-black text-slate-700 uppercase tracking-widest">{s.daysChecked}D Compliance</span>
+                                            <span className="text-[8px] font-black text-emerald-500/60 uppercase tracking-tighter">Peak Performance</span>
                                         </div>
-                                        <span className="text-[8px] text-slate-600 mt-0.5">
-                                            {s.daysChecked}d clean
-                                        </span>
                                     </div>
                                 </motion.div>
                             );
@@ -156,9 +141,13 @@ export default function StarPerformers({ clientFilter = [] }: Props) {
                     </AnimatePresence>
 
                     {/* Footer count line */}
-                    <p className="text-[9px] text-slate-700 text-center pt-1">
-                        {stars.length} recruiter{stars.length !== 1 ? 's' : ''} with perfect 5-day records
-                    </p>
+                    <div className="flex items-center gap-3 pt-2">
+                        <div className="flex-1 h-px bg-white/5" />
+                        <p className="text-[9px] font-bold text-slate-700 uppercase tracking-widest">
+                            {stars.length} Elite Performers
+                        </p>
+                        <div className="flex-1 h-px bg-white/5" />
+                    </div>
                 </div>
             )}
         </div>

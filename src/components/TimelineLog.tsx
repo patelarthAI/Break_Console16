@@ -38,9 +38,9 @@ export default function TimelineLog({ logs, isAdmin, onDeleteLog }: { logs: Time
                             <button
                                 onClick={() => onDeleteLog(log.id)}
                                 title="Delete Log"
-                                className="ml-2 p-1 rounded-md text-slate-500 opacity-0 group-hover:opacity-100 hover:text-rose-400 hover:bg-rose-500/10 transition-all"
+                                className="ml-2 flex items-center justify-center w-7 h-7 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500 hover:text-white hover:border-rose-500 transition-all shadow-sm"
                             >
-                                <Trash2 size={14} />
+                                <Trash2 size={13} />
                             </button>
                         )}
                     </motion.div>

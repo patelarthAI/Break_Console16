@@ -1,8 +1,9 @@
 'use client';
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Briefcase, FileText, Calendar, ChevronLeft, ChevronRight, Download, AlertTriangle, CheckCircle, BarChart2, Users, X, ChevronDown, Filter } from 'lucide-react';
-import { getAllUsers, getLogsForDate, getLogDatesForMonth, getClients, ClientRow } from '@/lib/store';
+import { getAllUsers, getLogsForDate, getLogDatesForMonth, getClients, ClientRow, getLogsBatch } from '@/lib/store';
+import { TimeLog } from '@/types';
 import {
     computeSession, computeWorkedTime, computeTotalTime,
     countBreaks, countBRBs, formatDuration, formatTime,
@@ -43,11 +44,11 @@ function monthLabel(d: Date): string { return d.toLocaleDateString('en-US', { mo
 
 interface DayRow { userId: string; name: string; clientName: string; date: string; punchIn?: number; punchOut?: number; workedMs: number; breakMs: number; brbMs: number; breakCount: number; brbCount: number; breakViol: boolean; breakViolMs: number; brbViol: boolean; brbViolMs: number; lateIn: boolean; lateInMs: number; earlyOut: boolean; earlyOutMs: number; }
 
-async function buildRow(
+function processLogsIntoRow(
     userId: string, name: string, clientName: string, date: string,
+    logs: TimeLog[],
     shiftStart = '08:00', shiftEnd = '17:00', timezone = 'America/Chicago'
-): Promise<DayRow> {
-    const logs = await getLogsForDate(userId, date);
+): DayRow {
     const session = computeSession(logs);
     const now = Date.now();
     const breakMs = computeTotalTime(session.breaks, now);
@@ -182,6 +183,7 @@ export default function MasterReports() {
     const [monthOffset, setMonthOffset] = useState(0);
     const [rows, setRows] = useState<DayRow[]>([]);
     const [loading, setLoading] = useState(false);
+    const [memoizedRange, setMemoizedRange] = useState<DateRange>('today'); // To avoid flicker
     const [clients, setClients] = useState<ClientRow[]>([]);
     const [selectedClients, setSelectedClients] = useState<string[]>([]);
     const [clientDropOpen, setClientDropOpen] = useState(false);
@@ -230,24 +232,32 @@ export default function MasterReports() {
         setLoading(true);
         try {
             const users = (await getAllUsers()).filter((u) => !u.isMaster);
-            const newRows: DayRow[] = [];
+            const userIds = users.map(u => u.id);
             const now = new Date();
+            let dates: string[] = [];
 
             if (range === 'today') {
-                const today = dateStr(now);
-                await Promise.all(users.map(async (u) => { newRows.push(await buildRow(u.id, u.name, u.clientName, today, u.shiftStart, u.shiftEnd, u.timezone)); }));
+                dates = [dateStr(now)];
             } else if (range === 'yesterday') {
                 const yest = new Date(now); yest.setDate(yest.getDate() - 1);
-                await Promise.all(users.map(async (u) => { newRows.push(await buildRow(u.id, u.name, u.clientName, dateStr(yest), u.shiftStart, u.shiftEnd, u.timezone)); }));
+                dates = [dateStr(yest)];
             } else if (range === 'week') {
-                const dates = getWeekDates(weekOffset);
-                await Promise.all(users.flatMap((u) => dates.map(async (d) => { newRows.push(await buildRow(u.id, u.name, u.clientName, d, u.shiftStart, u.shiftEnd, u.timezone)); })));
+                dates = getWeekDates(weekOffset);
             } else if (range === 'month') {
                 const refDate = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
-                const ym = yearMonthStr(refDate);
-                const dates = getMonthWorkDates(ym);
-                await Promise.all(users.flatMap((u) => dates.map(async (d) => { newRows.push(await buildRow(u.id, u.name, u.clientName, d, u.shiftStart, u.shiftEnd, u.timezone)); })));
+                dates = getMonthWorkDates(yearMonthStr(refDate));
             }
+
+            const logsByDay = await getLogsBatch(userIds, dates);
+            
+            const newRows: DayRow[] = [];
+            for (const user of users) {
+                for (const d of dates) {
+                    const logs = logsByDay[`${user.id}-${d}`] || [];
+                    newRows.push(processLogsIntoRow(user.id, user.name, user.clientName, d, logs, user.shiftStart, user.shiftEnd, user.timezone));
+                }
+            }
+            
             setRows(['week', 'month'].includes(range) ? newRows.filter(r => r.punchIn || r.workedMs > 0) : newRows);
         } finally { setLoading(false); }
     }, [range, weekOffset, monthOffset]);
@@ -260,12 +270,63 @@ export default function MasterReports() {
 
     const handleCSV = () => {
         const isMultiDay = ['week', 'month'].includes(range);
-        const header = ['Name', 'Client', 'Status', ...(isMultiDay ? ['Date', 'Day'] : []), 'Punch In', 'Punch Out', 'Worked', 'Breaks #', 'Break Time', 'BRBs #', 'BRB Time', 'Total Break', 'Break Viol', 'BRB Viol', 'Late In', 'Early Out'];
-        const data = filteredRows.map(r => [r.name, r.clientName, (r.punchIn || r.workedMs > 0) ? 'Active' : 'Offline', ...(isMultiDay ? [r.date, dayName(r.date)] : []), r.punchIn ? formatTime(r.punchIn) : '', r.punchOut ? formatTime(r.punchOut) : '', formatDuration(r.workedMs), r.breakCount, formatDuration(r.breakMs), r.brbCount, formatDuration(r.brbMs), formatDuration(r.breakMs + r.brbMs), r.breakViol ? `YES (${Math.round(r.breakViolMs / 60000)}m)` : 'No', r.brbViol ? `YES (${Math.round(r.brbViolMs / 60000)}m)` : 'No', r.lateIn ? `YES (${Math.round(r.lateInMs / 60000)}m)` : 'No', r.earlyOut ? `YES (${Math.round(r.earlyOutMs / 60000)}m)` : 'No']);
-        const s = summarize(filteredRows.filter(r => r.workedMs > 0));
+        const header = [
+            'Name', 'Client', 'Status', 
+            ...(isMultiDay ? ['Date', 'Day'] : []), 
+            'Punch In', 'Punch Out', 'Worked', 'Breaks #', 'Break Time', 'BRBs #', 'BRB Time', 'Total Break',
+            'Total Break Exceed', 'Break Viol', 'BRB Viol', 'Late In', 'Early Out'
+        ];
+        
+        const data = filteredRows.map((r: DayRow) => {
+            const totExMs = (r.breakViolMs || 0) + (r.brbViolMs || 0);
+            return [
+                r.name, r.clientName, (r.punchIn || r.workedMs > 0) ? 'Active' : 'Offline', 
+                ...(isMultiDay ? [r.date, dayName(r.date)] : []), 
+                r.punchIn ? formatTime(r.punchIn) : '', 
+                r.punchOut ? formatTime(r.punchOut) : '', 
+                formatDuration(r.workedMs), 
+                r.breakCount, 
+                formatDuration(r.breakMs), 
+                r.brbCount, 
+                formatDuration(r.brbMs), 
+                formatDuration(r.breakMs + r.brbMs), 
+                totExMs > 0 ? `${Math.round(totExMs / 60000)}m` : '-',
+                r.breakViol ? `${Math.round(r.breakViolMs / 60000)}m` : '-', 
+                r.brbViol ? `${Math.round(r.brbViolMs / 60000)}m` : '-', 
+                r.lateIn ? `${Math.round(r.lateInMs / 60000)}m` : '-', 
+                r.earlyOut ? `${Math.round(r.earlyOutMs / 60000)}m` : '-'
+            ];
+        });
+        
+        const s = summarize(filteredRows.filter((r: DayRow) => r.workedMs > 0));
         const lateInDays = filteredRows.filter(r => r.lateIn).length;
         const earlyOutDays = filteredRows.filter(r => r.earlyOut).length;
-        exportExcel([header, ...data, [], ['TOTALS', '', '', ...(isMultiDay ? ['', ''] : []), '', '', formatDuration(s.totalWorked), s.breakCount, formatDuration(s.totalBreak), s.brbCount, formatDuration(s.totalBrb), `${s.breakViolDays} day(s)`, `${s.brbViolDays} day(s)`, `${lateInDays} day(s)`, `${earlyOutDays} day(s)`], [], ['Policy Rules', 'Break allowance: 1h | Max: 1h 15m', 'BRB max: 10m/day', 'Shift: 8:00 AM CST | Grace: 8:05 AM', 'Shift end: 5:00 PM CST']], 'data-report');
+        
+        const totalsRow = [
+            'TOTALS', '', '', 
+            ...(isMultiDay ? ['', ''] : []), 
+            '', '', 
+            formatDuration(s.totalWorked), 
+            s.breakCount, 
+            formatDuration(s.totalBreak), 
+            s.brbCount, 
+            formatDuration(s.totalBrb), 
+            formatDuration(s.totalBreak + s.totalBrb),
+            '',
+            `${s.breakViolDays} day(s)`, 
+            `${s.brbViolDays} day(s)`, 
+            `${filteredRows.filter((r: DayRow) => r.lateIn).length} day(s)`, 
+            `${filteredRows.filter((r: DayRow) => r.earlyOut).length} day(s)`
+        ];
+        
+        exportExcel([
+            header, 
+            ...data, 
+            [], 
+            totalsRow, 
+            [], 
+            ['Policy Rules', 'Break allowance: 1h | Max: 1h 15m', 'BRB max: 10m/day', 'Shift: 8:00 AM CST | Grace: 8:05 AM', 'Shift end: 5:00 PM CST']
+        ], 'data-report');
     };
 
 
@@ -275,44 +336,47 @@ export default function MasterReports() {
     const refDate = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
     const isMultiDay = ['week', 'month'].includes(range);
 
+    // Memoized derived data
+    const { filteredRows, baseS, uniqueUsers, recruiterFiltered, avgWorkedMs, uniqueUserCount } = useMemo(() => {
+        const clientFiltered = selectedClients.length === 0 ? rows : rows.filter((r: DayRow) => selectedClients.includes(r.clientName));
+        const rFiltered = clientFiltered.filter((r: DayRow) => selectedRecruiters.length === 0 || selectedRecruiters.includes(r.name));
+
+        const fRows = (violationFilter === null ? rFiltered
+            : violationFilter === 'late_in' ? rFiltered.filter((r: DayRow) => r.lateIn)
+                : violationFilter === 'break' ? rFiltered.filter((r: DayRow) => r.breakViol)
+                    : violationFilter === 'brb' ? rFiltered.filter((r: DayRow) => r.brbViol)
+                        : rFiltered.filter((r: DayRow) => r.lateIn || r.breakViol || r.brbViol || r.earlyOut)
+        ).filter((r: DayRow) => {
+            if (statusDropFilter === 'Active' && !r.punchIn && r.workedMs === 0) return false;
+            if (statusDropFilter === 'Not Active' && (r.punchIn || r.workedMs > 0)) return false;
+
+            if (violDropFilter === 'Late In' && !r.lateIn) return false;
+            if (violDropFilter === 'Early Out' && !r.earlyOut) return false;
+            if (violDropFilter === 'Break Exceed' && !r.breakViol) return false;
+            if (violDropFilter === 'BRB Exceed' && !r.brbViol) return false;
+
+            return true;
+        }).sort((a, b) => (b.breakMs + b.brbMs) - (a.breakMs + a.brbMs));
+
+        const bS = summarize(rFiltered.filter((r: DayRow) => r.workedMs > 0));
+        const uUsers = [...new Set(fRows.map((r: DayRow) => r.userId))];
+        const uUserCount = [...new Set(rFiltered.map((r: DayRow) => r.userId))].length || 1;
+        const avgWkMs = bS.totalWorked / uUserCount;
+
+        return { filteredRows: fRows, baseS: bS, uniqueUsers: uUsers, recruiterFiltered: rFiltered, avgWorkedMs: avgWkMs, uniqueUserCount: uUserCount };
+    }, [rows, selectedClients, selectedRecruiters, violationFilter, statusDropFilter, violDropFilter]);
+
     // All recruiter names for typeahead
-    const allRecruiters = [...new Set(rows.map(r => r.name))].sort();
+    const allRecruiters = useMemo(() => [...new Set(rows.map(r => r.name))].sort(), [rows]);
     const filteredSuggestions = recruiterSearch.trim()
         ? allRecruiters.filter(n => n.toLowerCase().includes(recruiterSearch.toLowerCase()) && !selectedRecruiters.includes(n))
         : [];
     const addRecruiter = (name: string) => { setSelectedRecruiters(prev => prev.includes(name) ? prev : [...prev, name]); setRecruiterSearch(''); };
     const removeRecruiter = (name: string) => setSelectedRecruiters(prev => prev.filter(n => n !== name));
 
-    const clientFiltered = selectedClients.length === 0 ? rows : rows.filter(r => selectedClients.includes(r.clientName));
-    const recruiterFiltered = clientFiltered.filter(r => selectedRecruiters.length === 0 || selectedRecruiters.includes(r.name));
-
-    // Violation tile filter — also auto-sorted by total break (break + BRB) descending
-    // Apply dynamic filters
-    const filteredRows = (violationFilter === null ? recruiterFiltered
-        : violationFilter === 'late_in' ? recruiterFiltered.filter(r => r.lateIn)
-            : violationFilter === 'break' ? recruiterFiltered.filter(r => r.breakViol)
-                : violationFilter === 'brb' ? recruiterFiltered.filter(r => r.brbViol)
-                    : recruiterFiltered.filter(r => r.lateIn || r.breakViol || r.brbViol || r.earlyOut)
-    ).filter(r => {
-        if (statusDropFilter === 'Active' && !r.punchIn && r.workedMs === 0) return false;
-        if (statusDropFilter === 'Not Active' && (r.punchIn || r.workedMs > 0)) return false;
-
-        if (violDropFilter === 'Late In' && !r.lateIn) return false;
-        if (violDropFilter === 'Early Out' && !r.earlyOut) return false;
-        if (violDropFilter === 'Break Exceed' && !r.breakViol) return false;
-        if (violDropFilter === 'BRB Exceed' && !r.brbViol) return false;
-
-        return true;
-    }).sort((a, b) => (b.breakMs + b.brbMs) - (a.breakMs + a.brbMs));
-
     // Summary always based on un-violation-filtered data for the tile counts to stay stable
-    const baseS = summarize(recruiterFiltered.filter(r => r.workedMs > 0));
-    const uniqueUsers = [...new Set(filteredRows.map(r => r.userId))];
     const allS = summarize(filteredRows.filter(r => r.workedMs > 0));
     const totalViol = baseS.breakViolDays + baseS.brbViolDays + baseS.lateInDays + baseS.earlyOutDays;
-    // Avg worked per unique user
-    const uniqueUserCount = [...new Set(recruiterFiltered.map(r => r.userId))].length || 1;
-    const avgWorkedMs = baseS.totalWorked / uniqueUserCount;
 
     return (
         <div className="space-y-5">
@@ -574,11 +638,11 @@ export default function MasterReports() {
 
                     {/* When a violation tile is active: group results by client */}
                     {violationFilter && filteredRows.length > 0 && (() => {
-                        const byClient = filteredRows.reduce((acc, r) => {
+                        const byClient = filteredRows.reduce((acc: Record<string, DayRow[]>, r: DayRow) => {
                             if (!acc[r.clientName]) acc[r.clientName] = [];
                             acc[r.clientName].push(r);
                             return acc;
-                        }, {} as Record<string, DayRow[]>);
+                        }, {});
                         return (
                             <div className="rounded-2xl border border-white/8 bg-black/30 p-4 space-y-3">
                                 <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
@@ -625,7 +689,7 @@ export default function MasterReports() {
                         </div>
                         <h3 className="text-base font-extrabold text-white tracking-tight">Per-Recruiter Breakdown</h3>
                     </div>
-                    {uniqueUsers.map(uid => { const uRows = filteredRows.filter(r => r.userId === uid); return <UserSummaryCard key={uid} name={uRows[0]?.name ?? uid} rows={uRows} />; })}
+                    {uniqueUsers.map((uid: string) => { const uRows = filteredRows.filter((r: DayRow) => r.userId === uid); return <UserSummaryCard key={uid} name={uRows[0]?.name ?? uid} rows={uRows} />; })}
                 </div>
             )}
         </div>

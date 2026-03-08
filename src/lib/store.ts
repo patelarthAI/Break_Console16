@@ -23,6 +23,23 @@ export async function deleteClient(id: string): Promise<void> {
     await supabase.from('clients').delete().eq('id', id);
 }
 
+export async function renameClient(id: string, oldName: string, newName: string): Promise<void> {
+    const freshName = newName.trim();
+    if (!freshName) return;
+
+    // 1. Rename the core client record
+    const { error: cErr } = await supabase.from('clients').update({ name: freshName }).eq('id', id);
+    if (cErr) throw cErr;
+
+    // 2. Cascade rename across users
+    const { error: uErr } = await supabase.from('users').update({ client_name: freshName }).eq('client_name', oldName);
+    if (uErr) console.warn('Failed to cascade rename to users:', uErr);
+
+    // 3. Cascade rename across leaves
+    const { error: lErr } = await supabase.from('leaves').update({ client_name: freshName }).eq('client_name', oldName);
+    if (lErr) console.warn('Failed to cascade rename to leaves:', lErr);
+}
+
 // ─── Leaves ───────────────────────────────────────────────────────────────────
 export async function getLeaves(): Promise<LeaveRecord[]> {
     const { data } = await supabase.from('leaves').select('*').order('date', { ascending: false });
@@ -53,11 +70,12 @@ export interface SmartLeaveRecord extends LeaveRecord {
 export async function getSmartLeaves(dates: string[]): Promise<SmartLeaveRecord[]> {
     if (!dates.length) return [];
 
-    // 1. Fetch real leaves for these dates
+    // 1. Fetch ALL real leaves from the database without a date constraint
+    // This ensures historical records from 2024 and 2025 (e.g. imported data) 
+    // actually appear in the Master Leave Tracker.
     const { data: realLeavesData } = await supabase
         .from('leaves')
         .select('*')
-        .in('date', dates)
         .order('date', { ascending: false });
     const realLeaves = (realLeavesData ?? []) as SmartLeaveRecord[];
 
@@ -73,16 +91,27 @@ export async function getSmartLeaves(dates: string[]): Promise<SmartLeaveRecord[
     const allLogs = (logsData ?? []).map(rowToLog);
 
     const smartLeaves: SmartLeaveRecord[] = [...realLeaves];
-    const realLeaveSet = new Set(realLeaves.map(l => `${l.employee_name}-${l.client_name}-${l.date}`));
+    const realLeaveSet = new Set(realLeaves.map(l => `${l.employee_name.toLowerCase().trim()}-${l.client_name.toLowerCase().trim()}-${l.date}`));
 
     // 4. Compute virtual leaves for missing / half-day logs
     for (const date of dates) {
         // Skip future dates
         if (date > getTodayKey()) continue;
 
+        // Skip records before the system was fully implemented
+        if (date < '2026-03-06') continue;
+
+        // Skip weekends (0=Sunday, 6=Saturday)
+        const dObj = new Date(date);
+        // JS Date parsing of 'YYYY-MM-DD' treats it as UTC, which can shift the day.
+        // We use split to ensure local timezone logic
+        const [yr, mo, dy] = date.split('-').map(Number);
+        const dayOfWeek = new Date(yr, mo - 1, dy).getDay();
+        if (dayOfWeek === 0 || dayOfWeek === 6) continue;
+
         for (const user of users) {
             // If a real leave already exists, skip
-            const key = `${user.name}-${user.clientName}-${date}`;
+            const key = `${user.name.toLowerCase().trim()}-${user.clientName.toLowerCase().trim()}-${date}`;
             if (realLeaveSet.has(key)) continue;
 
             const userLogs = allLogs.filter(l => l.addedBy === user.id && l.date === date); // The store uses 'user_id', wait I need to map it properly.
@@ -273,6 +302,25 @@ export async function insertLog(userId: string, log: TimeLog): Promise<void> {
 
 export async function getLogsForDate(userId: string, date: string): Promise<TimeLog[]> {
     return getLogs(userId, date);
+}
+
+export async function getLogsBatch(userIds: string[], dates: string[]): Promise<Record<string, TimeLog[]>> {
+    if (!userIds.length || !dates.length) return {};
+    const { data, error } = await supabase
+        .from('time_logs').select('*')
+        .in('user_id', userIds)
+        .in('date', dates)
+        .order('timestamp', { ascending: true });
+    
+    if (error) throw error;
+    
+    const logsByDay: Record<string, TimeLog[]> = {};
+    (data ?? []).forEach(r => {
+        const key = `${r.user_id}-${r.date}`;
+        if (!logsByDay[key]) logsByDay[key] = [];
+        logsByDay[key].push(rowToLog(r as LogRow));
+    });
+    return logsByDay;
 }
 
 export async function deleteTimeLog(id: string): Promise<void> {

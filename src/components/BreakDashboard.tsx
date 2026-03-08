@@ -2,9 +2,12 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Coffee, RotateCcw, Users, Clock, Sparkles } from 'lucide-react';
-import { getAllUsersStatus, UserStatusRecord } from '@/lib/store';
+import { getAllUsersStatus, UserStatusRecord, getLeaves } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 import { formatDuration } from '@/lib/timeUtils';
+import StarPerformers from './StarPerformers';
+import { MonthlyLeaveCalendar } from './MasterConsole';
+import { LeaveRecord } from '@/types';
 
 function LiveTimer({ since, alertThresholdMs }: { since: number, alertThresholdMs?: number }) {
     const [e, setE] = useState(() => Date.now() - since);
@@ -37,6 +40,7 @@ const STRETCH_QUOTES = [
 
 export default function BreakDashboard({ currentUserId, isMaster, clientName }: Props) {
     const [records, setRecords] = useState<UserStatusRecord[]>([]);
+    const [leaves, setLeaves] = useState<LeaveRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const mountedRef = useRef(true);
     const [quoteIdx, setQuoteIdx] = useState(0);
@@ -47,11 +51,15 @@ export default function BreakDashboard({ currentUserId, isMaster, clientName }: 
     }, []);
 
     const refresh = useCallback(async () => {
-        const data = await getAllUsersStatus();
+        const [data, leavesData] = await Promise.all([
+            getAllUsersStatus(),
+            getLeaves()
+        ]);
         if (!mountedRef.current) return;
         // For regular users, filter to only same client
         const filtered = isMaster ? data : data.filter(r => r.user.clientName === clientName);
         setRecords(filtered.filter(r => r.user.id !== currentUserId));
+        setLeaves(leavesData);
         setLoading(false);
     }, [isMaster, clientName, currentUserId]);
 
@@ -195,6 +203,39 @@ export default function BreakDashboard({ currentUserId, isMaster, clientName }: 
                     </AnimatePresence>
                 </div>
             )}
+            {/* 2026 Monthly Calendar — Now visible to recruiters too */}
+            <div className="rounded-[1.5rem] bg-gradient-to-b from-[#0a0a14]/80 to-[#05050f]/80 backdrop-blur-xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-hidden relative group">
+                <div className="absolute inset-0 bg-violet-500/[0.02] group-hover:bg-violet-500/[0.05] transition-colors pointer-events-none" />
+                <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-white/5 bg-white/[0.02]">
+                    <div className="flex items-center gap-2.5">
+                        <div className="p-1.5 rounded-lg bg-violet-500/20 border border-violet-500/30">
+                            <Clock size={14} className="text-violet-400 drop-shadow-[0_0_8px_rgba(139,92,246,0.5)]" />
+                        </div>
+                        <span className="text-[11px] font-black tracking-[0.2em] uppercase text-violet-400/90">2026 Leave Calendar</span>
+                    </div>
+                </div>
+                <div className="p-4">
+                    <MonthlyLeaveCalendar leaves={leaves} selectedClients={clientName ? [clientName] : []} />
+                </div>
+            </div>
+
+            {/* Top Performers / Discipline Board — Now visible to recruiters too */}
+            <div className="rounded-[1.5rem] bg-gradient-to-b from-[#0a0a14]/80 to-[#05050f]/80 backdrop-blur-xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-hidden relative group">
+                <div className="absolute inset-0 bg-emerald-500/[0.02] group-hover:bg-emerald-500/[0.05] transition-colors pointer-events-none" />
+                <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-white/5 bg-white/[0.02]">
+                    <div className="flex items-center gap-2.5">
+                        <div className="p-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/30">
+                            <Sparkles size={14} className="text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                        </div>
+                        <span className="text-[11px] font-black tracking-[0.2em] uppercase text-emerald-400/90">Elite Discipline Board</span>
+                    </div>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-emerald-500/50 border border-emerald-500/20 px-2 py-0.5 rounded-full bg-emerald-500/5">Global Ranking</span>
+                </div>
+                <div className="p-4">
+                    <StarPerformers clientFilter={clientName ? [clientName] : []} />
+                </div>
+            </div>
+
             <div className="pt-4 pb-2 text-center opacity-60 hover:opacity-100 transition-opacity">
                 <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.3em] bg-white/5 px-3 py-1.5 rounded-full border border-white/5">
                     Live via Supabase Realtime

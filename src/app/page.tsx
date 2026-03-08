@@ -20,7 +20,7 @@ import MasterLeaveTracker from '@/components/MasterLeaveTracker';
 import NotificationPanel from '@/components/NotificationPanel';
 import { User, TimeLog, AppStatus, AppNotification } from '@/types';
 import {
-  getCurrentUser, setCurrentUser, getLogs, insertLog, getClients, addClient, deleteClient,
+  getCurrentUser, setCurrentUser, getLogs, insertLog, getClients, addClient, deleteClient, renameClient,
   ClientRow, getAllUsers, updateUser, getPendingUsers,
   getAllNotifications, createNotification, deleteNotification
 } from '@/lib/store';
@@ -135,6 +135,8 @@ function SettingsPanel() {
   const [settingsTab, setSettingsTab] = useState<'clients' | 'users' | 'notifications'>('clients');
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [newClientName, setNewClientName] = useState('');
+  const [editingClientId, setEditingClientId] = useState<string | null>(null);
+  const [editingClientName, setEditingClientName] = useState('');
   const [loadingClients, setLoadingClients] = useState(true);
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
@@ -191,6 +193,26 @@ function SettingsPanel() {
       setConfirmDelete(null);
       success('Client removed', `"${name}" has been deleted.`);
     } catch (err) { console.error(err); toastError('Failed to remove client'); setConfirmDelete(null); }
+  }
+
+  async function handleRenameClient(id: string, oldName: string) {
+    const trimmed = editingClientName.trim();
+    if (!trimmed || trimmed === oldName) {
+      setEditingClientId(null);
+      return;
+    }
+    try {
+      setSaving(true);
+      await renameClient(id, oldName, trimmed);
+      setClients(prev => prev.map(c => c.id === id ? { ...c, name: trimmed } : c));
+      success('Client renamed', `"${oldName}" updated to "${trimmed}". Data synced.`);
+      setEditingClientId(null);
+    } catch (err) {
+      console.error(err);
+      toastError('Rename failed', 'Unable to sync client rename across the system.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   function openEditUser(u: User) {
@@ -325,8 +347,35 @@ function SettingsPanel() {
                   ? <p className="text-center py-8 text-sm text-slate-600">No clients yet.</p>
                   : <ul className="divide-y divide-white/5">{clients.map(c => (
                     <li key={c.id} className="flex items-center justify-between px-4 py-3 hover:bg-white/[0.02]">
-                      <span className="text-sm font-semibold text-white">{c.name}</span>
-                      <button onClick={() => setConfirmDelete({ type: 'client', id: c.id, name: c.name })} className="p-1.5 text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all"><UserX size={14} /></button>
+                      {editingClientId === c.id ? (
+                        <input
+                          autoFocus
+                          type="text"
+                          value={editingClientName}
+                          onChange={e => setEditingClientName(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') handleRenameClient(c.id, c.name);
+                            if (e.key === 'Escape') setEditingClientId(null);
+                          }}
+                          className="flex-1 bg-white/5 border border-white/20 rounded-md py-1 px-3 text-white text-sm focus:outline-none focus:border-amber-500/50"
+                        />
+                      ) : (
+                        <span className="text-sm font-semibold text-white">{c.name}</span>
+                      )}
+
+                      <div className="flex items-center gap-1 ml-4">
+                        {editingClientId === c.id ? (
+                          <>
+                            <button disabled={saving} onClick={() => handleRenameClient(c.id, c.name)} className="p-1.5 text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-all disabled:opacity-50"><Pencil size={14} /></button>
+                            <button onClick={() => setEditingClientId(null)} className="p-1.5 text-slate-500 hover:text-white hover:bg-white/10 rounded-lg transition-all"><X size={14} /></button>
+                          </>
+                        ) : (
+                          <>
+                            <button onClick={() => { setEditingClientId(c.id); setEditingClientName(c.name); }} className="p-1.5 text-slate-600 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition-all"><Pencil size={14} /></button>
+                            <button onClick={() => setConfirmDelete({ type: 'client', id: c.id, name: c.name })} className="p-1.5 text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all"><UserX size={14} /></button>
+                          </>
+                        )}
+                      </div>
                     </li>
                   ))}</ul>}
             </div>
@@ -617,14 +666,11 @@ export default function Home() {
             <div className="glass-card rounded-2xl px-5 py-3 flex items-center justify-between mb-0 border-b-0 rounded-b-none">
               {/* Brand */}
               <div className="flex items-center gap-3">
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 border
-                  ${isMaster ? 'border-indigo-500/30 bg-indigo-500/10' : 'bg-indigo-900/30 border-indigo-500/30'}`}>
-                  {isMaster
-                    ? <img src="/logo.png" alt="Logo" className="w-6 h-6 object-contain" />
-                    : <span className="text-sm font-black text-indigo-300">{user.name[0].toUpperCase()}</span>}
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 border border-indigo-500/30 bg-indigo-500/10">
+                  <img src="/logo.png" alt="Logo" className="w-6 h-6 object-contain" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
+                   <div className="flex items-center gap-2">
                     <p className="text-sm font-bold text-white tracking-tight">{isMaster ? 'Brigade Pulse' : user.name}</p>
                     {isMaster && (
                       <>
@@ -666,7 +712,6 @@ export default function Home() {
 
             {/* ── CONTENT AREA ── */}
             <div className="glass-card rounded-2xl rounded-t-none border-t-0 p-6 shadow-2xl min-h-[60vh]">
-
               {/* ════ MASTER ════ */}
               {isMaster && (
                 <AnimatePresence mode="wait">
@@ -747,6 +792,18 @@ export default function Home() {
                 </>
               )}
             </div>
+
+            {/* Global Footer */}
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              transition={{ delay: 1 }}
+              className="mt-8 text-center"
+            >
+              <p className="text-[10px] font-bold text-slate-700 uppercase tracking-[0.3em]">
+                &copy; 2026 Arth Global Systems
+              </p>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

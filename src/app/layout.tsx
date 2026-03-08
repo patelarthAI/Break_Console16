@@ -2,9 +2,9 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { ToastProvider } from '@/components/Toast';
 export const metadata: Metadata = {
-  title: 'Breakthrough Console',
-  description: 'Real-time attendance and break tracking for recruiters. Punch in, track breaks, and generate daily reports.',
-  keywords: ['recruiter', 'time tracker', 'attendance', 'break tracking', 'daily report'],
+  title: 'Brigade Pulse',
+  description: 'Presence Creates Momentum. Real-time attendance and break tracking for recruiters by Arth Global Systems.',
+  keywords: ['Arth Global', 'recruiter', 'time tracker', 'attendance', 'break tracking', 'daily report'],
   robots: 'noindex, nofollow',
 };
 
@@ -20,7 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <link rel="icon" href="/logo.png" type="image/png" />
       </head>
-      <body className="antialiased font-sans">
+      <body className="antialiased font-sans" suppressHydrationWarning>
         <ToastProvider>
           {children}
         </ToastProvider>

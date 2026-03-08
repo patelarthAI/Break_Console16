@@ -11,15 +11,13 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function cleanSystemLeaves() {
-    const targetDate = '2026-03-06';
-    console.log(`🧹 Scanning for System-Generated leaves prior to ${targetDate}...`);
+    console.log(`🧹 Scanning for ALL System-Generated leaves...`);
 
     // First, fetch to show what will be deleted
     const { data: leavesToPurge, error: fetchError } = await supabase
         .from('leaves')
         .select('id, employee_name, date, reason')
-        .ilike('reason', '%System Auto-Generated%')
-        .lt('date', targetDate);
+        .ilike('reason', '%System Auto-Generated%');
 
     if (fetchError) {
         console.error("❌ Error fetching leaves:", fetchError);
@@ -27,7 +25,7 @@ async function cleanSystemLeaves() {
     }
 
     if (!leavesToPurge || leavesToPurge.length === 0) {
-        console.log("✅ No auto-generated leaves found prior to the target date. Database is clean.");
+        console.log("✅ No auto-generated leaves found. Database is clean.");
         return;
     }
 
@@ -38,8 +36,7 @@ async function cleanSystemLeaves() {
     const { error: deleteError } = await supabase
         .from('leaves')
         .delete()
-        .ilike('reason', '%System Auto-Generated%')
-        .lt('date', targetDate);
+        .ilike('reason', '%System Auto-Generated%');
 
     if (deleteError) {
         console.error("❌ Error deleting leaves:", deleteError);

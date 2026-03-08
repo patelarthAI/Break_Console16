@@ -243,72 +243,125 @@ function EmployeeRow({ r, isMaster, isClean, onEndBreak, onEndBrb, onPunchOut, c
     );
 }
 
-// ── Week Leave Calendar ────────────────────────────────────────────────────────
-function WeekLeaveCalendar({ leaves, selectedClients }: { leaves: LeaveRecord[], selectedClients: string[] }) {
-    const [expandedDay, setExpandedDay] = useState<string | null>(null);
-    const days = Array.from({ length: 7 }, (_, i) => {
-        const d = new Date();
-        d.setDate(d.getDate() + i);
-        return d;
-    });
+// ── Monthly Leave Calendar ────────────────────────────────────────────────────────
+export function MonthlyLeaveCalendar({ leaves, selectedClients }: { leaves: LeaveRecord[], selectedClients: string[] }) {
+    const [viewDate, setViewDate] = useState(new Date());
+    const [selectedDay, setSelectedDay] = useState<string | null>(null);
+
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+
+    const firstDayOfMonth = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    const monthName = viewDate.toLocaleString('default', { month: 'long' });
+
+    const prevMonth = () => setViewDate(new Date(year, month - 1, 1));
+    const nextMonth = () => setViewDate(new Date(year, month + 1, 1));
+
+    const todayStr = dateStr(new Date());
+
+    // Generate days grid
+    const days: (number | null)[] = [];
+    for (let i = 0; i < firstDayOfMonth; i++) days.push(null);
+    for (let i = 1; i <= daysInMonth; i++) days.push(i);
 
     return (
-        <div className="flex flex-col gap-2">
-            <div className="flex justify-between gap-1">
-                {days.map((d, i) => {
+        <div className="flex flex-col gap-4">
+            {/* Header / Nav */}
+            <div className="flex items-center justify-between mb-1">
+                <button onClick={prevMonth} className="p-1 px-2 rounded-lg hover:bg-white/5 text-slate-500 hover:text-white transition-colors">
+                    <ChevronDown size={14} className="rotate-90" />
+                </button>
+                <div className="text-center">
+                    <p className="text-[13px] font-black text-white uppercase tracking-wider">{monthName}</p>
+                    <p className="text-[9px] font-bold text-slate-600 tracking-widest">{year}</p>
+                </div>
+                <button onClick={nextMonth} className="p-1 px-2 rounded-lg hover:bg-white/5 text-slate-500 hover:text-white transition-colors">
+                    <ChevronDown size={14} className="-rotate-90" />
+                </button>
+            </div>
+
+            {/* Weekday Names */}
+            <div className="grid grid-cols-7 gap-1 text-center border-b border-white/5 pb-2 mb-1">
+                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+                    <span key={i} className="text-[9px] font-black text-slate-700 uppercase">{d}</span>
+                ))}
+            </div>
+
+            {/* Days Grid */}
+            <div className="grid grid-cols-7 gap-1">
+                {days.map((dayNum, i) => {
+                    if (dayNum === null) return <div key={`empty-${i}`} className="h-8" />;
+                    
+                    const d = new Date(year, month, dayNum);
                     const ds = dateStr(d);
                     const dayLeaves = leaves.filter(l => l.date === ds && (selectedClients.length === 0 || selectedClients.includes(l.client_name)));
                     const count = dayLeaves.length;
-                    const isToday = i === 0;
-                    const isExpanded = expandedDay === ds;
+                    const isToday = ds === todayStr;
+                    const isSelected = selectedDay === ds;
+
                     return (
-                        <div key={ds} className="flex flex-col items-center gap-1 flex-1">
-                            <span className={`text-[9px] font-bold uppercase ${isToday ? 'text-violet-400' : 'text-slate-500'}`}>
-                                {d.toLocaleDateString('en-US', { weekday: 'short' })}
-                            </span>
-                            <button
-                                onClick={() => count > 0 && setExpandedDay(isExpanded ? null : ds)}
-                                className={`w-full py-1.5 rounded-lg border flex flex-col items-center justify-center gap-0.5 transition-all ${count > 0
-                                    ? (isToday ? 'bg-violet-500/20 text-violet-300 border-violet-500/30 hover:bg-violet-500/30 cursor-pointer' : 'bg-slate-700/50 text-white border-slate-600 hover:bg-slate-600/60 cursor-pointer')
-                                    : 'bg-white/[0.02] text-slate-600 border-white/5 cursor-default'
-                                    } ${isExpanded ? 'ring-1 ring-violet-500/50' : ''}`}
-                            >
-                                <span className={`text-[12px] leading-none ${count > 0 ? 'font-black' : 'font-medium'}`}>{d.getDate()}</span>
-                                {count > 0 && (
-                                    <div className="w-1 h-1 rounded-full bg-violet-400 shadow-[0_0_5px_theme(colors.violet.400)]" />
-                                )}
-                            </button>
-                        </div>
+                        <button
+                            key={ds}
+                            onClick={() => count > 0 && setSelectedDay(isSelected ? null : ds)}
+                            className={`h-9 rounded-lg border flex flex-col items-center justify-center relative transition-all
+                                ${count > 0 
+                                    ? (isToday ? 'bg-violet-500/20 text-violet-300 border-violet-500/30 ring-1 ring-violet-500/10' : 'bg-slate-700/30 text-white border-slate-600/40 hover:bg-slate-600/50') 
+                                    : (isToday ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-white/[0.01] text-slate-600 border-transparent hover:border-white/5')
+                                }
+                                ${isSelected ? 'ring-2 ring-violet-500/50 border-violet-500/40' : ''}
+                                ${count > 0 ? 'cursor-pointer' : 'cursor-default'}
+                            `}
+                        >
+                            <span className={`text-[11px] tabular-nums ${count > 0 ? 'font-black' : 'font-medium'}`}>{dayNum}</span>
+                            {count > 0 && (
+                                <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-violet-400 shadow-[0_0_8px_rgba(167,139,250,0.6)]" />
+                            )}
+                        </button>
                     );
                 })}
             </div>
-            {/* Expanded day names */}
-            {expandedDay && (() => {
-                const dayLeaves = leaves.filter(l => l.date === expandedDay && (selectedClients.length === 0 || selectedClients.includes(l.client_name)));
-                if (dayLeaves.length === 0) return null;
-                const expandedDate = new Date(expandedDay + 'T00:00:00');
-                return (
-                    <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-3 space-y-1.5">
-                        <p className="text-[9px] font-black uppercase tracking-widest text-violet-400 mb-2">
-                            {expandedDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })} — {dayLeaves.length} on leave
-                        </p>
-                        {dayLeaves.map((l, idx) => (
-                            <div key={idx} className="flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2 min-w-0">
-                                    <div className="w-5 h-5 rounded-md bg-violet-500/20 flex items-center justify-center text-[9px] font-black text-violet-300 flex-shrink-0">
-                                        {l.employee_name[0]?.toUpperCase()}
-                                    </div>
-                                    <p className="text-[11px] font-bold text-slate-200 leading-tight">{l.employee_name}</p>
-                                </div>
-                                <div className="flex items-center gap-1.5 flex-shrink-0">
-                                    <span className="text-[9px] text-slate-500 font-medium">{l.client_name}</span>
-                                    <span className="text-[8px] font-bold uppercase text-violet-400 bg-violet-500/10 border border-violet-500/20 px-1.5 py-0.5 rounded">{l.leave_type}</span>
-                                </div>
+
+            {/* Selected Day Details */}
+            <AnimatePresence>
+                {selectedDay && (() => {
+                    const dayLeaves = leaves.filter(l => l.date === selectedDay && (selectedClients.length === 0 || selectedClients.includes(l.client_name)));
+                    if (dayLeaves.length === 0) return null;
+                    const expandedDate = new Date(selectedDay + 'T00:00:00');
+                    return (
+                        <motion.div 
+                            initial={{ opacity: 0, height: 0, y: 10 }} 
+                            animate={{ opacity: 1, height: 'auto', y: 0 }} 
+                            exit={{ opacity: 0, height: 0, y: 10 }}
+                            className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-4 mt-2 overflow-hidden shadow-2xl"
+                        >
+                            <div className="flex items-center justify-between mb-3 border-b border-violet-500/10 pb-2">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-violet-400">
+                                    {expandedDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                                </p>
+                                <span className="text-[9px] font-black uppercase text-violet-500/80 bg-violet-500/10 px-2 py-0.5 rounded-full">{dayLeaves.length} Leaves</span>
                             </div>
-                        ))}
-                    </div>
-                );
-            })()}
+                            <div className="space-y-2.5 max-h-48 overflow-y-auto scrollbar-thin">
+                                {dayLeaves.map((l, idx) => (
+                                    <div key={idx} className="flex items-start justify-between gap-3 group">
+                                        <div className="flex items-center gap-2.5 min-w-0">
+                                            <div className="w-6 h-6 rounded-lg bg-violet-500/20 flex items-center justify-center text-[10px] font-black text-violet-300 flex-shrink-0 border border-violet-500/20">
+                                                {l.employee_name[0]?.toUpperCase()}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="text-[12px] font-black text-slate-200 truncate group-hover:text-white transition-colors">{l.employee_name}</p>
+                                                <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">{l.client_name}</p>
+                                            </div>
+                                        </div>
+                                        <span className="text-[8px] font-black uppercase text-violet-400 bg-violet-500/10 border border-violet-500/30 px-2 py-1 rounded-md mt-0.5">{l.leave_type}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </motion.div>
+                    );
+                })()}
+            </AnimatePresence>
         </div>
     );
 }
@@ -795,24 +848,27 @@ export default function MasterConsole({ currentUserId, isMaster }: { currentUser
                 {/* RIGHT: Weekly Leave Calendar + Violators */}
                 <div className="flex flex-col gap-4">
 
-                    {/* Leave Calendar — compact 7-day number bar */}
-                    <div className="rounded-2xl border border-white/8 bg-[#0a0a18] p-4">
-                        <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-1.5">
-                                <Calendar size={13} className="text-indigo-400" />
-                                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Leave · Next 7 Days</p>
+                    {/* Leave Calendar — full monthly view */}
+                    <div className="rounded-2xl border border-white/8 bg-[#0a0a18] p-5 shadow-2xl relative overflow-hidden group">
+                        <div className="absolute inset-0 bg-violet-500/[0.02] group-hover:bg-violet-500/[0.04] transition-colors pointer-events-none" />
+                        <div className="flex items-center justify-between mb-5 relative z-10">
+                            <div className="flex items-center gap-2">
+                                <div className="p-1.5 rounded-lg bg-violet-500/20 border border-violet-500/30">
+                                    <Calendar size={14} className="text-violet-400" />
+                                </div>
+                                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-violet-400">Leave Console</p>
                             </div>
                             {(() => {
-                                const todayCount = weekLeaves.filter(l =>
+                                const todayCount = leaves.filter(l =>
                                     l.date === dateStr(new Date()) &&
                                     (selectedClients.length === 0 || selectedClients.includes(l.client_name))
                                 ).length;
                                 return todayCount > 0
-                                    ? <span className="text-[10px] font-bold text-violet-400 bg-violet-500/10 border border-violet-500/20 px-2 py-0.5 rounded-full">{todayCount} today</span>
-                                    : <span className="text-[10px] text-slate-700 font-semibold">All clear today</span>;
+                                    ? <span className="text-[10px] font-black uppercase tracking-widest text-violet-300 bg-violet-500/20 border border-violet-500/40 px-3 py-1 rounded-full animate-pulse shadow-[0_0_12px_rgba(139,92,246,0.3)]">{todayCount} on leave today</span>
+                                    : <span className="text-[10px] text-slate-600 font-black uppercase tracking-widest bg-white/[0.03] border border-white/5 px-3 py-1 rounded-full">All operational today</span>;
                             })()}
                         </div>
-                        <WeekLeaveCalendar leaves={weekLeaves} selectedClients={selectedClients} />
+                        <MonthlyLeaveCalendar leaves={leaves} selectedClients={selectedClients} />
                     </div>
 
                     {/* Star Performers */}
