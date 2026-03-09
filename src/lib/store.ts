@@ -1,6 +1,6 @@
 import { supabase, UserRow, LogRow } from './supabase';
 import { User, TimeLog, AppStatus, LeaveRecord, AppNotification } from '@/types';
-import { getTodayKey, generateUUID, getPastDaysZoned, checkViolations, COMBINED_LIMIT_MS, BREAK_LIMIT_MS, BRB_LIMIT_MS } from './timeUtils';
+import { getTodayKey, generateUUID, getPastDaysZoned, checkViolations, toZonedMinutes, getRealNow, parseShiftMins, COMBINED_LIMIT_MS, BREAK_LIMIT_MS, BRB_LIMIT_MS } from './timeUtils';
 
 export interface ClientRow {
     id: string;
@@ -114,11 +114,7 @@ export async function getSmartLeaves(dates: string[]): Promise<SmartLeaveRecord[
             const key = `${user.name.toLowerCase().trim()}-${user.clientName.toLowerCase().trim()}-${date}`;
             if (realLeaveSet.has(key)) continue;
 
-            const userLogs = allLogs.filter(l => l.addedBy === user.id && l.date === date); // The store uses 'user_id', wait I need to map it properly.
-            // Wait, rowToLog drops user_id. Let's filter logs by querying directly or map them.
-            // Since I need userId, let's filter logsData directly.
             const rawUserLogs = (logsData ?? []).filter((r: any) => r.user_id === user.id && r.date === date).map(rowToLog);
-
             const virtualId = `virtual-${user.id}-${date}`;
 
             // Check if declined in localstorage
@@ -129,8 +125,21 @@ export async function getSmartLeaves(dates: string[]): Promise<SmartLeaveRecord[
             }
             if (isDeclined) continue;
 
+            // ─── Time-Aware Logic for TODAY ──────────────────────────────────
+            const todayKey = getTodayKey();
+            const isToday = (date === todayKey);
+
             if (rawUserLogs.length === 0) {
-                // Offline entirely
+                // If it's today, we only generate ABSENT if we are at least 1 hour past shift start
+                if (isToday) {
+                    const nowMins = toZonedMinutes(getRealNow(), user.timezone);
+                    const shiftStartMins = parseShiftMins(user.shiftStart);
+                    if (nowMins < shiftStartMins + 60) {
+                        // Too early to call it absent
+                        continue;
+                    }
+                }
+
                 smartLeaves.push({
                     id: virtualId,
                     date,
@@ -147,6 +156,12 @@ export async function getSmartLeaves(dates: string[]): Promise<SmartLeaveRecord[
                 // Check if workedMs < 4 hours (4 * 60 * 60 * 1000 = 14400000 ms)
                 const status = deriveStatus(rawUserLogs);
                 if (status.workedMs > 0 && status.workedMs < 14400000) {
+                    // For TODAY, only mark as HD if the user has actually PUNCHED OUT.
+                    // If they are currently WORKING, don't mark as HD yet (they might reach 4h).
+                    if (isToday && status.status === 'working') {
+                        continue;
+                    }
+
                     smartLeaves.push({
                         id: virtualId,
                         date,

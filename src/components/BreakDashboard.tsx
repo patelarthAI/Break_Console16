@@ -203,43 +203,30 @@ export default function BreakDashboard({ currentUserId, isMaster, clientName }: 
                     </AnimatePresence>
                 </div>
             )}
-            {/* 2026 Monthly Calendar — Now visible to recruiters too */}
-            <div className="rounded-[1.5rem] bg-gradient-to-b from-[#0a0a14]/80 to-[#05050f]/80 backdrop-blur-xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-hidden relative group">
-                <div className="absolute inset-0 bg-violet-500/[0.02] group-hover:bg-violet-500/[0.05] transition-colors pointer-events-none" />
-                <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-white/5 bg-white/[0.02]">
-                    <div className="flex items-center gap-2.5">
-                        <div className="p-1.5 rounded-lg bg-violet-500/20 border border-violet-500/30">
-                            <Clock size={14} className="text-violet-400 drop-shadow-[0_0_8px_rgba(139,92,246,0.5)]" />
+            {/* 2026 Monthly Calendar — Only visible to admins */}
+            {isMaster && (
+                <div className="rounded-[1.5rem] bg-gradient-to-b from-[#0a0a14]/80 to-[#05050f]/80 backdrop-blur-xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-hidden relative group">
+                    <div className="absolute inset-0 bg-violet-500/[0.02] group-hover:bg-violet-500/[0.05] transition-colors pointer-events-none" />
+                    <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-white/5 bg-white/[0.02]">
+                        <div className="flex items-center gap-2.5">
+                            <div className="p-1.5 rounded-lg bg-violet-500/20 border border-violet-500/30">
+                                <Clock size={14} className="text-violet-400 drop-shadow-[0_0_8px_rgba(139,92,246,0.5)]" />
+                            </div>
+                            <span className="text-[11px] font-black tracking-[0.2em] uppercase text-violet-400/90">2026 Leave Calendar</span>
                         </div>
-                        <span className="text-[11px] font-black tracking-[0.2em] uppercase text-violet-400/90">2026 Leave Calendar</span>
+                    </div>
+                    <div className="p-4">
+                        <MonthlyLeaveCalendar leaves={leaves} selectedClients={clientName ? [clientName] : []} />
                     </div>
                 </div>
-                <div className="p-4">
-                    <MonthlyLeaveCalendar leaves={leaves} selectedClients={clientName ? [clientName] : []} />
-                </div>
-            </div>
+            )}
 
-            {/* Top Performers / Discipline Board — Now visible to recruiters too */}
-            <div className="rounded-[1.5rem] bg-gradient-to-b from-[#0a0a14]/80 to-[#05050f]/80 backdrop-blur-xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-hidden relative group">
-                <div className="absolute inset-0 bg-emerald-500/[0.02] group-hover:bg-emerald-500/[0.05] transition-colors pointer-events-none" />
-                <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-white/5 bg-white/[0.02]">
-                    <div className="flex items-center gap-2.5">
-                        <div className="p-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/30">
-                            <Sparkles size={14} className="text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                        </div>
-                        <span className="text-[11px] font-black tracking-[0.2em] uppercase text-emerald-400/90">Elite Discipline Board</span>
-                    </div>
-                    <span className="text-[9px] font-black uppercase tracking-widest text-emerald-500/50 border border-emerald-500/20 px-2 py-0.5 rounded-full bg-emerald-500/5">Global Ranking</span>
+            {/* Top Performers / Discipline Board — Now visible to recruiters too — GLOBAL RANKING */}
+            <div className="rounded-[2.5rem] bg-gradient-to-b from-[#0a0a14]/80 to-[#05050f]/80 backdrop-blur-3xl border border-white/10 shadow-[0_32px_64px_rgba(0,0,0,0.6)] overflow-hidden relative group">
+                <div className="absolute inset-0 bg-emerald-500/[0.02] group-hover:bg-emerald-500/[0.04] transition-colors pointer-events-none" />
+                <div className="p-6">
+                    <StarPerformers />
                 </div>
-                <div className="p-4">
-                    <StarPerformers clientFilter={clientName ? [clientName] : []} />
-                </div>
-            </div>
-
-            <div className="pt-4 pb-2 text-center opacity-60 hover:opacity-100 transition-opacity">
-                <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.3em] bg-white/5 px-3 py-1.5 rounded-full border border-white/5">
-                    Live via Supabase Realtime
-                </span>
             </div>
         </div>
     );

@@ -609,7 +609,9 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                         </th>
                                     );
                                 })}
-                                <th className="py-3 px-4 w-24"></th>
+                                <th className="py-3 px-4 w-32 text-right pr-6">
+                                    <span className="text-[11px] font-bold tracking-[0.1em] uppercase text-slate-500">Actions</span>
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
@@ -675,8 +677,8 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                                 {(l as any).is_smart ? <span className="text-amber-500/80 text-[10px] font-bold uppercase">{l.reason}</span> : (l.reason || <span className="text-slate-700">—</span>)}
                                             </td>
                                             <td className="py-3.5 px-4 text-slate-600 text-xs whitespace-nowrap">{(l as any).is_smart ? <span className="text-slate-500 italic">System Gen</span> : l.approver}</td>
-                                            <td className="py-3.5 px-4 pr-6 w-24">
-                                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all justify-end">
+                                            <td className="py-3.5 px-4 pr-6 w-32">
+                                                <div className="flex items-center gap-1.5 justify-end">
                                                     {(l as any).is_smart && (
                                                         <>
                                                             <button onClick={() => startEdit(l)} title="Approve & Save"
