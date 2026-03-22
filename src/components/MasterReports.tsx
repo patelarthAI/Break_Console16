@@ -87,56 +87,72 @@ function summarize(rows: DayRow[]): Summary {
 
 function ReportTable({ rows, showDate, showName }: { rows: DayRow[]; showDate: boolean; showName: boolean; }) {
     if (!rows.length) return <p className="text-center text-slate-500 font-medium text-sm py-16 bg-black/20 rounded-[2rem] border border-white/5">No data for this period.</p>;
+    
+    const gridCols = [
+        showName ? 'minmax(150px, 1.5fr)' : null,
+        showDate ? '90px' : null,
+        showDate ? '80px' : null,
+        '70px', '70px', '80px', '70px', '80px', '70px', '80px', '100px', 'minmax(120px, 1.5fr)'
+    ].filter(Boolean).join(' ');
+
     return (
-        <div className="overflow-x-auto rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl shadow-2xl relative">
-            <table className="w-full text-xs min-w-[700px] relative z-10">
-                <thead>
-                    <tr className="bg-white/[0.04] text-slate-400 border-b border-white/10">
-                        {showName && <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px]">Name</th>}
-                        {showDate && <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px]">Date</th>}
-                        {showDate && <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px]">Day</th>}
-                        <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px] text-emerald-500">In</th>
-                        <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px] text-rose-500">Out</th>
-                        <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px] text-indigo-400">Worked</th>
-                        <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px] text-orange-400">Breaks</th>
-                        <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px] text-orange-400">Break Time</th>
-                        <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px] text-sky-400">BRBs</th>
-                        <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px] text-sky-400">BRB Time</th>
-                        <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px] text-purple-400">⏱ Total Break</th>
-                        <th className="py-3.5 px-4 text-left font-bold tracking-widest uppercase text-[10px] text-rose-400">⚠ Violations</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                    {rows.map((r, i) => {
-                        const anyViol = r.breakViol || r.brbViol || r.lateIn || r.earlyOut;
-                        return (
-                            <tr key={`${r.userId}-${r.date}-${i}`} className={`hover:bg-white/[0.03] transition-colors ${anyViol ? 'border-l-2 border-l-rose-500/70 bg-rose-500/[0.04]' : ''}`}>
-                                {showName && <td className="py-3 px-4 font-extrabold text-white whitespace-nowrap tracking-tight">{r.name}</td>}
-                                {showDate && <td className="py-3 px-4 text-slate-300 font-mono whitespace-nowrap">{r.date}</td>}
-                                {showDate && <td className="py-3 px-4 text-slate-500 font-medium whitespace-nowrap">{dayName(r.date)}</td>}
-                                <td className="py-3 px-4 text-emerald-400 font-mono font-bold whitespace-nowrap tracking-tight">{r.punchIn ? formatTime(r.punchIn) : <span className="text-slate-600">—</span>}</td>
-                                <td className="py-3 px-4 font-mono font-bold whitespace-nowrap tracking-tight">{r.punchOut ? <span className="text-rose-400">{formatTime(r.punchOut)}</span> : r.punchIn ? <span className="text-sky-400 animate-pulse font-extrabold text-[10px] uppercase tracking-widest bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/30">Active</span> : <span className="text-slate-600">—</span>}</td>
-                                <td className="py-3 px-4 text-indigo-400 font-mono font-extrabold whitespace-nowrap tracking-tight">{r.workedMs > 0 ? formatDuration(r.workedMs) : <span className="text-slate-600">—</span>}</td>
-                                <td className="py-3 px-4 text-orange-400 font-bold whitespace-nowrap">{r.breakCount > 0 ? r.breakCount : '—'}</td>
-                                <td className="py-3 px-4 text-orange-400 font-mono font-bold whitespace-nowrap tracking-tight">{r.breakMs > 0 ? formatDuration(r.breakMs) : '—'}</td>
-                                <td className="py-3 px-4 text-sky-400 font-bold whitespace-nowrap">{r.brbCount > 0 ? r.brbCount : '—'}</td>
-                                <td className="py-3 px-4 text-sky-400 font-mono font-bold whitespace-nowrap tracking-tight">{r.brbMs > 0 ? formatDuration(r.brbMs) : '—'}</td>
-                                <td className="py-3 px-4 font-mono font-bold whitespace-nowrap tracking-tight">
-                                    {(r.breakMs + r.brbMs) > 0 ? (
-                                        <span className={`${(r.breakMs + r.brbMs) > 85 * 60 * 1000
-                                            ? 'text-rose-400'
-                                            : (r.breakMs + r.brbMs) > 60 * 60 * 1000
-                                                ? 'text-amber-400'
-                                                : 'text-purple-400'
-                                            }`}>{formatDuration(r.breakMs + r.brbMs)}</span>
-                                    ) : '—'}
-                                </td>
-                                <td className="py-3 px-4 whitespace-nowrap"><ViolBadge breakViol={r.breakViol} breakViolMs={r.breakViolMs} brbViol={r.brbViol} brbViolMs={r.brbViolMs} lateIn={r.lateIn} lateInMs={r.lateInMs} earlyOut={r.earlyOut} earlyOutMs={r.earlyOutMs} /></td>
-                            </tr>
-                        );
-                    })}
-                </tbody>
-            </table>
+        <div className="overflow-x-auto rounded-[2rem] p-4 relative panel-3d shadow-2xl">
+            <div className="min-w-[950px] flex flex-col gap-3">
+                {/* Headers */}
+                <div className="grid gap-4 px-5 py-3 rounded-xl bg-white/[0.03] border border-white/[0.05] shadow-[inset_0_1px_0_rgba(255,255,255,0.02)] items-center" style={{ gridTemplateColumns: gridCols }}>
+                    {showName && <div className="text-[10px] font-black tracking-widest uppercase text-slate-500">Name</div>}
+                    {showDate && <div className="text-[10px] font-black tracking-widest uppercase text-slate-500">Date</div>}
+                    {showDate && <div className="text-[10px] font-black tracking-widest uppercase text-slate-500">Day</div>}
+                    <div className="text-[10px] font-black tracking-widest uppercase text-emerald-500/80">In</div>
+                    <div className="text-[10px] font-black tracking-widest uppercase text-rose-500/80">Out</div>
+                    <div className="text-[10px] font-black tracking-widest uppercase text-indigo-400">Worked</div>
+                    <div className="text-[10px] font-black tracking-widest uppercase text-orange-400">Breaks</div>
+                    <div className="text-[10px] font-black tracking-widest uppercase text-orange-400">Time</div>
+                    <div className="text-[10px] font-black tracking-widest uppercase text-sky-400">BRBs</div>
+                    <div className="text-[10px] font-black tracking-widest uppercase text-sky-400">Time</div>
+                    <div className="text-[10px] font-black tracking-widest uppercase text-purple-400">⏱ Total Brk</div>
+                    <div className="text-[10px] font-black tracking-widest uppercase text-rose-400">⚠ Violations</div>
+                </div>
+
+                {/* Rows */}
+                {rows.map((r, i) => {
+                    const anyViol = r.breakViol || r.brbViol || r.lateIn || r.earlyOut;
+                    return (
+                        <div key={`${r.userId}-${r.date}-${i}`} 
+                            className={`grid gap-4 px-5 py-3.5 items-center rounded-2xl transition-all duration-300 panel-3d hover:scale-[1.01] group 
+                                ${anyViol ? 'bg-[linear-gradient(120deg,rgba(225,29,72,0.06),rgba(0,0,0,0.4))] border-l-2 border-l-rose-500/40' : 'bg-white/[0.015] hover:bg-white/[0.03]'}`}
+                            style={{ gridTemplateColumns: gridCols }}>
+                            
+                            {showName && <div className="font-extrabold text-[13px] text-white tracking-tight truncate drop-shadow-sm">{r.name}</div>}
+                            {showDate && <div className="text-[11px] font-mono text-slate-400/80 font-bold uppercase tracking-widest">{r.date}</div>}
+                            {showDate && <div className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">{dayName(r.date)}</div>}
+                            
+                            <div className="text-[13px] text-emerald-400 font-mono font-bold tracking-tight">{r.punchIn ? formatTime(r.punchIn) : <span className="text-slate-600 font-sans">—</span>}</div>
+                            <div className="text-[13px] font-mono font-bold tracking-tight">
+                                {r.punchOut ? <span className="text-rose-400">{formatTime(r.punchOut)}</span> : r.punchIn ? <span className="text-sky-400 animate-pulse font-extrabold text-[10px] uppercase tracking-widest bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/30">Active</span> : <span className="text-slate-600 font-sans">—</span>}
+                            </div>
+                            
+                            <div className="text-[13px] text-indigo-400 font-mono font-black tracking-tight">{r.workedMs > 0 ? formatDuration(r.workedMs) : <span className="text-slate-600 font-sans">—</span>}</div>
+                            
+                            <div className="text-[12px] text-orange-400 font-black">{r.breakCount > 0 ? r.breakCount : <span className="text-slate-600">—</span>}</div>
+                            <div className="text-[12px] text-orange-400 font-mono font-bold tracking-tight">{r.breakMs > 0 ? formatDuration(r.breakMs) : <span className="text-slate-600 font-sans">—</span>}</div>
+                            
+                            <div className="text-[12px] text-sky-400 font-black">{r.brbCount > 0 ? r.brbCount : <span className="text-slate-600">—</span>}</div>
+                            <div className="text-[12px] text-sky-400 font-mono font-bold tracking-tight">{r.brbMs > 0 ? formatDuration(r.brbMs) : <span className="text-slate-600 font-sans">—</span>}</div>
+                            
+                            <div className="text-[13px] font-mono font-black tracking-tight">
+                                {(r.breakMs + r.brbMs) > 0 ? (
+                                    <span className={`${(r.breakMs + r.brbMs) > 85 * 60 * 1000 ? 'text-rose-400 drop-shadow-[0_0_8px_rgba(225,29,72,0.5)]' : (r.breakMs + r.brbMs) > 60 * 60 * 1000 ? 'text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]' : 'text-purple-400'}`}>
+                                        {formatDuration(r.breakMs + r.brbMs)}
+                                    </span>
+                                ) : <span className="text-slate-600 font-sans">—</span>}
+                            </div>
+                            
+                            <div className="min-w-0"><ViolBadge breakViol={r.breakViol} breakViolMs={r.breakViolMs} brbViol={r.brbViol} brbViolMs={r.brbViolMs} lateIn={r.lateIn} lateInMs={r.lateInMs} earlyOut={r.earlyOut} earlyOutMs={r.earlyOutMs} /></div>
+                        </div>
+                    );
+                })}
+            </div>
         </div>
     );
 }
@@ -148,7 +164,7 @@ function UserSummaryCard({ name, rows }: { name: string; rows: DayRow[] }) {
     const avgBrb = s.daysWorked > 0 ? s.totalBrb / s.daysWorked : 0;
     const hasViol = s.breakViolDays + s.brbViolDays > 0;
     return (
-        <div className={`rounded-[1.5rem] border p-5 backdrop-blur-md transition-all hover:scale-[1.01] ${hasViol ? 'border-rose-500/40 bg-rose-900/20 shadow-[0_0_20px_rgba(244,63,94,0.15)]' : 'border-white/10 bg-black/40'}`}>
+        <div className={`panel-3d transition-all hover:scale-[1.01] ${hasViol ? 'border-rose-500/40 bg-rose-900/20 shadow-[-4px_-4px_10px_rgba(255,255,255,0.01),8px_8px_20px_rgba(225,29,72,0.2),inset_0_1px_1px_rgba(255,255,255,0.08)]' : 'p-5'}`}>
             <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-600 to-blue-800 border border-blue-400/30 flex items-center justify-center text-sm font-extrabold text-white shadow-lg">{name[0].toUpperCase()}</div>
@@ -396,7 +412,7 @@ export default function MasterReports() {
             </div>
 
             {/* ── Filter bar — matching Live Dashboard style ─────────────── */}
-            <div className="flex z-40 items-center justify-between bg-black/60 backdrop-blur-md p-2.5 rounded-2xl border border-white/10 shadow-lg relative flex-wrap gap-2">
+            <div className="flex z-40 items-center justify-between panel-3d border border-white/10 p-2.5 relative flex-wrap gap-2">
                 <div className="flex items-center gap-2 flex-1 flex-wrap">
                     {/* Multi-select client dropdown */}
                     <div className="relative" ref={clientDropRef}>
@@ -576,7 +592,7 @@ export default function MasterReports() {
             </div>
 
             {/* ── Date range tabs — matching Live Dashboard segmented control ── */}
-            <div className="glass-card rounded-[1.5rem] p-1.5 grid grid-cols-4 gap-1 bg-black/20">
+            <div className="panel-3d p-1.5 grid grid-cols-4 gap-1 rounded-[1.5rem]">
                 {(['today', 'yesterday', 'week', 'month'] as const).map((r) => (
                     <button key={r} onClick={() => setRange(r)}
                         className={`flex items-center justify-center gap-1.5 py-3 rounded-[1.2rem] text-sm font-bold tracking-wide transition-all duration-300 ${range === r ? 'bg-indigo-600 text-white shadow-[0_4px_20px_rgba(99,102,241,0.4)] border border-indigo-400/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
@@ -586,14 +602,14 @@ export default function MasterReports() {
             </div>
 
             {range === 'week' && (
-                <div className="flex items-center justify-between glass-card rounded-[1.5rem] px-5 py-4 border border-white/10 bg-black/40 shadow-xl">
+                <div className="flex items-center justify-between panel-3d px-5 py-4 shadow-xl">
                     <button onClick={() => setWeekOffset(o => o - 1)} className="text-slate-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-white/5"><ChevronLeft size={20} /></button>
                     <p className="text-base font-extrabold text-white tracking-wide">{weekLabel(weekOffset)}</p>
                     <button onClick={() => setWeekOffset(o => Math.min(o + 1, 0))} disabled={weekOffset >= 0} className="text-slate-400 hover:text-white transition-colors disabled:opacity-30 p-2 rounded-lg hover:bg-white/5"><ChevronRight size={20} /></button>
                 </div>
             )}
             {range === 'month' && (
-                <div className="flex items-center justify-between glass-card rounded-[1.5rem] px-5 py-4 border border-white/10 bg-black/40 shadow-xl">
+                <div className="flex items-center justify-between panel-3d px-5 py-4 shadow-xl">
                     <button onClick={() => setMonthOffset(o => o - 1)} className="text-slate-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-white/5"><ChevronLeft size={20} /></button>
                     <p className="text-base font-extrabold text-white tracking-wide">{monthLabel(refDate)}</p>
                     <button onClick={() => setMonthOffset(o => Math.min(o + 1, 0))} disabled={monthOffset >= 0} className="text-slate-400 hover:text-white transition-colors disabled:opacity-30 p-2 rounded-lg hover:bg-white/5"><ChevronRight size={20} /></button>
@@ -607,7 +623,7 @@ export default function MasterReports() {
                 <div className="space-y-3">
                     <div className="grid grid-cols-5 gap-3">
                         {/* Avg Worked — display only */}
-                        <div className="rounded-2xl border border-indigo-500/30 bg-indigo-500/5 p-4 flex flex-col gap-1">
+                        <div className="panel-3d border border-indigo-500/30 bg-[linear-gradient(120deg,rgba(99,102,241,0.1),rgba(4,4,15,0.8))] p-4 flex flex-col gap-1">
                             <p className="text-[10px] font-bold tracking-widest uppercase text-slate-500">Avg Worked / Person</p>
                             <p className="text-2xl font-black font-mono tabular-nums text-indigo-400">{formatDuration(avgWorkedMs)}</p>
                             <p className="text-[9px] text-slate-600">{uniqueUserCount} people · {range}</p>
@@ -624,7 +640,7 @@ export default function MasterReports() {
                             return (
                                 <button key={t.label}
                                     onClick={() => setViolationFilter(isActive ? null : t.key)}
-                                    className={`rounded-2xl border p-4 flex flex-col gap-1 text-left transition-all hover:brightness-110 relative overflow-hidden
+                                    className={`panel-3d p-4 flex flex-col gap-1 text-left transition-all hover:brightness-110 relative overflow-hidden
                                         ${isActive ? t.active : t.idle}
                                         ${t.count === 0 ? 'cursor-default' : 'cursor-pointer'}`}>
                                     {isActive && <div className="absolute top-0 inset-x-0 h-0.5 bg-current opacity-60" />}
@@ -644,7 +660,7 @@ export default function MasterReports() {
                             return acc;
                         }, {});
                         return (
-                            <div className="rounded-2xl border border-white/8 bg-black/30 p-4 space-y-3">
+                            <div className="panel-3d p-4 space-y-3">
                                 <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
                                     {filteredRows.length} record{filteredRows.length !== 1 ? 's' : ''} · grouped by client
                                 </p>

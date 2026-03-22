@@ -478,45 +478,58 @@ function SettingsPanel() {
               : filteredUsers.length === 0
                 ? <p className="text-center py-12 text-sm text-slate-600">{userSearch ? 'No users match your search.' : 'No users found.'}</p>
                 : (
-                  <div className="rounded-xl border border-white/8 overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="bg-black/30 border-b border-white/8">
-                          <th className="py-2.5 px-4 text-left text-[10px] font-black uppercase tracking-widest text-slate-500">Name</th>
-                          <th className="py-2.5 px-4 text-left text-[10px] font-black uppercase tracking-widest text-slate-500">Client</th>
-                          <th className="py-2.5 px-4 text-left text-[10px] font-black uppercase tracking-widest text-slate-500">Status</th>
-                          <th className="py-2.5 px-4 text-right text-[10px] font-black uppercase tracking-widest text-slate-500">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/5">
+                  <div className="overflow-x-auto rounded-[2rem] p-4 relative panel-3d shadow-2xl mt-4">
+                    <div className="min-w-[1000px] flex flex-col gap-3">
+                        {/* Header */}
+                        <div className="grid grid-cols-[minmax(180px,2fr)_minmax(150px,1.5fr)_minmax(180px,1.5fr)_minmax(140px,1fr)_100px_80px] gap-4 px-5 py-3 rounded-xl bg-white/[0.03] border border-white/[0.05] shadow-[inset_0_1px_0_rgba(255,255,255,0.02)] items-center">
+                            <div className="text-[10px] font-black tracking-widest uppercase text-slate-500">Name</div>
+                            <div className="text-[10px] font-black tracking-widest uppercase text-slate-500">Client</div>
+                            <div className="text-[10px] font-black tracking-widest uppercase text-slate-500">Shift Time</div>
+                            <div className="text-[10px] font-black tracking-widest uppercase text-slate-500">Mode</div>
+                            <div className="text-[10px] font-black tracking-widest uppercase text-slate-500">Status</div>
+                            <div className="text-[10px] font-black tracking-widest uppercase text-slate-500 text-right">Actions</div>
+                        </div>
+                        
+                        {/* Rows */}
                         {filteredUsers.map(u => (
-                          <tr key={u.id} className="hover:bg-white/[0.02] transition-colors">
-                            <td className="py-3 px-4">
-                              <p className="font-semibold text-white">{u.name}</p>
-                              <p className="text-[10px] text-slate-600 mt-0.5">
-                                {u.shiftStart ?? '08:00'} – {u.shiftEnd ?? '17:00'} &nbsp;·&nbsp;
-                                {(u.timezone ?? 'America/Chicago').replace('America/', '')}
-                              </p>
-                            </td>
-                            <td className="py-3 px-4 text-slate-400 text-xs">{u.clientName}</td>
-                            <td className="py-3 px-4">
-                              <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md
-                                ${u.isApproved ? 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20' : 'text-amber-400 bg-amber-500/10 border border-amber-500/20'}`}>
-                                {u.isApproved ? 'Active' : 'Pending'}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 text-right">
-                              <div className="flex items-center justify-end gap-1">
-                                <button onClick={() => openEditUser(u)} className="p-1.5 text-slate-600 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-all" title="Edit"><Pencil size={13} /></button>
-                                <button onClick={() => setConfirmDelete({ type: 'user', id: u.id, name: u.name })} className="p-1.5 text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all" title="Delete"><UserX size={13} /></button>
-                              </div>
-                            </td>
-                          </tr>
+                            <div key={u.id} className="grid grid-cols-[minmax(180px,2fr)_minmax(150px,1.5fr)_minmax(180px,1.5fr)_minmax(140px,1fr)_100px_80px] gap-4 px-5 py-3.5 items-center rounded-2xl transition-all duration-300 panel-3d hover:scale-[1.01] bg-white/[0.015] hover:bg-white/[0.03] group">
+                                <div className="font-extrabold text-[14px] text-white tracking-tight truncate drop-shadow-sm">{u.name}</div>
+                                <div className="text-[12px] font-bold text-slate-400 capitalize truncate">{u.clientName}</div>
+                                
+                                <div className="text-[13px] font-mono text-indigo-300 font-bold tracking-tight flex items-center gap-2">
+                                    {u.shiftStart ?? '08:00'} <span className="text-slate-500 px-0.5">–</span> {u.shiftEnd ?? '17:00'}
+                                    <span className="text-slate-400 text-[9px] uppercase font-sans font-black tracking-widest bg-black/40 px-2 py-0.5 rounded-md border border-white/5 shadow-inner">{(u.timezone ?? 'America/Chicago').split('/').pop()?.replace('_', ' ')}</span>
+                                </div>
+                                
+                                <div className="text-[11px] font-black uppercase tracking-wider">
+                                    {u.workMode === 'WFO' 
+                                        ? <span className="text-blue-400 flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]"></span> In-Office</span> 
+                                        : <span className="text-purple-400 flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.8)]"></span> Remote</span>}
+                                </div>
+                                
+                                <div>
+                                    <span className={`inline-flex min-w-[70px] justify-center text-[10px] font-black uppercase tracking-wider px-2.5 py-1.5 rounded-md ${u.isApproved ? 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 shadow-[0_0_10px_rgba(52,211,153,0.1)]' : 'text-amber-400 bg-amber-500/10 border border-amber-500/20 shadow-[0_0_10px_rgba(251,191,36,0.1)]'}`}>
+                                        {u.isApproved ? 'Active' : 'Pending'}
+                                    </span>
+                                </div>
+                                
+                                <div className="flex items-center justify-end gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity">
+                                    <button onClick={() => openEditUser(u)} className="p-1.5 text-slate-300 hover:text-blue-400 hover:bg-blue-500/20 rounded-lg transition-all" title="Edit"><Pencil size={14} /></button>
+                                    <button onClick={() => setConfirmDelete({ type: 'user', id: u.id, name: u.name })} className="p-1.5 text-slate-300 hover:text-rose-400 hover:bg-rose-500/20 rounded-lg transition-all" title="Delete"><UserX size={14} /></button>
+                                </div>
+                            </div>
                         ))}
-                      </tbody>
-                    </table>
-                    <div className="px-4 py-2 border-t border-white/5 bg-black/10">
-                      <p className="text-[10px] text-slate-700">{filteredUsers.length} user{filteredUsers.length !== 1 ? 's' : ''}{userSearch ? ` matching "${userSearch}"` : ''} · {allUsers.filter(u => !u.isApproved).length} pending approval</p>
+                        
+                        <div className="px-5 py-3 mt-2 rounded-xl border border-white/5 bg-black/20 flex justify-between items-center shadow-inner">
+                            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">
+                                {filteredUsers.length} Match{filteredUsers.length !== 1 ? 'es' : ''} {userSearch ? ` for "${userSearch}"` : ''}
+                            </p>
+                            {allUsers.filter(u => !u.isApproved).length > 0 && (
+                                <p className="text-[10px] font-black uppercase tracking-widest text-amber-500/80 bg-amber-500/10 px-3 py-1.5 rounded-full border border-amber-500/20 shadow-[0_0_10px_rgba(251,191,36,0.1)] animate-pulse">
+                                    {allUsers.filter(u => !u.isApproved).length} Pending Approval
+                                </p>
+                            )}
+                        </div>
                     </div>
                   </div>
                 )}
@@ -671,8 +684,7 @@ export default function Home() {
       <AnimatePresence>
         {user && (user.isMaster || user.isApproved) && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-            className={`w-full ${isMaster ? 'max-w-6xl' : 'max-w-md'} flex flex-col gap-0`}>
+            className={`w-full ${isMaster ? 'max-w-[1800px] px-2 lg:px-6' : 'max-w-md'} flex flex-col gap-0 mx-auto`}>
 
             {/* ── TOP NAV SHELL ── */}
             <div className="glass-card rounded-2xl px-5 py-3 flex items-center justify-between mb-0 border-b-0 rounded-b-none">

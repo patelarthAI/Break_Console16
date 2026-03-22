@@ -135,12 +135,12 @@ function LiveTimer({ since, isBreakOrBrb = false }: { since: number; isBreakOrBr
 }
 
 const STATUS = {
-    idle: { label: 'Offline', dot: 'bg-slate-500', ring: 'ring-slate-500/0', text: 'text-slate-400', cardBg: 'bg-[#0a0a18] border-white/5 hover:bg-white/[0.04]', badgeBg: 'bg-slate-800/80 border-slate-700/50 text-slate-400' },
-    working: { label: 'Working', dot: 'bg-emerald-400 animate-pulse drop-shadow-[0_0_5px_currentColor]', ring: 'ring-emerald-400/30', text: 'text-emerald-400', cardBg: 'bg-emerald-950/10 border-emerald-500/20 shadow-[inset_0_1px_1px_rgba(255,255,255,0.05),0_0_15px_rgba(16,185,129,0.05)] hover:bg-emerald-900/30 hover:border-emerald-500/40', badgeBg: 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300' },
-    on_break: { label: 'On Break', dot: 'bg-amber-400 animate-pulse drop-shadow-[0_0_5px_currentColor]', ring: 'ring-amber-400/30', text: 'text-amber-400', cardBg: 'bg-amber-950/10 border-amber-500/20 shadow-[inset_0_1px_1px_rgba(255,255,255,0.05),0_0_15px_rgba(245,158,11,0.05)] hover:bg-amber-900/30 hover:border-amber-500/40', badgeBg: 'bg-amber-500/15 border-amber-500/30 text-amber-300' },
-    on_brb: { label: 'BRB', dot: 'bg-blue-400 animate-pulse drop-shadow-[0_0_5px_currentColor]', ring: 'ring-blue-400/30', text: 'text-blue-400', cardBg: 'bg-blue-950/10 border-blue-500/20 shadow-[inset_0_1px_1px_rgba(255,255,255,0.05),0_0_15px_rgba(59,130,246,0.05)] hover:bg-blue-900/30 hover:border-blue-500/40', badgeBg: 'bg-blue-500/15 border-blue-500/30 text-blue-300' },
-    punched_out: { label: 'Logged Out', dot: 'bg-slate-500', ring: 'ring-slate-400/0', text: 'text-slate-500', cardBg: 'bg-slate-900/20 border-slate-700/40 hover:bg-slate-800/40', badgeBg: 'bg-slate-800/80 border-slate-700/50 text-slate-400' },
-    on_leave: { label: 'On Leave', dot: 'bg-violet-400', ring: 'ring-violet-400/30', text: 'text-violet-400', cardBg: 'bg-violet-950/10 border-violet-500/20', badgeBg: 'bg-violet-500/15 border-violet-500/30 text-violet-300' },
+    idle: { label: 'Offline', dot: 'bg-slate-500', ring: 'ring-slate-500/0', text: 'text-slate-400', cardBg: 'bg-[linear-gradient(145deg,rgba(10,10,24,0.6),rgba(5,5,15,0.9))] border-white/5 hover:bg-white/[0.04] shadow-[inset_2px_2px_5px_rgba(0,0,0,0.5),inset_-1px_-1px_3px_rgba(255,255,255,0.02)]', badgeBg: 'bg-slate-800/80 border-slate-700/50 text-slate-400 shadow-[inset_0_1px_1px_rgba(255,255,255,0.05),0_2px_6px_rgba(0,0,0,0.6)]' },
+    working: { label: 'Working', dot: 'bg-emerald-400 animate-pulse drop-shadow-[0_0_5px_currentColor]', ring: 'ring-emerald-400/30', text: 'text-emerald-400', cardBg: 'bg-[linear-gradient(120deg,rgba(16,185,129,0.1),rgba(4,4,15,0.8))] border-emerald-500/20 shadow-[-4px_-4px_10px_rgba(255,255,255,0.01),8px_8px_20px_rgba(0,0,0,0.6),inset_0_1px_1px_rgba(255,255,255,0.08)] hover:brightness-110', badgeBg: 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08),0_2px_6px_rgba(0,0,0,0.6)]' },
+    on_break: { label: 'On Break', dot: 'bg-amber-400 animate-pulse drop-shadow-[0_0_5px_currentColor]', ring: 'ring-amber-400/30', text: 'text-amber-400', cardBg: 'bg-[linear-gradient(120deg,rgba(245,158,11,0.1),rgba(4,4,15,0.8))] border-amber-500/20 shadow-[-4px_-4px_10px_rgba(255,255,255,0.01),8px_8px_20px_rgba(0,0,0,0.6),inset_0_1px_1px_rgba(255,255,255,0.08)] hover:brightness-110', badgeBg: 'bg-amber-500/15 border-amber-500/30 text-amber-300 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08),0_2px_6px_rgba(0,0,0,0.6)]' },
+    on_brb: { label: 'BRB', dot: 'bg-blue-400 animate-pulse drop-shadow-[0_0_5px_currentColor]', ring: 'ring-blue-400/30', text: 'text-blue-400', cardBg: 'bg-[linear-gradient(120deg,rgba(59,130,246,0.1),rgba(4,4,15,0.8))] border-blue-500/20 shadow-[-4px_-4px_10px_rgba(255,255,255,0.01),8px_8px_20px_rgba(0,0,0,0.6),inset_0_1px_1px_rgba(255,255,255,0.08)] hover:brightness-110', badgeBg: 'bg-blue-500/15 border-blue-500/30 text-blue-300 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08),0_2px_6px_rgba(0,0,0,0.6)]' },
+    punched_out: { label: 'Logged Out', dot: 'bg-slate-500', ring: 'ring-slate-400/0', text: 'text-slate-500', cardBg: 'bg-[linear-gradient(145deg,rgba(30,41,59,0.3),rgba(15,23,42,0.8))] border-slate-700/40 shadow-[-2px_-2px_6px_rgba(255,255,255,0.01),4px_4px_12px_rgba(0,0,0,0.4),inset_0_1px_1px_rgba(255,255,255,0.04)]', badgeBg: 'bg-slate-800/80 border-slate-700/50 text-slate-400 shadow-[inset_0_1px_1px_rgba(255,255,255,0.03),0_2px_6px_rgba(0,0,0,0.4)]' },
+    on_leave: { label: 'On Leave', dot: 'bg-violet-400', ring: 'ring-violet-400/30', text: 'text-violet-400', cardBg: 'bg-[linear-gradient(120deg,rgba(139,92,246,0.1),rgba(4,4,15,0.8))] border-violet-500/20 shadow-[-4px_-4px_10px_rgba(255,255,255,0.01),8px_8px_20px_rgba(0,0,0,0.6),inset_0_1px_1px_rgba(255,255,255,0.08)] hover:brightness-110', badgeBg: 'bg-violet-500/15 border-violet-500/30 text-violet-300 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08),0_2px_6px_rgba(0,0,0,0.6)]' },
 };
 
 function EmployeeRow({ r, isMaster, isClean, onEndBreak, onEndBrb, onPunchOut, confirmingEnd, onConfirmEnd, onCancelEnd, confirmingDelete, onConfirmDelete, onCancelDelete, onDeleteRequest, onClickRow }: any) {
@@ -154,22 +154,22 @@ function EmployeeRow({ r, isMaster, isClean, onEndBreak, onEndBrb, onPunchOut, c
     const workedMs = r.workedMs ?? (r.punchIn && r.punchOut ? r.punchOut - r.punchIn : 0);
 
     return (
-        <div onClick={onClickRow} className={`flex items-center p-3 rounded-xl border border-white/5 ${cfg.cardBg} group transition-all duration-300 hover:border-white/20 cursor-pointer`}>
+        <div onClick={onClickRow} className={`flex items-center p-3.5 mb-2 rounded-xl border border-white/5 ${cfg.cardBg} group transition-all duration-300 cursor-pointer`}>
             {/* Left: Avatar + Info */}
-            <div className="flex items-center gap-4 min-w-[200px] w-1/4">
+            <div className="flex items-center gap-4 w-[34%] pl-2 shrink-0">
                 <div className={`w-10 h-10 rounded-[10px] flex items-center justify-center text-[15px] font-black shrink-0 ${isDone || isLeave ? 'bg-slate-800 text-slate-400 border border-slate-700/50' : cfg.text.replace('text-', 'bg-').replace('-400', '-500/15') + ' border border-current shadow-[0_0_12px_currentColor] drop-shadow-lg ' + cfg.text}`}>
                     {r.user.name[0].toUpperCase()}
                 </div>
-                <div className="flex flex-col">
+                <div className="flex flex-col flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                        <h3 className={`text-[14px] font-bold tracking-tight truncate ${isDone ? 'text-slate-400' : 'text-slate-100'}`}>{r.user.name}</h3>
-                        {isClean && <span className="text-[9px] bg-yellow-500/15 text-yellow-400 px-1 py-0.5 rounded border border-yellow-500/30 flex-shrink-0" title="Perfect 7-day compliance">⭐</span>}
+                        <h3 className={`text-[15px] font-bold tracking-tight truncate ${isDone ? 'text-slate-400' : 'text-slate-100'}`}>{r.user.name}</h3>
+                        {isClean && <span className="text-[9px] bg-[linear-gradient(145deg,rgba(234,179,8,0.2),rgba(234,179,8,0.05))] text-yellow-400 px-1.5 py-0.5 rounded border border-yellow-500/40 flex-shrink-0 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2),0_2px_4px_rgba(234,179,8,0.15)]" title="Perfect 7-day compliance">⭐</span>}
                     </div>
                 </div>
             </div>
 
             {/* Middle: Status Badge */}
-            <div className="min-w-[120px] w-1/6">
+            <div className="w-[14%] shrink-0">
                 <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[10px] font-black uppercase tracking-widest ${cfg.badgeBg}`}>
                     {(!isDone && !isLeave) && <div className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />}
                     {cfg.label}
@@ -177,7 +177,7 @@ function EmployeeRow({ r, isMaster, isClean, onEndBreak, onEndBrb, onPunchOut, c
             </div>
 
             {/* Middle: Timer section */}
-            <div className="min-w-[150px] w-1/4 flex items-center">
+            <div className="w-[28%] flex items-center shrink-0">
                 {isLeave && <p className="text-sm font-semibold text-violet-400/80">Scheduled Leave</p>}
                 {isDone && workedMs > 0 && (
                     <div className="flex items-center gap-2">
@@ -212,20 +212,20 @@ function EmployeeRow({ r, isMaster, isClean, onEndBreak, onEndBrb, onPunchOut, c
 
             {/* Right: Actions */}
             {isMaster ? (
-                <div className="flex items-center justify-end gap-2 min-w-[200px] flex-1" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-end gap-2 pr-2 w-[24%] shrink-0" onClick={e => e.stopPropagation()}>
                     {isBreak && !confirmingEnd && (
-                        <button onClick={onEndBreak} className="px-4 py-2 text-xs uppercase tracking-wider font-bold rounded-lg bg-amber-500 text-amber-950 hover:bg-amber-400 transition-all shadow-[0_2px_10px_rgba(245,158,11,0.2)]">End Break</button>
+                        <button onClick={onEndBreak} className="px-4 py-2 text-xs uppercase tracking-wider font-bold rounded-lg bg-[linear-gradient(145deg,#f59e0b,#d97706)] text-amber-950 hover:brightness-110 active:scale-95 transition-all shadow-[inset_0_1px_1px_rgba(255,255,255,0.4),0_4px_10px_rgba(245,158,11,0.3)] border border-amber-400/50">End Break</button>
                     )}
                     {isBrb && !confirmingEnd && (
-                        <button onClick={onEndBrb} className="px-4 py-2 text-xs uppercase tracking-wider font-bold rounded-lg bg-blue-500 text-blue-950 hover:bg-blue-400 transition-all shadow-[0_2px_10px_rgba(59,130,246,0.2)]">End BRB</button>
+                        <button onClick={onEndBrb} className="px-4 py-2 text-xs uppercase tracking-wider font-bold rounded-lg bg-[linear-gradient(145deg,#3b82f6,#2563eb)] text-white hover:brightness-110 active:scale-95 transition-all shadow-[inset_0_1px_1px_rgba(255,255,255,0.4),0_4px_10px_rgba(59,130,246,0.3)] border border-blue-400/50">End BRB</button>
                     )}
                     {!['idle', 'punched_out', 'on_leave'].includes(r.status) && (
                         confirmingEnd
                             ? <div className="flex items-center gap-2">
-                                <button onClick={onConfirmEnd} className="px-4 py-2 text-xs font-bold shadow-inner rounded-lg bg-rose-500 text-white hover:bg-rose-400 uppercase tracking-wider">Yes, Out</button>
-                                <button onClick={onCancelEnd} className="px-4 py-2 text-xs font-bold rounded-lg bg-white/10 text-slate-300 hover:bg-white/20 uppercase tracking-wider border border-white/5">Cancel</button>
+                                <button onClick={onConfirmEnd} className="px-4 py-2 text-xs font-bold shadow-[inset_0_1px_1px_rgba(255,255,255,0.2),0_4px_12px_rgba(225,29,72,0.4)] border border-rose-400/50 rounded-lg bg-[linear-gradient(145deg,#e11d48,#be123c)] text-white hover:brightness-110 uppercase tracking-wider active:scale-95 transition-all">Yes, Out</button>
+                                <button onClick={onCancelEnd} className="px-4 py-2 text-xs font-bold rounded-lg bg-[rgba(255,255,255,0.05)] text-slate-300 hover:bg-[rgba(255,255,255,0.1)] uppercase tracking-wider border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1),0_4px_12px_rgba(0,0,0,0.4)] active:scale-95 transition-all">Cancel</button>
                             </div>
-                            : (!isBreak && !isBrb) && <button onClick={onPunchOut} className="px-4 py-2 text-xs rounded-lg bg-transparent text-slate-400 border border-slate-700 hover:bg-white/5 hover:text-white transition-all opacity-0 group-hover:opacity-100 uppercase tracking-widest font-bold">Clock Out</button>
+                            : (!isBreak && !isBrb) && <button onClick={onPunchOut} className="px-4 py-2 text-xs rounded-lg bg-[linear-gradient(145deg,rgba(255,255,255,0.02),rgba(0,0,0,0.4))] text-slate-300 border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.05),0_4px_8px_rgba(0,0,0,0.2)] hover:border-white/30 hover:text-white transition-all opacity-0 group-hover:opacity-100 uppercase tracking-widest font-bold">Clock Out</button>
                     )}
 
                     <div className="ml-2 pl-2 flex items-center">
@@ -238,7 +238,7 @@ function EmployeeRow({ r, isMaster, isClean, onEndBreak, onEndBrb, onPunchOut, c
                         }
                     </div>
                 </div>
-            ) : <div className="w-[30%]" />}
+            ) : null}
         </div>
     );
 }
@@ -603,22 +603,22 @@ export default function MasterConsole({ currentUserId, isMaster }: { currentUser
 
 
             {/* ── MAIN GRID: People Table + Week Calendar ────────────────────── */}
-            <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 min-h-0 items-start">
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] xl:grid-cols-[1fr_380px] gap-6 min-h-0 items-start">
 
                 {/* LEFT: Dashboard Data Map */}
-                <div className="xl:col-span-3 flex flex-col gap-6 min-h-0">
+                <div className="flex flex-col gap-6 min-h-0">
 
                     {/* MANAGER OVERVIEW PANEL / FILTERS */}
                     {!loading && (() => {
                         const total = augmented.length || 1;
                         const tiles = [
-                            { label: 'All', k: null, val: total, color: 'text-slate-200', bg: 'bg-[#11111a] border-white/10 hover:bg-white/5', acc: 'bg-slate-500' },
-                            { label: 'Working', k: 'working', val: stats.working, color: 'text-emerald-400', bg: 'bg-[#0a0a1a] border-white/5 hover:bg-emerald-950/40', acc: 'bg-emerald-500' },
-                            { label: 'On Break', k: 'on_break', val: stats.onBreak, color: 'text-amber-400', bg: 'bg-[#0a0a1a] border-white/5 hover:bg-amber-950/40', acc: 'bg-amber-500' },
-                            { label: 'BRB', k: 'on_brb', val: stats.onBrb, color: 'text-indigo-400', bg: 'bg-[#0a0a1a] border-white/5 hover:bg-indigo-950/40', acc: 'bg-indigo-500' },
-                            { label: 'On Leave', k: 'on_leave', val: stats.onLeave, color: 'text-violet-400', bg: 'bg-[#0a0a1a] border-white/5 hover:bg-violet-950/40', acc: 'bg-violet-500' },
-                            { label: 'Logged Out', k: 'punched_out', val: stats.done, color: 'text-slate-400', bg: 'bg-[#0a0a1a] border-white/5 hover:bg-slate-900/50', acc: 'bg-slate-500' },
-                            { label: 'Offline', k: 'idle', val: stats.idle, color: 'text-slate-500', bg: 'bg-[#0a0a1a] border-white/5 hover:bg-slate-900/30', acc: 'bg-slate-700' },
+                            { label: 'All', k: null, val: total, color: 'text-slate-200', bg: 'panel-3d bg-[linear-gradient(145deg,rgba(15,23,42,0.8),rgba(2,6,23,0.9))] border-white/10 hover:brightness-110', acc: 'bg-slate-500' },
+                            { label: 'Working', k: 'working', val: stats.working, color: 'text-emerald-400', bg: 'panel-3d bg-[linear-gradient(120deg,rgba(16,185,129,0.1),rgba(4,4,15,0.8))] border-emerald-500/20 hover:brightness-125', acc: 'bg-emerald-500' },
+                            { label: 'On Break', k: 'on_break', val: stats.onBreak, color: 'text-amber-400', bg: 'panel-3d bg-[linear-gradient(120deg,rgba(245,158,11,0.1),rgba(4,4,15,0.8))] border-amber-500/20 hover:brightness-125', acc: 'bg-amber-500' },
+                            { label: 'BRB', k: 'on_brb', val: stats.onBrb, color: 'text-indigo-400', bg: 'panel-3d bg-[linear-gradient(120deg,rgba(59,130,246,0.1),rgba(4,4,15,0.8))] border-indigo-500/20 hover:brightness-125', acc: 'bg-indigo-500' },
+                            { label: 'On Leave', k: 'on_leave', val: stats.onLeave, color: 'text-violet-400', bg: 'panel-3d bg-[linear-gradient(120deg,rgba(139,92,246,0.1),rgba(4,4,15,0.8))] border-violet-500/20 hover:brightness-125', acc: 'bg-violet-500' },
+                            { label: 'Logged Out', k: 'punched_out', val: stats.done, color: 'text-slate-400', bg: 'panel-3d bg-[linear-gradient(145deg,rgba(30,41,59,0.3),rgba(15,23,42,0.8))] border-slate-700/40 hover:brightness-125', acc: 'bg-slate-500' },
+                            { label: 'Offline', k: 'idle', val: stats.idle, color: 'text-slate-500', bg: 'panel-3d-inset border-white/5 hover:bg-slate-900/30 text-opacity-50', acc: 'bg-slate-700' },
                         ];
                         return (
                             <div className="grid grid-cols-3 md:grid-cols-7 gap-3 mb-2">
@@ -638,7 +638,7 @@ export default function MasterConsole({ currentUserId, isMaster }: { currentUser
                     })()}
 
                     {/* Filter row */}
-                    <div className="flex z-10 items-center justify-between bg-black/60 backdrop-blur-md p-3 rounded-2xl border border-white/10 shadow-lg relative">
+                    <div className="flex z-10 items-center justify-between panel-3d border border-white/10 p-3 relative">
                         <div className="flex items-center gap-3 flex-1 flex-wrap">
                             <Wifi size={16} className="text-emerald-400 animate-pulse flex-shrink-0 ml-1 drop-shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
                             <span className="text-[12px] font-black uppercase tracking-[0.2em] text-emerald-400">Live</span>
@@ -845,7 +845,7 @@ export default function MasterConsole({ currentUserId, isMaster }: { currentUser
                 <div className="flex flex-col gap-4">
 
                     {/* Leave Calendar — full monthly view */}
-                    <div className="rounded-2xl border border-white/8 bg-[#0a0a18] p-5 shadow-2xl relative overflow-hidden group">
+                    <div className="panel-3d p-6 relative overflow-hidden group">
                         <div className="absolute inset-0 bg-violet-500/[0.02] group-hover:bg-violet-500/[0.04] transition-colors pointer-events-none" />
                         <div className="flex items-center justify-between mb-5 relative z-10">
                             <div className="flex items-center gap-2">
@@ -868,12 +868,12 @@ export default function MasterConsole({ currentUserId, isMaster }: { currentUser
                     </div>
 
                     {/* Star Performers */}
-                    <div className="rounded-2xl border border-white/8 bg-[#0a0a18] p-4">
+                    <div className="panel-3d p-5">
                         <StarPerformers />
                     </div>
 
                     {/* Break Violators Panel */}
-                    <div className="rounded-2xl border border-white/8 bg-[#0a0a18] p-4">
+                    <div className="panel-3d p-5">
                         <ViolatorsPanel />
                     </div>
                 </div>

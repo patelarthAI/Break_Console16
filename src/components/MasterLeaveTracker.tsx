@@ -68,7 +68,7 @@ function TypeBadge({ type, isSmart }: { type: string, isSmart?: boolean }) {
 
 function StatCard({ label, value, sub, color, accent, active }: { label: string; value: string | number; sub?: string; color: string; accent: string; active?: boolean; }) {
     return (
-        <div className={`relative flex flex-col bg-[#0a0a1a] border rounded-xl px-5 py-4 overflow-hidden transition-all duration-300 group ${active ? 'border-white/20 bg-white/5 ring-1 ring-white/10' : 'border-white/5 hover:bg-white/[0.04] hover:border-white/10'}`}>
+        <div className={`relative flex flex-col panel-3d px-5 py-4 overflow-hidden transition-all duration-300 group ${active ? 'border-white/20 ring-1 ring-white/10' : 'hover:brightness-110'}`}>
             {/* Colored top accent bar — same pattern as Live Dashboard */}
             <div className={`absolute top-0 left-0 right-0 h-[3px] ${accent} ${active ? 'opacity-100' : 'opacity-80'}`} />
             {active && <div className={`absolute -right-4 -top-4 w-12 h-12 ${accent} opacity-10 blur-2xl rounded-full`} />}
@@ -349,7 +349,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
             </div>
 
             {/* ── Unified Filter Bar ─────────────────────────────────────── */}
-            <div className="bg-black/60 backdrop-blur-md rounded-2xl border border-white/10 shadow-lg overflow-hidden">
+            <div className="panel-3d rounded-2xl shadow-lg overflow-hidden">
                 <div className="flex items-center gap-3 p-3 flex-wrap">
                     {/* Year Selector */}
                     <div className="relative">
@@ -461,127 +461,121 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
             </div>
 
             {/* ── Table ───────────────────────────────────────────────────── */}
-            <div className="rounded-xl border border-white/[0.07] overflow-hidden bg-white/[0.02]">
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead>
-                            <tr className="border-b border-white/[0.06] bg-white/[0.03] shadow-[0_1px_0_rgba(255,255,255,0.02)]">
-                                {['Date', 'Employee', 'Client', 'Leave Type', 'Duration', 'Planned', 'Reason', 'Logged by'].map(h => (
-                                    <th key={h} className="py-3 px-4 text-left whitespace-nowrap first:pl-5">
-                                        <button onClick={() => {
-                                            if (sortConfig.key === h) setSortConfig({ key: h, dir: sortConfig.dir === 'asc' ? 'desc' : 'asc' });
-                                            else setSortConfig({ key: h, dir: 'asc' });
-                                        }} className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.1em] uppercase text-slate-500 hover:text-white transition-colors outline-none cursor-pointer group">
-                                            {h}
-                                            <span className="flex flex-col opacity-0 group-hover:opacity-50 transition-opacity" style={{ opacity: sortConfig.key === h ? 1 : undefined }}>
-                                                <ChevronUp size={10} className={`-mb-1 transition-colors ${sortConfig.key === h && sortConfig.dir === 'asc' ? 'text-emerald-400' : ''}`} />
-                                                <ChevronDown size={10} className={`transition-colors ${sortConfig.key === h && sortConfig.dir === 'desc' ? 'text-emerald-400' : ''}`} />
+            <div className="panel-3d overflow-hidden rounded-[2rem] p-4">
+                <div className="overflow-x-auto pb-4">
+                    <div className="min-w-[1050px] flex flex-col gap-3">
+                        {/* Headers */}
+                        <div className="grid grid-cols-[100px_minmax(150px,2fr)_minmax(130px,1fr)_minmax(160px,1.5fr)_90px_90px_minmax(140px,1.5fr)_100px_90px] gap-4 px-5 py-3 rounded-xl bg-white/[0.03] border border-white/[0.05] shadow-[inset_0_1px_0_rgba(255,255,255,0.02)] items-center">
+                            {['Date', 'Employee', 'Client', 'Leave Type', 'Duration', 'Planned', 'Reason', 'Logged by'].map(h => (
+                                <button key={h} onClick={() => {
+                                    if (sortConfig.key === h) setSortConfig({ key: h, dir: sortConfig.dir === 'asc' ? 'desc' : 'asc' });
+                                    else setSortConfig({ key: h, dir: 'asc' });
+                                }} className="flex items-center gap-1.5 text-[10px] font-black tracking-[0.15em] uppercase text-slate-500 hover:text-white transition-colors outline-none cursor-pointer group text-left">
+                                    {h}
+                                    <span className="flex flex-col opacity-0 group-hover:opacity-50 transition-opacity" style={{ opacity: sortConfig.key === h ? 1 : undefined }}>
+                                        <ChevronUp size={10} className={`-mb-1 transition-colors ${sortConfig.key === h && sortConfig.dir === 'asc' ? 'text-emerald-400' : ''}`} />
+                                        <ChevronDown size={10} className={`transition-colors ${sortConfig.key === h && sortConfig.dir === 'desc' ? 'text-emerald-400' : ''}`} />
+                                    </span>
+                                </button>
+                            ))}
+                            <div className="text-[10px] font-black tracking-[0.15em] uppercase text-slate-500 text-right pr-2">Actions</div>
+                        </div>
+
+                        {/* Body Slots */}
+                        {loading ? (
+                            <div className="py-20 flex flex-col items-center justify-center gap-3">
+                                <div className="w-6 h-6 border-2 border-slate-800 border-t-indigo-500 rounded-full animate-spin shadow-[0_0_15px_rgba(99,102,241,0.4)]" />
+                                <p className="text-xs font-bold tracking-widest uppercase text-slate-500">Loading records…</p>
+                            </div>
+                        ) : displayedLeaves.length === 0 ? (
+                            <div className="py-24 flex flex-col items-center justify-center gap-4">
+                                <div className="w-16 h-16 rounded-3xl bg-white/[0.02] border border-white/5 flex items-center justify-center shadow-[inset_0_2px_10px_rgba(255,255,255,0.02)]">
+                                    <CalendarCheck2 size={28} className="text-slate-600" />
+                                </div>
+                                <div className="text-center">
+                                    <p className="text-sm font-black text-slate-400 tracking-wide">No records found</p>
+                                    <p className="text-xs font-medium text-slate-600 mt-1">{search || hasFilter ? 'Try adjusting your filters' : 'Click "New Record" to add the first leave entry'}</p>
+                                </div>
+                                {(search || hasFilter) && (
+                                    <button onClick={() => { setSearch(''); setFilterClient(''); setFilterEmployee(''); }}
+                                        className="text-xs uppercase tracking-widest text-indigo-400 hover:text-indigo-300 font-black transition-colors px-4 py-2 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20">
+                                        Clear all filters
+                                    </button>
+                                )}
+                            </div>
+                        ) : (
+                            <AnimatePresence initial={false}>
+                                {displayedLeaves.map((l, i) => (
+                                    <motion.div key={l.id}
+                                        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+                                        transition={{ duration: 0.2 }}
+                                        className={`grid grid-cols-[100px_minmax(150px,2fr)_minmax(130px,1fr)_minmax(160px,1.5fr)_90px_90px_minmax(140px,1.5fr)_100px_90px] gap-4 px-5 py-3.5 items-center rounded-2xl transition-all duration-300 group cursor-default
+                                            ${editingId === l.id ? 'bg-[linear-gradient(120deg,rgba(245,158,11,0.08),rgba(0,0,0,0.4))] border border-amber-500/30 shadow-[0_0_20px_rgba(245,158,11,0.1)] ring-1 ring-amber-500/20' : 'bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] hover:border-white/10 hover:shadow-xl hover:scale-[1.005]'}`}>
+                                        
+                                        <div className="font-mono text-[11px] font-bold text-slate-400/80 uppercase tracking-widest">{fmtDate(l.date)}</div>
+                                        
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <span className="w-8 h-8 rounded-xl bg-[linear-gradient(145deg,rgba(255,255,255,0.05),rgba(255,255,255,0.01))] border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] text-[11px] font-black text-white flex items-center justify-center flex-shrink-0 drop-shadow-md">
+                                                {l.employee_name[0]}
                                             </span>
-                                        </button>
-                                    </th>
-                                ))}
-                                <th className="py-3 px-4 w-32 text-right pr-6">
-                                    <span className="text-[11px] font-bold tracking-[0.1em] uppercase text-slate-500">Actions</span>
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {loading ? (
-                                <tr><td colSpan={9} className="py-20 text-center">
-                                    <div className="flex flex-col items-center gap-3">
-                                        <div className="w-5 h-5 border-2 border-slate-800 border-t-emerald-500 rounded-full animate-spin" />
-                                        <p className="text-xs text-slate-600">Loading records…</p>
-                                    </div>
-                                </td></tr>
-                            ) : displayedLeaves.length === 0 ? (
-                                <tr><td colSpan={9} className="py-24 text-center">
-                                    <div className="flex flex-col items-center gap-3">
-                                        <div className="w-12 h-12 rounded-2xl bg-white/[0.03] border border-white/8 flex items-center justify-center">
-                                            <CalendarCheck2 size={22} className="text-slate-700" />
+                                            <span className="text-[13px] font-bold text-white truncate drop-shadow-sm">{l.employee_name}</span>
                                         </div>
+
+                                        <div className="min-w-0">
+                                            <span className="inline-block max-w-full truncate text-[9px] font-black uppercase tracking-widest text-slate-400 bg-black/40 border border-white/5 px-2.5 py-1.5 rounded-lg shadow-inner">{l.client_name}</span>
+                                        </div>
+
+                                        <div><TypeBadge type={l.leave_type} isSmart={(l as any).is_smart} /></div>
+
+                                        <div className={`text-[11px] font-black tracking-wider uppercase ${l.day_count === 1 ? 'text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.5)]' : 'text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]'}`}>
+                                            {l.day_count === 1 ? 'Full' : 'Half'}
+                                        </div>
+
                                         <div>
-                                            <p className="text-sm font-semibold text-slate-500">No records found</p>
-                                            <p className="text-xs text-slate-700 mt-1">{search || hasFilter ? 'Try adjusting your filters' : 'Click "New Record" to add the first leave entry'}</p>
+                                            {(l as any).is_smart ? (
+                                                <span className="inline-flex items-center gap-1 text-amber-500/90 text-[10px] uppercase tracking-widest font-black bg-amber-500/10 px-2 py-1 rounded-md border border-amber-500/20"><AlertCircle size={10} /> Auto</span>
+                                            ) : l.is_planned
+                                                ? <span className="inline-flex items-center gap-1 text-emerald-400/90 text-[10px] uppercase tracking-widest font-black bg-emerald-500/10 px-2 py-1 rounded-md border border-emerald-500/20"><CheckCircle size={10} /> Yes</span>
+                                                : <span className="inline-flex items-center gap-1 text-rose-400/90 text-[10px] uppercase tracking-widest font-black bg-rose-500/10 px-2 py-1 rounded-md border border-rose-500/20"><AlertCircle size={10} /> No</span>}
                                         </div>
-                                        {(search || hasFilter) && (
-                                            <button onClick={() => { setSearch(''); setFilterClient(''); setFilterEmployee(''); }}
-                                                className="text-xs text-emerald-400 hover:text-emerald-300 font-bold transition-colors">
-                                                Clear all filters
-                                            </button>
-                                        )}
-                                    </div>
-                                </td></tr>
-                            ) : (
-                                <AnimatePresence initial={false}>
-                                    {displayedLeaves.map((l, i) => (
-                                        <motion.tr key={l.id}
-                                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, height: 0 }}
-                                            transition={{ duration: 0.15 }} // Removed per-row stagger delay for instant tabular display
-                                            className={`border-b border-white/[0.04] hover:bg-white/5 transition-colors group cursor-default
-                                                ${editingId === l.id ? 'bg-amber-500/[0.04] border-l-2 border-l-amber-500/40' : ''}`}>
-                                            <td className="py-3.5 px-4 pl-5 font-mono text-xs text-slate-400 whitespace-nowrap">{fmtDate(l.date)}</td>
-                                            <td className="py-3.5 px-4">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="w-6 h-6 rounded-md bg-white/5 text-[10px] font-black text-white flex items-center justify-center flex-shrink-0">
-                                                        {l.employee_name[0]}
-                                                    </span>
-                                                    <span className="text-sm font-semibold text-white whitespace-nowrap">{l.employee_name}</span>
-                                                </div>
-                                            </td>
-                                            <td className="py-3.5 px-4">
-                                                <span className="text-[10px] font-black uppercase tracking-wide text-slate-500 bg-white/[0.04] border border-white/8 px-2 py-1 rounded-md whitespace-nowrap">{l.client_name}</span>
-                                            </td>
-                                            <td className="py-3.5 px-4"><TypeBadge type={l.leave_type} isSmart={(l as any).is_smart} /></td>
-                                            <td className="py-3.5 px-4">
-                                                <span className={`text-xs font-black tabular-nums ${l.day_count === 1 ? 'text-blue-400' : 'text-amber-400'}`}>
-                                                    {l.day_count === 1 ? 'Full Day' : 'Half Day'}
-                                                </span>
-                                            </td>
-                                            <td className="py-3.5 px-4">
-                                                {(l as any).is_smart ? (
-                                                    <span className="inline-flex items-center gap-1 text-amber-500 text-[10px] uppercase tracking-widest font-black"><AlertCircle size={10} /> Auto</span>
-                                                ) : l.is_planned
-                                                    ? <span className="inline-flex items-center gap-1 text-emerald-400 text-xs font-bold"><CheckCircle size={11} /> Yes</span>
-                                                    : <span className="inline-flex items-center gap-1 text-rose-400 text-xs font-bold"><AlertCircle size={11} /> No</span>}
-                                            </td>
-                                            <td className="py-3.5 px-4 text-slate-500 text-xs max-w-[130px] truncate" title={l.reason || ''}>
-                                                {(l as any).is_smart ? <span className="text-amber-500/80 text-[10px] font-bold uppercase">{l.reason}</span> : (l.reason || <span className="text-slate-700">—</span>)}
-                                            </td>
-                                            <td className="py-3.5 px-4 text-slate-600 text-xs whitespace-nowrap">{(l as any).is_smart ? <span className="text-slate-500 italic">System Gen</span> : l.approver}</td>
-                                            <td className="py-3.5 px-4 pr-6 w-32">
-                                                <div className="flex items-center gap-1.5 justify-end">
-                                                    {(l as any).is_smart && (
-                                                        <>
-                                                            <button onClick={() => startEdit(l)} title="Approve & Save"
-                                                                className="flex items-center justify-center w-7 h-7 rounded-md bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-black transition-all">
-                                                                <CheckCircle size={14} />
-                                                            </button>
-                                                            <button onClick={() => declineSmartLeave(l.id)} title="Decline"
-                                                                className="flex items-center justify-center w-7 h-7 rounded-md bg-rose-500/10 text-rose-400 hover:bg-rose-500 hover:text-white transition-all">
-                                                                <X size={14} />
-                                                            </button>
-                                                        </>
-                                                    )}
-                                                    {!(l as any).is_smart && (
-                                                        <button onClick={() => startEdit(l)} title="Edit"
-                                                            className="p-1.5 rounded-md text-slate-600 hover:text-amber-400 hover:bg-amber-500/10 transition-all">
-                                                            <Edit2 size={13} />
-                                                        </button>
-                                                    )}
-                                                    {!(l as any).is_smart && (
-                                                        <button onClick={() => setDeleteId(l.id)} title="Delete"
-                                                            className="p-1.5 rounded-md text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all">
-                                                            <Trash2 size={13} />
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </td>
-                                        </motion.tr>
-                                    ))}
-                                </AnimatePresence>
-                            )}
-                        </tbody>
-                    </table>
+
+                                        <div className="min-w-0 text-slate-500 text-[11px] font-semibold truncate" title={l.reason || ''}>
+                                            {(l as any).is_smart ? <span className="text-amber-500/70 text-[9px] font-black uppercase tracking-widest">{(l.reason || '').replace(/System Auto-Generated:\s*/i, '').replace(/No punch-in recorded/i, 'No Punch In').replace(/Half-Day/i, 'Less Hours')}</span> : (l.reason || <span className="text-slate-700 font-bold">—</span>)}
+                                        </div>
+
+                                        <div className="truncate text-slate-500 text-[11px] font-bold">{(l as any).is_smart ? <span className="text-indigo-400/70 italic drop-shadow-[0_0_5px_rgba(129,140,248,0.3)]">System Gen</span> : l.approver}</div>
+
+                                        <div className="flex items-center justify-end gap-1.5 w-full">
+                                            {(l as any).is_smart && (
+                                                <>
+                                                    <button onClick={() => startEdit(l)} title="Approve & Save"
+                                                        className="flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30 text-emerald-400 hover:from-emerald-500 hover:to-emerald-400 hover:text-emerald-950 transition-all shadow-[0_0_10px_rgba(16,185,129,0.1)] hover:shadow-[0_0_15px_rgba(16,185,129,0.4)] hover:scale-105 active:scale-95">
+                                                        <CheckCircle size={14} className="drop-shadow-sm" />
+                                                    </button>
+                                                    <button onClick={() => declineSmartLeave(l.id)} title="Decline"
+                                                        className="flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-br from-rose-500/20 to-rose-600/10 border border-rose-500/30 text-rose-400 hover:from-rose-500 hover:to-rose-400 hover:text-rose-950 transition-all shadow-[0_0_10px_rgba(225,29,72,0.1)] hover:shadow-[0_0_15px_rgba(225,29,72,0.4)] hover:scale-105 active:scale-95">
+                                                        <X size={14} className="drop-shadow-sm" />
+                                                    </button>
+                                                </>
+                                            )}
+                                            {!(l as any).is_smart && (
+                                                <button onClick={() => startEdit(l)} title="Edit"
+                                                    className="flex items-center justify-center w-8 h-8 rounded-xl bg-white/[0.03] border border-white/10 text-slate-400 hover:bg-amber-500/20 hover:border-amber-500/40 hover:text-amber-400 transition-all shadow-sm hover:shadow-[0_0_15px_rgba(245,158,11,0.2)] hover:scale-105 active:scale-95">
+                                                    <Edit2 size={13} />
+                                                </button>
+                                            )}
+                                            {!(l as any).is_smart && (
+                                                <button onClick={() => setDeleteId(l.id)} title="Delete"
+                                                    className="flex items-center justify-center w-8 h-8 rounded-xl bg-white/[0.03] border border-white/10 text-slate-400 hover:bg-rose-500/20 hover:border-rose-500/40 hover:text-rose-400 transition-all shadow-sm hover:shadow-[0_0_15px_rgba(225,29,72,0.2)] hover:scale-105 active:scale-95">
+                                                    <Trash2 size={13} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </motion.div>
+                                ))}
+                            </AnimatePresence>
+                        )}
+                    </div>
                 </div>
 
                 {/* Table Footer */}
