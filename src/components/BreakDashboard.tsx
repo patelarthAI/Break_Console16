@@ -6,6 +6,7 @@ import { getAllUsersStatus, UserStatusRecord, getLeaves } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 import { formatDuration } from '@/lib/timeUtils';
 import StarPerformers from './StarPerformers';
+import ViolatorsPanel from './ViolatorsPanel';
 import { MonthlyLeaveCalendar } from './MasterConsole';
 import { LeaveRecord } from '@/types';
 
@@ -221,11 +222,19 @@ export default function BreakDashboard({ currentUserId, isMaster, clientName }: 
                 </div>
             )}
 
-            {/* Top Performers / Discipline Board — Now visible to recruiters too — GLOBAL RANKING */}
+            {/* Aura Maxxers — Global Ranking */}
             <div className="rounded-[2.5rem] bg-gradient-to-b from-[#0a0a14]/80 to-[#05050f]/80 backdrop-blur-3xl border border-white/10 shadow-[0_32px_64px_rgba(0,0,0,0.6)] overflow-hidden relative group">
                 <div className="absolute inset-0 bg-emerald-500/[0.02] group-hover:bg-emerald-500/[0.04] transition-colors pointer-events-none" />
                 <div className="p-6">
                     <StarPerformers />
+                </div>
+            </div>
+
+            {/* Lobby Campers — Global Break Violators */}
+            <div className="rounded-[2.5rem] bg-gradient-to-b from-[#0a0a14]/80 to-[#05050f]/80 backdrop-blur-3xl border border-white/10 shadow-[0_32px_64px_rgba(0,0,0,0.6)] overflow-hidden relative group">
+                <div className="absolute inset-0 bg-rose-500/[0.02] group-hover:bg-rose-500/[0.04] transition-colors pointer-events-none" />
+                <div className="p-6">
+                    <ViolatorsPanel />
                 </div>
             </div>
         </div>

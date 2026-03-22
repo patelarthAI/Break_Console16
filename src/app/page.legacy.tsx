@@ -1,9 +1,11 @@
+// @ts-nocheck
 'use client';
 import { useState, useCallback, useEffect } from 'react';
+import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LogOut, BarChart2, Clock as ClockIcon, Users, Activity,
-  FileBarChart2, UserX, Settings, CalendarDays, Briefcase, Pencil, X, Search, Bell, Trash2
+  FileBarChart2, UserX, Settings, CalendarDays, Briefcase, Pencil, X, Search, Bell, Trash2, RotateCcw
 } from 'lucide-react';
 import { useToast } from '@/components/Toast';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -18,6 +20,8 @@ import MasterReports from '@/components/MasterReports';
 import BreakDashboard from '@/components/BreakDashboard';
 import MasterLeaveTracker from '@/components/MasterLeaveTracker';
 import NotificationPanel from '@/components/NotificationPanel';
+import ShowcaseAuthModal from '@/components/ShowcaseAuthModal';
+import HomeExperience from '@/components/HomeExperience';
 import { User, TimeLog, AppStatus, AppNotification } from '@/types';
 import {
   getCurrentUser, setCurrentUser, getLogs, insertLog, getClients, addClient, deleteClient, renameClient,
@@ -112,7 +116,7 @@ function PendingApproval({ user, onLogout }: { user: User; onLogout: () => void 
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
       <motion.div initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }}
         className="glass-card w-full max-w-sm p-8 rounded-3xl text-center space-y-6">
-        <img src="/logo.png" alt="Logo" className="w-16 h-16 object-contain mx-auto" />
+        <Image src="/logo.png" alt="Logo" width={64} height={64} className="mx-auto h-16 w-16 object-contain" />
         <div>
           <h2 className="text-xl font-bold text-white mb-2">Awaiting Approval</h2>
           <p className="text-slate-400 text-sm">Hi <span className="text-white font-semibold">{user.name}</span>, your account is pending admin approval.</p>
@@ -131,7 +135,7 @@ function PendingApproval({ user, onLogout }: { user: User; onLogout: () => void 
 
 // ─── Settings Panel (Clients + Users) ────────────────────────────────────────
 function SettingsPanel() {
-  const { success, error: toastError, warning } = useToast();
+  const { success, error: toastError } = useToast();
   const [settingsTab, setSettingsTab] = useState<'clients' | 'users' | 'notifications'>('clients');
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [newClientName, setNewClientName] = useState('');
@@ -147,7 +151,6 @@ function SettingsPanel() {
   const [editShiftStart, setEditShiftStart] = useState('08:00');
   const [editShiftEnd, setEditShiftEnd] = useState('17:00');
   const [editTimezone, setEditTimezone] = useState('America/Chicago');
-  const [editWorkMode, setEditWorkMode] = useState<'WFO' | 'WFH'>('WFO');
   const [saving, setSaving] = useState(false);
   const [userSearch, setUserSearch] = useState('');
   const [pendingCount, setPendingCount] = useState(0);
@@ -157,7 +160,7 @@ function SettingsPanel() {
   const [loadingNotifs, setLoadingNotifs] = useState(false);
   const adminId = getCurrentUser()?.id ?? '';
   // ConfirmDialog state
-  const [confirmDelete, setConfirmDelete] = useState<{ type: 'client' | 'user' | 'notification'; id: string; name: string } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ type: 'client' | 'user' | 'notification' | 'reset'; id: string; name: string } | null>(null);
 
   useEffect(() => {
     getClients().then(d => setClients(d)).finally(() => setLoadingClients(false));
@@ -224,7 +227,6 @@ function SettingsPanel() {
     setEditShiftStart(u.shiftStart ?? '08:00');
     setEditShiftEnd(u.shiftEnd ?? '17:00');
     setEditTimezone(u.timezone ?? 'America/Chicago');
-    setEditWorkMode(u.workMode ?? 'WFO');
   }
 
   async function saveEditUser(e: React.FormEvent) {
@@ -239,7 +241,6 @@ function SettingsPanel() {
         shiftStart: editShiftStart,
         shiftEnd: editShiftEnd,
         timezone: editTimezone,
-        workMode: editWorkMode,
       });
       setAllUsers(prev => prev.map(u => u.id === updated.id ? updated : u));
       setEditUser(null);
@@ -293,22 +294,30 @@ function SettingsPanel() {
         title={
           confirmDelete?.type === 'client' ? `Remove "${confirmDelete?.name}"?` :
             confirmDelete?.type === 'notification' ? 'Delete Broadcast?' :
-              `Delete ${confirmDelete?.name}?`
+              confirmDelete?.type === 'reset' ? 'Reset All Weekly Timers?' :
+                `Delete ${confirmDelete?.name}?`
         }
         message={
           confirmDelete?.type === 'user' ? 'This will permanently remove the user and ALL their time logs. This cannot be undone.' :
             confirmDelete?.type === 'notification' ? 'This will instantly remove it from all recruiter screens.' :
-              'Recruiters using this client will lose their client assignment.'
+              confirmDelete?.type === 'reset' ? 'This will PERMANENTLY delete all time logs from previous days (before today). This is used to start the week fresh.' :
+                'Recruiters using this client will lose their client assignment.'
         }
         confirmLabel={
           confirmDelete?.type === 'user' ? 'Delete User' :
             confirmDelete?.type === 'notification' ? 'Delete Broadcast' :
-              'Remove Client'
+              confirmDelete?.type === 'reset' ? 'Reset All Data' :
+                'Remove Client'
         }
         onConfirm={() => {
           const d = confirmDelete; if (!d) return;
           if (d.type === 'client') confirmDeleteClient(d.id);
           else if (d.type === 'notification') confirmDeleteNotification(d.id);
+          else if (d.type === 'reset') {
+            // resetAllLogsBeforeToday is no longer available
+            toastError('Reset function removed', 'Weekly data now resets automatically.');
+            setConfirmDelete(null);
+          }
           else confirmDeleteUser(d.id);
         }}
         onCancel={() => setConfirmDelete(null)}
@@ -332,6 +341,15 @@ function SettingsPanel() {
             )}
           </button>
         ))}
+      </div>
+
+      <div className="flex justify-end pt-2">
+        <button
+          onClick={() => setConfirmDelete({ type: 'reset', id: 'all', name: 'everything' })}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 transition-all text-xs font-black uppercase tracking-widest"
+        >
+          <RotateCcw size={12} /> Reset Weekly Slates
+        </button>
       </div>
 
       <AnimatePresence mode="wait">
@@ -433,7 +451,7 @@ function SettingsPanel() {
                     </div>
                     {/* Timezone */}
                     <div>
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1.5">Timezone (US)</label>
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1.5">Timezone</label>
                       <select value={editTimezone} onChange={e => setEditTimezone(e.target.value)}
                         className="w-full bg-white/[0.04] border border-white/10 rounded-xl py-2.5 px-3 text-white text-sm focus:outline-none focus:border-blue-500/50 transition-all appearance-none">
                         <option value="America/Chicago" className="bg-[#0d0d1a]">Central (CT) — Chicago</option>
@@ -441,15 +459,8 @@ function SettingsPanel() {
                         <option value="America/Denver" className="bg-[#0d0d1a]">Mountain (MT) — Denver</option>
                         <option value="America/Los_Angeles" className="bg-[#0d0d1a]">Pacific (PT) — Los Angeles</option>
                         <option value="America/Phoenix" className="bg-[#0d0d1a]">Arizona (AZ) — No DST</option>
-                      </select>
-                    </div>
-                    {/* Work Mode */}
-                    <div>
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1.5">Work Setting</label>
-                      <select value={editWorkMode} onChange={e => setEditWorkMode(e.target.value as 'WFO' | 'WFH')}
-                        className="w-full bg-white/[0.04] border border-white/10 rounded-xl py-2.5 px-3 text-white text-sm focus:outline-none focus:border-blue-500/50 transition-all appearance-none">
-                        <option value="WFO" className="bg-[#0d0d1a]">WFO (In-Office)</option>
-                        <option value="WFH" className="bg-[#0d0d1a]">WFH (Remote)</option>
+                        <option value="Europe/London" className="bg-[#0d0d1a]">Europe — London (UK)</option>
+                        <option value="Asia/Kolkata" className="bg-[#0d0d1a]">Asia — Kolkata (India)</option>
                       </select>
                     </div>
                     <div className="flex gap-2 pt-1">
@@ -615,18 +626,26 @@ export default function Home() {
 
     // 2. Load user session
     const saved = getCurrentUser();
-    if (saved) { setUser(saved); if (saved.isApproved) loadLogs(saved.id); }
+    if (saved) { setUser(saved); if (saved.isApproved) loadLogs(saved); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function loadLogs(userId: string) {
+  async function loadLogs(targetUser: User) {
     setLogsLoading(true);
-    try { const todayLogs = await getLogs(userId, getTodayKey()); setLogs(todayLogs); restoreStatus(todayLogs); }
+    try { 
+      const todayKey = getTodayKey();
+      const todayLogs = await getLogs(targetUser.id, todayKey); 
+      setLogs(todayLogs); 
+      restoreStatus(todayLogs); 
+    }
     finally { setLogsLoading(false); }
   }
 
   function restoreStatus(todayLogs: TimeLog[]) {
-    if (!todayLogs.length) return;
+    if (!todayLogs.length) {
+      setStatus('idle');
+      return;
+    }
     const last = todayLogs[todayLogs.length - 1];
     const map: Record<string, AppStatus> = { punch_in: 'working', punch_out: 'punched_out', break_start: 'on_break', break_end: 'working', brb_start: 'on_brb', brb_end: 'working' };
     setStatus(map[last.eventType] ?? 'idle');
@@ -634,12 +653,13 @@ export default function Home() {
 
   const addLog = useCallback(async (eventType: TimeLog['eventType']) => {
     if (!user) return;
-    const log: TimeLog = { id: generateUUID(), eventType, timestamp: getRealNow(), date: getTodayKey() };
+    const todayKey = getTodayKey();
+    const log: TimeLog = { id: generateUUID(), userId: user.id, eventType, timestamp: getRealNow(), date: todayKey };
     setLogs((prev) => [...prev, log]);
     await insertLog(user.id, log);
   }, [user]);
 
-  const handleLogin = async (u: User) => { setUser(u); if (u.isApproved) await loadLogs(u.id); };
+  const handleLogin = async (u: User) => { setUser(u); if (u.isApproved) await loadLogs(u); };
   const handleLogout = () => {
     setCurrentUser(null); setUser(null); setLogs([]); setStatus('idle');
     setMasterTab('dashboard'); setUserTab('tracker');
@@ -651,6 +671,84 @@ export default function Home() {
   const breakMs = computeTotalTime(session.breaks, nowMs);
   const brbMs = computeTotalTime(session.brbs, nowMs);
   const isMaster = user?.isMaster ?? false;
+  const usePremiumShell =
+    ['tracker', 'team'].includes(userTab) ||
+    ['dashboard', 'reports', 'leaves', 'settings'].includes(masterTab);
+
+  if (usePremiumShell) {
+    const masterContent = user && isMaster ? (
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={masterTab}
+          initial={{ opacity: 0, x: 10 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -10 }}
+          transition={{ duration: 0.2 }}
+        >
+          {masterTab === 'dashboard' && (
+            <ErrorBoundary fallbackLabel="Dashboard failed to load">
+              <MasterConsole currentUserId={user.id} isMaster={true} />
+            </ErrorBoundary>
+          )}
+          {masterTab === 'reports' && (
+            <ErrorBoundary fallbackLabel="Reports failed to load">
+              <MasterReports />
+            </ErrorBoundary>
+          )}
+          {masterTab === 'leaves' && (
+            <ErrorBoundary fallbackLabel="Leave tracker failed to load">
+              <MasterLeaveTracker currentUser={user} />
+            </ErrorBoundary>
+          )}
+          {masterTab === 'settings' && (
+            <ErrorBoundary fallbackLabel="Settings failed to load">
+              <SettingsPanel />
+            </ErrorBoundary>
+          )}
+        </motion.div>
+      </AnimatePresence>
+    ) : null;
+
+    const teamContent = user && !isMaster ? (
+      <BreakDashboard currentUserId={user.id} isMaster={false} clientName={user.clientName} />
+    ) : null;
+
+    return (
+      <main className="relative min-h-screen">
+        {!user && <ShowcaseAuthModal onLogin={handleLogin} />}
+        {user && !user.isMaster && !user.isApproved && <PendingApproval user={user} onLogout={handleLogout} />}
+
+        <AnimatePresence>
+          {user && (user.isMaster || user.isApproved) && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <HomeExperience
+                user={user}
+                status={status as Exclude<AppStatus, 'on_leave'>}
+                masterTab={masterTab}
+                setMasterTab={setMasterTab}
+                userTab={userTab}
+                setUserTab={setUserTab}
+                logs={logs}
+                logsLoading={logsLoading}
+                workedMs={workedMs}
+                breakMs={breakMs}
+                brbMs={brbMs}
+                onLogout={handleLogout}
+                onPunchIn={() => { addLog('punch_in'); setStatus('working'); }}
+                onStartBreak={() => { addLog('break_start'); setStatus('on_break'); }}
+                onEndBreak={() => { addLog('break_end'); setStatus('working'); }}
+                onPunchOut={() => { addLog('punch_out'); setStatus('punched_out'); }}
+                onBRBIn={() => { addLog('brb_start'); setStatus('on_brb'); }}
+                onBRBOut={() => { addLog('brb_end'); setStatus('working'); }}
+                masterContent={masterContent}
+                teamContent={teamContent}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </main>
+    );
+  }
 
   const MASTER_TABS = [
     { id: 'dashboard' as const, label: 'Live Dashboard', icon: <Activity size={15} /> },
@@ -670,94 +768,98 @@ export default function Home() {
 
       <AnimatePresence>
         {user && (user.isMaster || user.isApproved) && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-            className={`w-full ${isMaster ? 'max-w-6xl' : 'max-w-md'} flex flex-col gap-0`}>
+            className={`w-full ${isMaster ? 'max-w-[1600px]' : 'max-w-md'} flex flex-col gap-0`}>
 
             {/* ── TOP NAV SHELL ── */}
-            <div className="glass-card rounded-2xl px-5 py-3 flex items-center justify-between mb-0 border-b-0 rounded-b-none">
-              {/* Brand */}
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 border border-indigo-500/30 bg-indigo-500/10">
-                  <img src="/logo.png" alt="Logo" className="w-6 h-6 object-contain" />
-                </div>
-                <div>
-                   <div className="flex items-center gap-2">
-                    <p className="text-sm font-bold text-white tracking-tight">{isMaster ? 'Brigade Pulse' : user.name}</p>
-                    {isMaster && (
-                      <>
-                        <span className="text-[9px] uppercase font-black tracking-widest bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-1.5 py-0.5 rounded">Admin</span>
-                        <span className="flex items-center gap-1 text-[9px] font-bold text-emerald-400 uppercase tracking-wider">
-                          <span className="badge-dot live"></span> Live
-                        </span>
-                      </>
-                    )}
-                    {!isMaster && user.clientName && (
-                      <span className="text-[9px] uppercase font-black tracking-widest bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 px-1.5 py-0.5 rounded">{user.clientName}</span>
-                    )}
+            <header className="glass-card rounded-2xl px-5 py-4 flex items-center justify-between mb-6 border-white/5 bg-[#080812]/80 backdrop-blur-xl shadow-2xl relative overflow-hidden group">
+              <div className="absolute inset-x-0 bottom-0 h-px bg-white/5" />
+              <div className="flex items-center gap-6">
+                {/* Brand */}
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 border border-indigo-500/30 bg-indigo-500/10 shadow-[0_0_20px_rgba(99,102,241,0.15)] relative overflow-hidden">
+                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/20 to-transparent" />
+                    <Briefcase size={18} className="text-white relative z-10" />
                   </div>
-                  {isMaster && <p className="text-[10px] text-slate-600 mt-0.5 tracking-wider uppercase">Master Control · {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</p>}
+                  <div>
+                    <div className="flex items-center gap-2">
+                       <p className="text-[14px] font-black text-white tracking-[0.1em] uppercase">Brigade Pulse</p>
+                       <div className="flex items-center gap-1.5">
+                         <span className="text-[8px] uppercase font-black tracking-widest bg-white/5 text-slate-500 border border-white/10 px-2 py-0.5 rounded-md">Admin</span>
+                         <div className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md text-[8px] font-black uppercase text-emerald-400 tracking-widest whitespace-nowrap">
+                           <div className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" /> Live
+                         </div>
+                       </div>
+                    </div>
+                    <p className="text-[9px] text-slate-500 font-black mt-1 uppercase tracking-[0.25em]">Master Control · {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase()}</p>
+                  </div>
                 </div>
-              </div>
 
-              {/* Master Tab Nav */}
-              {isMaster && (
-                <nav className="flex items-center gap-0.5 bg-black/30 border border-white/8 rounded-xl p-1">
-                  {MASTER_TABS.map(t => (
-                    <button key={t.id} onClick={() => setMasterTab(t.id)}
-                      className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all duration-150
-                        ${masterTab === t.id
-                          ? 'bg-indigo-600 text-white shadow-[0_2px_12px_rgba(99,102,241,0.4)]'
-                          : 'text-slate-500 hover:text-slate-200 hover:bg-white/5'}`}>
-                      {t.icon} {t.label}
-                    </button>
-                  ))}
-                </nav>
-              )}
+                <div className="w-px h-8 bg-white/10 mx-2" />
 
-              {/* Sign out */}
-              <button onClick={handleLogout}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold text-slate-500 hover:text-rose-400 hover:bg-rose-500/8 border border-transparent hover:border-rose-500/15 transition-all">
-                <LogOut size={12} /> Sign out
-              </button>
-            </div>
-
-            {/* ── CONTENT AREA ── */}
-            <div className="glass-card rounded-2xl rounded-t-none border-t-0 p-6 shadow-2xl min-h-[60vh]">
-              {/* ════ MASTER ════ */}
-              {isMaster && (
-                <AnimatePresence mode="wait">
-                  <motion.div key={masterTab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.2 }}>
-                    {masterTab === 'dashboard' && <ErrorBoundary fallbackLabel="Dashboard failed to load"><MasterConsole currentUserId={user.id} isMaster={true} /></ErrorBoundary>}
-                    {masterTab === 'reports' && <ErrorBoundary fallbackLabel="Reports failed to load"><MasterReports /></ErrorBoundary>}
-                    {masterTab === 'leaves' && <ErrorBoundary fallbackLabel="Leave tracker failed to load"><MasterLeaveTracker currentUser={user} /></ErrorBoundary>}
-                    {masterTab === 'settings' && <ErrorBoundary fallbackLabel="Settings failed to load"><SettingsPanel /></ErrorBoundary>}
-                  </motion.div>
-                </AnimatePresence>
-              )}
-
-              {/* ════ USER ════ */}
-              {!isMaster && (
-                <>
-                  {/* User sub-tabs */}
-                  <div className="flex gap-2 mb-6">
-                    {([
-                      { id: 'tracker' as const, label: 'My Tracker', icon: <ClockIcon size={14} /> },
-                      { id: 'team' as const, label: 'Team Status', icon: <Users size={14} /> },
-                    ]).map(t => (
-                      <button key={t.id} onClick={() => setUserTab(t.id)}
-                        className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold tracking-wide transition-all duration-200
-                          ${userTab === t.id ? 'bg-blue-600 text-white shadow-[0_4px_16px_rgba(37,99,235,0.4)]' : 'text-slate-400 hover:text-white bg-white/[0.03] border border-white/8'}`}>
+                {/* Horizontal Navigation Tabs */}
+                {isMaster && (
+                  <nav className="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/5">
+                    {MASTER_TABS.map(t => (
+                      <button key={t.id} onClick={() => setMasterTab(t.id)}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all
+                        ${masterTab === t.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'text-slate-500 hover:text-slate-200'}`}>
                         {t.icon} {t.label}
                       </button>
                     ))}
-                  </div>
+                  </nav>
+                )}
+                {!isMaster && (
+                  <nav className="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/5">
+                    {[
+                      { id: 'tracker' as const, label: 'Live Dashboard', icon: <ClockIcon size={13} /> },
+                      { id: 'team' as const, label: 'Reports', icon: <Users size={13} /> },
+                    ].map(t => (
+                      <button key={t.id} onClick={() => setUserTab(t.id)}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all
+                        ${userTab === t.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'text-slate-500 hover:text-slate-200'}`}>
+                        {t.icon} {t.label}
+                      </button>
+                    ))}
+                  </nav>
+                )}
+              </div>
 
-                  <AnimatePresence mode="wait">
-                    {userTab === 'tracker' && (
-                      <motion.div key="tracker" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-5 relative">
-                        {/* The modern floating notification panel for recruiters */}
-                        <NotificationPanel userId={user.id} />
+              {/* Top Row Actions (Master/User) */}
+              <div className="flex items-center gap-3">
+                <button onClick={handleLogout}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-rose-400 transition-all group">
+                  <LogOut size={12} className="group-hover:translate-x-0.5 transition-transform" /> Sign out
+                </button>
+              </div>
+            </header>
+
+            {/* ── CONTENT AREA ── */}
+            <div className="w-full">
+
+                <div className="flex-1 min-w-0">
+                    <div className="glass-card rounded-2xl p-6 shadow-2xl min-h-[70vh] border-border-subtle bg-surface-low">
+                        {/* ════ MASTER ════ */}
+                        {isMaster && (
+                            <AnimatePresence mode="wait">
+                            <motion.div key={masterTab} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.2 }}>
+                                {/* (Header removed as it is now in the top navbar) */}
+                                {masterTab === 'dashboard' && <ErrorBoundary fallbackLabel="Dashboard failed to load"><MasterConsole currentUserId={user.id} isMaster={true} /></ErrorBoundary>}
+                                {masterTab === 'reports' && <ErrorBoundary fallbackLabel="Reports failed to load"><MasterReports /></ErrorBoundary>}
+                                {masterTab === 'leaves' && <ErrorBoundary fallbackLabel="Leave tracker failed to load"><MasterLeaveTracker currentUser={user} /></ErrorBoundary>}
+                                {masterTab === 'settings' && <ErrorBoundary fallbackLabel="Settings failed to load"><SettingsPanel /></ErrorBoundary>}
+                            </motion.div>
+                            </AnimatePresence>
+                        )}
+
+                        {/* ════ USER ════ */}
+                        {!isMaster && (
+                            <>
+                            <AnimatePresence mode="wait">
+                                {userTab === 'tracker' && (
+                                <motion.div key="tracker" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-6 relative">
+                                    <NotificationPanel userId={user.id} />
 
                         <Clock />
                         <div className="flex justify-center"><StatusBadge status={status as Exclude<AppStatus, 'on_leave'>} /></div>
@@ -788,34 +890,31 @@ export default function Home() {
                         <div className="border-t border-white/5 pt-5">
                           <div className="flex items-center gap-2 mb-4">
                             <BarChart2 size={15} className="text-slate-500" />
-                            <h3 className="text-sm font-bold text-slate-400">Today's Timeline</h3>
+                            <h3 className="text-sm font-bold text-slate-400">Today&apos;s Timeline</h3>
                             <span className="ml-auto text-[10px] text-slate-600 uppercase tracking-wider">{logs.length} events</span>
                           </div>
                           <TimelineLog logs={logs} />
                         </div>
-                      </motion.div>
-                    )}
-                    {userTab === 'team' && (
-                      <motion.div key="team" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-                        <BreakDashboard currentUserId={user.id} isMaster={false} clientName={user.clientName} />
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </>
-              )}
-            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </>
+                  )}
+                </div>
+              </div>
 
-            {/* Global Footer */}
-            <motion.div 
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              transition={{ delay: 1 }}
-              className="mt-8 text-center"
-            >
-              <p className="text-[10px] font-bold text-slate-700 uppercase tracking-[0.3em]">
-                &copy; 2026 Arth Global Systems
-              </p>
-            </motion.div>
+              {/* Global Footer */}
+              <motion.div 
+                initial={{ opacity: 0 }} 
+                animate={{ opacity: 1 }} 
+                transition={{ delay: 1 }}
+                className="mt-8 text-center pb-8"
+              >
+                <p className="text-[10px] font-bold text-slate-700 uppercase tracking-[0.3em]">
+                  &copy; 2026 Arth Global Systems
+                </p>
+              </motion.div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

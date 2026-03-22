@@ -65,7 +65,7 @@ export default function AuthModal({ onLogin }: Props) {
                 if (!user) user = await upsertUser({
                     id: generateUUID(), name: 'Master Admin', clientName: '__master__',
                     isMaster: true, isApproved: true,
-                    shiftStart: '08:00', shiftEnd: '17:00', timezone: 'America/Chicago'
+                    shiftStart: '08:00', shiftEnd: '17:00', timezone: 'America/Chicago', workMode: 'WFO'
                 });
                 else user = await upsertUser({ ...user, isMaster: true, isApproved: true });
                 setCurrentUser(user);
@@ -76,7 +76,7 @@ export default function AuthModal({ onLogin }: Props) {
                     user = await upsertUser({
                         id: generateUUID(), name: name.trim(), clientName: clientName.trim(),
                         isMaster: false, isApproved: false,
-                        shiftStart: '08:00', shiftEnd: '17:00', timezone: 'America/Chicago'
+                        shiftStart: '08:00', shiftEnd: '17:00', timezone: 'America/Chicago', workMode: 'WFO'
                     });
                 } else if (user.name !== name.trim()) {
                     user = await upsertUser({ ...user, name: name.trim() });

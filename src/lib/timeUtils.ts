@@ -114,13 +114,12 @@ export function checkViolations(
 }
 
 export function formatDuration(ms: number): string {
-    if (ms <= 0) return '00m 00s';
-    const totalSecs = Math.floor(ms / 1000);
-    const h = Math.floor(totalSecs / 3600);
-    const m = Math.floor((totalSecs % 3600) / 60);
-    const s = totalSecs % 60;
-    if (h > 0) return `${h}h ${m.toString().padStart(2, '0')}m ${s.toString().padStart(2, '0')}s`;
-    return `${m.toString().padStart(2, '0')}m ${s.toString().padStart(2, '0')}s`;
+    if (ms <= 0) return '0m';
+    const totalMins = Math.floor(ms / 60000);
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
 }
 
 export function formatTime(ts: number): string {
@@ -143,6 +142,69 @@ export function getPastDaysZoned(count: number, excludeToday: boolean = true): s
         days.push(dateStr(d));
     }
     return days.reverse(); // oldest first
+}
+
+/** Given a YYYY-MM-DD string, returns a new YYYY-MM-DD string offset by N days */
+export function getRelativeDate(baseDateStr: string, offsetDays: number): string {
+    const d = new Date(baseDateStr + 'T12:00:00');
+    d.setDate(d.getDate() + offsetDays);
+    return dateStr(d);
+}
+
+/**
+ * Returns the Mon–Fri date strings that have already elapsed for the current week.
+ * - On Monday (no elapsed weekdays yet): falls back to last week's Mon–Fri.
+ * - On Tuesday: returns [Monday].
+ * - On Wednesday: returns [Monday, Tuesday].
+ * - ...
+ * - On Saturday/Sunday: returns full [Mon–Fri].
+ * Used by Aura Maxxers & Lobby Campers for weekly-reset leaderboards.
+ */
+export function getElapsedWeekdays(): { days: string[]; isLastWeek: boolean } {
+    const now = getRealDate();
+    const cstParts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Chicago',
+        weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(now);
+    const weekday = cstParts.find(p => p.type === 'weekday')!.value;
+    const dowMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    const dow = dowMap[weekday] ?? 0;
+
+    const todayY = parseInt(cstParts.find(p => p.type === 'year')!.value);
+    const todayM = parseInt(cstParts.find(p => p.type === 'month')!.value) - 1;
+    const todayD = parseInt(cstParts.find(p => p.type === 'day')!.value);
+    const todayDate = new Date(todayY, todayM, todayD);
+
+    // Find the most recent Monday
+    const daysSinceMonday = dow === 0 ? 6 : dow - 1;
+    const thisMonday = new Date(todayDate);
+    thisMonday.setDate(todayDate.getDate() - daysSinceMonday);
+
+    let isLastWeek = false;
+    let targetMonday = thisMonday;
+    let daysToGenerate = 0;
+
+    if (dow === 0 || dow === 1) {
+        // Sunday or Monday -> Reset! Show last week's Mon-Fri
+        isLastWeek = true;
+        targetMonday = new Date(thisMonday);
+        targetMonday.setDate(thisMonday.getDate() - 7);
+        daysToGenerate = 5;
+    } else if (dow === 6) {
+        // Saturday -> Show this week's Mon-Fri
+        daysToGenerate = 5;
+    } else {
+        // Tue (1 elapsed), Wed (2), Thu (3), Fri (4)
+        daysToGenerate = dow - 1; 
+    }
+
+    const days: string[] = [];
+    for (let i = 0; i < daysToGenerate; i++) {
+        const d = new Date(targetMonday);
+        d.setDate(targetMonday.getDate() + i);
+        days.push(dateStr(d));
+    }
+    return { days, isLastWeek };
 }
 
 function pad(n: string | number) { return String(n).padStart(2, '0'); }
@@ -230,7 +292,7 @@ export function generateUUID(): string {
 }
 
 
-export function exportCSV(rows: (string | number)[][], filename: string = 'breakthrough-report'): void {
+export async function exportCSV(rows: (string | number)[][], filename: string = 'breakthrough-report') {
     const csv = rows
         .map((r) =>
             r.length === 0
@@ -239,18 +301,15 @@ export function exportCSV(rows: (string | number)[][], filename: string = 'break
         )
         .join('\r\n');
     const bom = '\uFEFF';
-    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    triggerDownload(url, `${filename}-${getTodayKey()}.csv`);
+    const finalFilename = `${filename}-${getTodayKey()}.csv`;
+    await triggerDownload(bom + csv, finalFilename);
 }
 
-export function exportExcel(rows: (string | number)[][], filename: string = 'breakthrough-data'): void {
-    // Produce a proper CSV — Excel opens these cleanly without any security warnings.
+export async function exportExcel(rows: (string | number)[][], filename: string = 'breakthrough-data') {
     const csv = rows
         .map(r =>
             r.map(c => {
                 const val = String(c ?? '');
-                // Wrap in quotes if the value contains commas, quotes or newlines
                 return val.includes(',') || val.includes('"') || val.includes('\n')
                     ? `"${val.replace(/"/g, '""')}"`
                     : val;
@@ -258,19 +317,39 @@ export function exportExcel(rows: (string | number)[][], filename: string = 'bre
         )
         .join('\r\n');
 
-    const bom = '\uFEFF'; // UTF-8 BOM so Excel reads non-ASCII chars correctly
-    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    triggerDownload(url, `${filename}-${getTodayKey()}.csv`);
+    const bom = '\uFEFF';
+    const finalFilename = `${filename}-${getTodayKey()}.csv`;
+    await triggerDownload(bom + csv, finalFilename);
 }
 
-function triggerDownload(url: string, filename: string) {
+async function triggerDownload(content: string, filename: string) {
+    if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
+        try {
+            const handle = await (window as any).showSaveFilePicker({
+                suggestedName: filename,
+                types: [{
+                    description: 'CSV Spreadsheet',
+                    accept: { 'text/csv': ['.csv'] },
+                }],
+            });
+            const writable = await handle.createWritable();
+            await writable.write(content);
+            await writable.close();
+            return;
+        } catch (err: any) {
+            // AbortError means user cancelled the dialog
+            if (err.name === 'AbortError') return;
+            console.warn('showSaveFilePicker failed, falling back to legacy <a> download', err);
+        }
+    }
+
+    const uri = 'data:text/csv;charset=utf-8,' + encodeURIComponent(content);
     const a = document.createElement('a');
-    a.setAttribute('href', url);
-    a.setAttribute('download', filename);
     a.style.display = 'none';
+    a.href = uri;
+    a.setAttribute('download', filename);
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }

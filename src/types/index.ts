@@ -4,7 +4,8 @@ export type EventType =
   | 'break_start'
   | 'break_end'
   | 'brb_start'
-  | 'brb_end';
+  | 'brb_end'
+  | 'auto_logout';
 
 export interface TimeLog {
   id: string;
@@ -23,6 +24,7 @@ export interface User {
   shiftStart: string;   // HH:MM in 24h, e.g. "08:00"
   shiftEnd: string;     // HH:MM in 24h, e.g. "17:00"
   timezone: string;     // IANA timezone, e.g. "America/Chicago"
+  workMode: 'WFO' | 'WFH';  // Work From Office or Work From Home
 }
 
 export type AppStatus = 'idle' | 'working' | 'on_break' | 'on_brb' | 'punched_out' | 'on_leave';

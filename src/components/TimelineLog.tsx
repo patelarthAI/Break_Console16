@@ -11,6 +11,7 @@ const eventConfig = {
     break_end: { label: 'Break End', icon: <PlayCircle size={14} />, color: 'text-sky-400', dot: 'bg-sky-400' },
     brb_start: { label: 'BRB In', icon: <RotateCcw size={14} />, color: 'text-violet-400', dot: 'bg-violet-400' },
     brb_end: { label: 'BRB Out', icon: <RotateCw size={14} />, color: 'text-teal-400', dot: 'bg-teal-400' },
+    auto_logout: { label: 'Auto Logout', icon: <Clock size={14} />, color: 'text-rose-500', dot: 'bg-rose-500' },
 };
 
 export default function TimelineLog({ logs, isAdmin, onDeleteLog }: { logs: TimeLog[]; isAdmin?: boolean; onDeleteLog?: (id: string) => void }) {

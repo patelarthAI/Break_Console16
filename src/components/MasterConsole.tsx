@@ -389,7 +389,7 @@ export default function MasterConsole({ currentUserId, isMaster }: { currentUser
     const [selectedUserDetail, setSelectedUserDetail] = useState<UserStatusRecord | null>(null);
     const [detailLogs, setDetailLogs] = useState<TimeLog[]>([]);
     const [addLogType, setAddLogType] = useState('punch_in');
-    const [addLogTime, setAddLogTime] = useState('08:00 AM');
+    const [addLogTime, setAddLogTime] = useState('08:00');
     const [addLogDate, setAddLogDate] = useState(getTodayKey());
     const [timelineDeleteConfirmId, setTimelineDeleteConfirmId] = useState<string | null>(null);
 
@@ -419,12 +419,8 @@ export default function MasterConsole({ currentUserId, isMaster }: { currentUser
         // Parse the selected date and time strings to create absolute timestamp in local time
         const [datePart] = addLogDate.split('T');
         const d = new Date(`${datePart}T00:00:00`);
-        const isPM = addLogTime.includes('PM');
-        let [hStr, mStr] = addLogTime.replace(/ [AP]M/, '').split(':');
-        let h = parseInt(hStr, 10);
-        if (isPM && h !== 12) h += 12;
-        if (!isPM && h === 12) h = 0;
-        d.setHours(h, parseInt(mStr, 10), 0, 0);
+        const [hStr, mStr] = addLogTime.split(':');
+        d.setHours(parseInt(hStr, 10), parseInt(mStr, 10), 0, 0);
 
         const newLog: TimeLog = {
             id: generateUUID(),
@@ -873,12 +869,12 @@ export default function MasterConsole({ currentUserId, isMaster }: { currentUser
 
                     {/* Star Performers */}
                     <div className="rounded-2xl border border-white/8 bg-[#0a0a18] p-4">
-                        <StarPerformers clientFilter={selectedClients} />
+                        <StarPerformers />
                     </div>
 
                     {/* Break Violators Panel */}
                     <div className="rounded-2xl border border-white/8 bg-[#0a0a18] p-4">
-                        <ViolatorsPanel clientFilter={selectedClients} />
+                        <ViolatorsPanel />
                     </div>
                 </div>
             </div> {/* End Main Grid */}

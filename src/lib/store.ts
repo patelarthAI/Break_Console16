@@ -1,6 +1,6 @@
 import { supabase, UserRow, LogRow } from './supabase';
 import { User, TimeLog, AppStatus, LeaveRecord, AppNotification } from '@/types';
-import { getTodayKey, generateUUID, getPastDaysZoned, checkViolations, toZonedMinutes, getRealNow, parseShiftMins, COMBINED_LIMIT_MS, BREAK_LIMIT_MS, BRB_LIMIT_MS } from './timeUtils';
+import { getTodayKey, generateUUID, getPastDaysZoned, getElapsedWeekdays, checkViolations, toZonedMinutes, getRealNow, parseShiftMins, COMBINED_LIMIT_MS, BREAK_LIMIT_MS, BRB_LIMIT_MS } from './timeUtils';
 
 export interface ClientRow {
     id: string;
@@ -70,79 +70,50 @@ export interface SmartLeaveRecord extends LeaveRecord {
 export async function getSmartLeaves(dates: string[]): Promise<SmartLeaveRecord[]> {
     if (!dates.length) return [];
 
-    // 1. Fetch ALL real leaves from the database without a date constraint
-    // This ensures historical records from 2024 and 2025 (e.g. imported data) 
-    // actually appear in the Master Leave Tracker.
     const { data: realLeavesData } = await supabase
         .from('leaves')
         .select('*')
         .order('date', { ascending: false });
     const realLeaves = (realLeavesData ?? []) as SmartLeaveRecord[];
 
-    // 2. Fetch all active users
     const users = await getAllUsers();
-
-    // 3. Fetch logs for these users on these dates
-    const { data: logsData } = await supabase
-        .from('time_logs')
-        .select('*')
-        .in('user_id', users.map(u => u.id))
-        .in('date', dates);
-    const allLogs = (logsData ?? []).map(rowToLog);
-
     const smartLeaves: SmartLeaveRecord[] = [...realLeaves];
     const realLeaveSet = new Set(realLeaves.map(l => `${l.employee_name.toLowerCase().trim()}-${l.client_name.toLowerCase().trim()}-${l.date}`));
 
-    // 4. Compute virtual leaves for missing / half-day logs
-    for (const date of dates) {
-        // Skip future dates
-        if (date > getTodayKey()) continue;
+    for (const d of dates) {
+        const [yr, mo, dy] = d.split('-').map(Number);
+        const dow = new Date(yr, mo - 1, dy).getDay();
+        const isWeekend = dow === 0 || dow === 6;
+        if (isWeekend) continue; // Skip weekends entirely
 
-        // Skip records before the system was fully implemented
-        if (date < '2026-03-06') continue;
+        const isToday = d === getTodayKey();
 
-        // Skip weekends (0=Sunday, 6=Saturday)
-        const dObj = new Date(date);
-        // JS Date parsing of 'YYYY-MM-DD' treats it as UTC, which can shift the day.
-        // We use split to ensure local timezone logic
-        const [yr, mo, dy] = date.split('-').map(Number);
-        const dayOfWeek = new Date(yr, mo - 1, dy).getDay();
-        if (dayOfWeek === 0 || dayOfWeek === 6) continue;
+        // Fetch logs ONLY for this specific date to bypass Supabase 1000 row limit
+        // which was causing older dates to silently truncate and falsely flag as absent.
+        const { data: dailyLogsData } = await supabase
+            .from('time_logs')
+            .select('*')
+            .in('user_id', users.map(u => u.id))
+            .eq('date', d);
 
         for (const user of users) {
-            // If a real leave already exists, skip
-            const key = `${user.name.toLowerCase().trim()}-${user.clientName.toLowerCase().trim()}-${date}`;
+            const key = `${user.name.toLowerCase().trim()}-${user.clientName.toLowerCase().trim()}-${d}`;
             if (realLeaveSet.has(key)) continue;
 
-            const rawUserLogs = (logsData ?? []).filter((r: any) => r.user_id === user.id && r.date === date).map(rowToLog);
-            const virtualId = `virtual-${user.id}-${date}`;
+            const rawUserLogs = (dailyLogsData ?? []).filter((r: any) => r.user_id === user.id && r.date === d).map(rowToLog);
+            const virtualId = `virtual-${user.id}-${d}`;
 
-            // Check if declined in localstorage
-            let isDeclined = false;
-            if (typeof window !== 'undefined') {
-                const dec = JSON.parse(localStorage.getItem('declined_smart_leaves') || '[]');
-                if (dec.includes(virtualId)) isDeclined = true;
-            }
-            if (isDeclined) continue;
-
-            // ─── Time-Aware Logic for TODAY ──────────────────────────────────
-            const todayKey = getTodayKey();
-            const isToday = (date === todayKey);
+            const userNowMins = toZonedMinutes(getRealNow(), user.timezone);
+            const shiftStartMins = parseShiftMins(user.shiftStart);
+            const shiftEndMins = parseShiftMins(user.shiftEnd);
 
             if (rawUserLogs.length === 0) {
-                // If it's today, we only generate ABSENT if we are at least 1 hour past shift start
-                if (isToday) {
-                    const nowMins = toZonedMinutes(getRealNow(), user.timezone);
-                    const shiftStartMins = parseShiftMins(user.shiftStart);
-                    if (nowMins < shiftStartMins + 60) {
-                        // Too early to call it absent
-                        continue;
-                    }
-                }
+                // If checking today, don't flag absent until 1 hour past shift start
+                if (isToday && userNowMins < shiftStartMins + 60) continue;
 
                 smartLeaves.push({
                     id: virtualId,
-                    date,
+                    date: d,
                     client_name: user.clientName,
                     employee_name: user.name,
                     is_planned: false,
@@ -153,18 +124,14 @@ export async function getSmartLeaves(dates: string[]): Promise<SmartLeaveRecord[
                     is_smart: true
                 });
             } else {
-                // Check if workedMs < 4 hours (4 * 60 * 60 * 1000 = 14400000 ms)
                 const status = deriveStatus(rawUserLogs);
                 if (status.workedMs > 0 && status.workedMs < 14400000) {
-                    // For TODAY, only mark as HD if the user has actually PUNCHED OUT.
-                    // If they are currently WORKING, don't mark as HD yet (they might reach 4h).
-                    if (isToday && status.status === 'working') {
-                        continue;
-                    }
+                    if (isToday && status.status === 'working') continue;
+                    if (isToday && userNowMins < shiftEndMins) continue;
 
                     smartLeaves.push({
                         id: virtualId,
-                        date,
+                        date: d,
                         client_name: user.clientName,
                         employee_name: user.name,
                         is_planned: false,
@@ -179,7 +146,7 @@ export async function getSmartLeaves(dates: string[]): Promise<SmartLeaveRecord[
         }
     }
 
-    // Sort combined leaves
+    // Sort combined leaves — newest first
     smartLeaves.sort((a, b) => {
         if (a.date !== b.date) return b.date.localeCompare(a.date);
         return a.employee_name.localeCompare(b.employee_name);
@@ -226,6 +193,7 @@ function rowToUser(row: UserRow): User {
         shiftStart: row.shift_start ?? '08:00',
         shiftEnd: row.shift_end ?? '17:00',
         timezone: row.timezone ?? 'America/Chicago',
+        workMode: (row.work_mode === 'WFH' ? 'WFH' : 'WFO') as 'WFO' | 'WFH',
     };
 }
 
@@ -248,6 +216,7 @@ export async function upsertUser(user: User): Promise<User> {
             client_name: user.clientName,
             is_master: user.isMaster,
             is_approved: user.isApproved,
+            work_mode: user.workMode ?? 'WFO',
         }, { onConflict: 'id' })
         .select().single();
     if (error) throw error;
@@ -276,6 +245,7 @@ export async function deleteUser(userId: string): Promise<void> {
 export async function updateUser(userId: string, updates: {
     name?: string; clientName?: string; isApproved?: boolean;
     shiftStart?: string; shiftEnd?: string; timezone?: string;
+    workMode?: 'WFO' | 'WFH';
 }): Promise<User> {
     const payload: Record<string, unknown> = {};
     if (updates.name !== undefined) payload.name = updates.name;
@@ -284,6 +254,7 @@ export async function updateUser(userId: string, updates: {
     if (updates.shiftStart !== undefined) payload.shift_start = updates.shiftStart;
     if (updates.shiftEnd !== undefined) payload.shift_end = updates.shiftEnd;
     if (updates.timezone !== undefined) payload.timezone = updates.timezone;
+    if (updates.workMode !== undefined) payload.work_mode = updates.workMode;
     const { data, error } = await supabase.from('users').update(payload).eq('id', userId).select().single();
     if (error) throw error;
     return rowToUser(data as UserRow);
@@ -389,6 +360,7 @@ function deriveStatus(logs: TimeLog[]): Omit<UserStatusRecord, 'user'> {
                 currentWorkSegStart = log.timestamp;
                 punchOut = undefined; breakStart = brbStart = undefined; break;
             case 'punch_out':
+            case 'auto_logout':
                 status = 'punched_out'; punchOut = log.timestamp; breakStart = brbStart = undefined; workStart = undefined;
                 if (currentWorkSegStart) { workedMs += log.timestamp - currentWorkSegStart; currentWorkSegStart = undefined; } break;
             case 'break_start':
@@ -418,9 +390,55 @@ export async function getAllUsersStatus(): Promise<UserStatusRecord[]> {
     if (!usersData?.length) return [];
     const userIds = usersData.map((u: UserRow) => u.id);
     const { data: logsData } = await supabase.from('time_logs').select('*').in('user_id', userIds).eq('date', today).order('timestamp', { ascending: true });
+    
     const logsByUser: Record<string, TimeLog[]> = {};
     userIds.forEach((id: string) => { logsByUser[id] = []; });
     (logsData ?? []).forEach((r: LogRow) => { logsByUser[r.user_id]?.push(rowToLog(r)); });
+
+    const nowMins = toZonedMinutes(getRealNow(), 'America/Chicago');
+    const penaltyLogsToInsert: any[] = [];
+
+    // ENFORCE AUTO LOGOUTS FOR TODAY
+    usersData.forEach((row: UserRow) => {
+        const user = rowToUser(row);
+        const logs = logsByUser[user.id];
+        const currentStats = deriveStatus(logs);
+        
+        if (currentStats.status !== 'idle' && currentStats.status !== 'punched_out' && currentStats.status !== 'on_leave') {
+            const shiftEndMins = parseShiftMins(user.shiftEnd);
+            const userNowMins = toZonedMinutes(getRealNow(), user.timezone);
+            
+            // Limit strict threshold: 90 mins over shift end
+            if (userNowMins > shiftEndMins + 90) {
+                const diffMins = userNowMins - (shiftEndMins + 80);
+                const penaltyTimestamp = getRealNow() - (diffMins * 60000); // Guarantees exact timestamp of (ShiftEnd + 80m)
+                
+                const newLog = {
+                    id: generateUUID(),
+                    user_id: user.id,
+                    action: 'auto_logout',
+                    timestamp: penaltyTimestamp,
+                    date: today,
+                    added_by: 'system' // mark for audits
+                };
+                penaltyLogsToInsert.push(newLog);
+                
+                // Optimistically mutate current fetch
+                logs.push({
+                    id: newLog.id,
+                    eventType: 'auto_logout',
+                    timestamp: penaltyTimestamp,
+                    date: today,
+                    addedBy: 'system'
+                });
+            }
+        }
+    });
+
+    if (penaltyLogsToInsert.length > 0) {
+        supabase.from('time_logs').insert(penaltyLogsToInsert).then(); // Fire-and-forget DB patch
+    }
+
     return usersData.map((row: UserRow) => ({ user: rowToUser(row), ...deriveStatus(logsByUser[row.id] ?? []) }));
 }
 
@@ -503,6 +521,84 @@ export async function get7DayBreakStats(): Promise<UserBreakStats[]> {
         return {
             user, totalBreakMs, totalBrbMs, breakViolDays, brbViolDays, combinedViolDays,
             lateInDays, earlyOutDays, daysChecked, breakCounts, brbCounts,
+            avgBreakMs: daysChecked > 0 ? totalBreakMs / daysChecked : 0,
+            avgBrbMs: daysChecked > 0 ? totalBrbMs / daysChecked : 0,
+        };
+    });
+}
+
+// ─── Weekly Break Stats (for Aura Maxxers & Lobby Campers) ───────────────────
+export interface WeeklyBreakStats {
+    user: User;
+    avgBreakMs: number;
+    avgBrbMs: number;
+    totalBreakMs: number;
+    totalBrbMs: number;
+    breakViolDays: number;
+    brbViolDays: number;
+    combinedViolDays: number;
+    lateInDays: number;
+    earlyOutDays: number;
+    daysChecked: number;     // how many days user actually logged in
+    expectedDays: number;    // how many weekdays have elapsed (for Aura Maxxers: must match daysChecked)
+    isLastWeek: boolean;     // true when showing last week's data (on Mondays)
+}
+
+export async function getWeeklyBreakStats(): Promise<WeeklyBreakStats[]> {
+    const { days, isLastWeek } = getElapsedWeekdays();
+    const expectedDays = days.length;
+
+    if (expectedDays === 0) return [];
+
+    const { data: usersData } = await supabase.from('users').select('*').eq('is_master', false).eq('is_approved', true);
+    if (!usersData?.length) return [];
+
+    const userIds = usersData.map((u: UserRow) => u.id);
+    const { data: logsData } = await supabase
+        .from('time_logs').select('*')
+        .in('user_id', userIds)
+        .in('date', days)
+        .order('timestamp', { ascending: true });
+
+    const COMBINED_LIMIT = 85 * 60 * 1000;
+
+    return usersData.map((row: UserRow) => {
+        const user = rowToUser(row);
+        let totalBreakMs = 0, totalBrbMs = 0, breakViolDays = 0, brbViolDays = 0, combinedViolDays = 0, daysChecked = 0;
+        let lateInDays = 0, earlyOutDays = 0;
+
+        for (const day of days) {
+            const dayLogs = (logsData ?? []).filter((l: LogRow) => l.user_id === row.id && l.date === day).map(rowToLog);
+            if (!dayLogs.length) continue;
+            daysChecked++;
+
+            let breakStart: number | null = null, brbStart: number | null = null;
+            let dayPunchIn: number | undefined, dayPunchOut: number | undefined;
+            let dayBreakMs = 0, dayBrbMs = 0;
+
+            for (const log of dayLogs) {
+                if (log.eventType === 'punch_in' && !dayPunchIn) dayPunchIn = log.timestamp;
+                if (log.eventType === 'punch_out') dayPunchOut = log.timestamp;
+                if (log.eventType === 'break_start') { breakStart = log.timestamp; }
+                if (log.eventType === 'break_end' && breakStart) { dayBreakMs += (log.timestamp - breakStart); breakStart = null; }
+                if (log.eventType === 'brb_start') { brbStart = log.timestamp; }
+                if (log.eventType === 'brb_end' && brbStart) { dayBrbMs += (log.timestamp - brbStart); brbStart = null; }
+            }
+
+            const v = checkViolations(dayBreakMs, dayBrbMs, dayPunchIn, dayPunchOut, user.shiftStart, user.shiftEnd, user.timezone);
+
+            totalBreakMs += dayBreakMs;
+            totalBrbMs += dayBrbMs;
+            if (v.breakViol) breakViolDays++;
+            if (v.brbViol) brbViolDays++;
+            if (v.lateIn) lateInDays++;
+            if (v.earlyOut) earlyOutDays++;
+            if ((dayBreakMs + dayBrbMs) > COMBINED_LIMIT) combinedViolDays++;
+        }
+
+        return {
+            user, totalBreakMs, totalBrbMs, breakViolDays, brbViolDays, combinedViolDays,
+            lateInDays, earlyOutDays, daysChecked, expectedDays, isLastWeek,
             avgBreakMs: daysChecked > 0 ? totalBreakMs / daysChecked : 0,
             avgBrbMs: daysChecked > 0 ? totalBrbMs / daysChecked : 0,
         };
