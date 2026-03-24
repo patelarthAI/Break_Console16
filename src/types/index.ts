@@ -38,6 +38,7 @@ export interface DaySession {
   breaks: BreakRecord[];
   brbs: BRBRecord[];
   logs: TimeLog[];
+  isAutoLogout?: boolean;
 }
 
 export interface LeaveRecord {

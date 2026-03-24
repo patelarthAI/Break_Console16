@@ -2,8 +2,10 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Briefcase, FileText, Calendar, ChevronLeft, ChevronRight, Download, AlertTriangle, CheckCircle, BarChart2, Users, X, ChevronDown, Filter } from 'lucide-react';
-import { getAllUsers, getLogsForDate, getLogDatesForMonth, getClients, ClientRow, getLogsBatch } from '@/lib/store';
-import { TimeLog } from '@/types';
+import { getAllUsers, getLogsForDate, getLogDatesForMonth, getClients, ClientRow, getLogsBatch, getCurrentUser } from '@/lib/store';
+import { TimeLog, User } from '@/types';
+import DailyLogEditor from './DailyLogEditor';
+import { Pencil } from 'lucide-react';
 import {
     computeSession, computeWorkedTime, computeTotalTime,
     countBreaks, countBRBs, formatDuration, formatTime,
@@ -42,7 +44,7 @@ function weekLabel(weekOffset: number): string {
 }
 function monthLabel(d: Date): string { return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }); }
 
-interface DayRow { userId: string; name: string; clientName: string; date: string; punchIn?: number; punchOut?: number; workedMs: number; breakMs: number; brbMs: number; breakCount: number; brbCount: number; breakViol: boolean; breakViolMs: number; brbViol: boolean; brbViolMs: number; lateIn: boolean; lateInMs: number; earlyOut: boolean; earlyOutMs: number; }
+interface DayRow { userId: string; name: string; clientName: string; date: string; punchIn?: number; punchOut?: number; workedMs: number; breakMs: number; brbMs: number; breakCount: number; brbCount: number; breakViol: boolean; breakViolMs: number; brbViol: boolean; brbViolMs: number; lateIn: boolean; lateInMs: number; earlyOut: boolean; earlyOutMs: number; autoLogout: boolean; }
 
 function processLogsIntoRow(
     userId: string, name: string, clientName: string, date: string,
@@ -53,23 +55,37 @@ function processLogsIntoRow(
     const now = Date.now();
     const breakMs = computeTotalTime(session.breaks, now);
     const brbMs = computeTotalTime(session.brbs, now);
-    const v = checkViolations(breakMs, brbMs, session.punchIn, session.punchOut, shiftStart, shiftEnd, timezone);
-    return { userId, name, clientName, date, punchIn: session.punchIn, punchOut: session.punchOut, workedMs: computeWorkedTime(session, now), breakMs, brbMs, breakCount: countBreaks(logs), brbCount: countBRBs(logs), breakViol: v.breakViol, breakViolMs: v.breakViolMs, brbViol: v.brbViol, brbViolMs: v.brbViolMs, lateIn: v.lateIn, lateInMs: v.lateInMs, earlyOut: v.earlyOut, earlyOutMs: v.earlyOutMs };
+    
+    // We pass logs to checkViolations for autoLogout detection
+    const v = checkViolations(breakMs, brbMs, session.punchIn, session.punchOut, shiftStart, shiftEnd, timezone, logs);
+    
+    return { 
+        userId, name, clientName, date, 
+        punchIn: session.punchIn, punchOut: session.punchOut, 
+        workedMs: computeWorkedTime(session, now, date, shiftEnd), 
+        breakMs, brbMs, breakCount: countBreaks(logs), brbCount: countBRBs(logs), 
+        breakViol: v.breakViol, breakViolMs: v.breakViolMs, 
+        brbViol: v.brbViol, brbViolMs: v.brbViolMs, 
+        lateIn: v.lateIn, lateInMs: v.lateInMs, 
+        earlyOut: v.earlyOut, earlyOutMs: v.earlyOutMs,
+        autoLogout: v.autoLogout
+    };
 }
 
-function ViolBadge({ breakViol, breakViolMs, brbViol, brbViolMs, lateIn, lateInMs, earlyOut, earlyOutMs }: { breakViol: boolean; breakViolMs: number; brbViol: boolean; brbViolMs: number; lateIn: boolean; lateInMs: number; earlyOut: boolean; earlyOutMs: number; }) {
-    if (!breakViol && !brbViol && !lateIn && !earlyOut) return <span className="text-emerald-400"><CheckCircle size={13} /></span>;
+function ViolBadge({ breakViol, breakViolMs, brbViol, brbViolMs, lateIn, lateInMs, earlyOut, earlyOutMs, autoLogout }: { breakViol: boolean; breakViolMs: number; brbViol: boolean; brbViolMs: number; lateIn: boolean; lateInMs: number; earlyOut: boolean; earlyOutMs: number; autoLogout: boolean; }) {
+    if (!breakViol && !brbViol && !lateIn && !earlyOut && !autoLogout) return <span className="text-emerald-400"><CheckCircle size={13} /></span>;
     return (
         <div className="flex flex-col gap-0.5">
             {breakViol && <span className="flex items-center gap-1 text-orange-400 text-[10px] font-bold"><AlertTriangle size={9} />Break {breakViolMs > 0 ? `(${Math.round(breakViolMs / 60000)}m)` : ''}</span>}
             {brbViol && <span className="flex items-center gap-1 text-sky-400 text-[10px] font-bold"><AlertTriangle size={9} />BRB {brbViolMs > 0 ? `(${Math.round(brbViolMs / 60000)}m)` : ''}</span>}
             {lateIn && <span className="flex items-center gap-1 text-amber-400 text-[10px] font-bold"><AlertTriangle size={9} />Late In {lateInMs > 0 ? `(${Math.round(lateInMs / 60000)}m)` : ''}</span>}
             {earlyOut && <span className="flex items-center gap-1 text-purple-400 text-[10px] font-bold"><AlertTriangle size={9} />Early Out {earlyOutMs > 0 ? `(${Math.round(earlyOutMs / 60000)}m)` : ''}</span>}
+            {autoLogout && <span className="flex items-center gap-1 text-red-500 text-[10px] font-bold"><AlertTriangle size={9} />Auto Out</span>}
         </div>
     );
 }
 
-interface Summary { totalWorked: number; totalBreak: number; totalBrb: number; breakCount: number; brbCount: number; breakViolDays: number; brbViolDays: number; lateInDays: number; earlyOutDays: number; daysWorked: number; }
+interface Summary { totalWorked: number; totalBreak: number; totalBrb: number; breakCount: number; brbCount: number; breakViolDays: number; brbViolDays: number; lateInDays: number; earlyOutDays: number; autoLogoutDays: number; daysWorked: number; }
 function summarize(rows: DayRow[]): Summary {
     return rows.reduce((a, r) => ({
         totalWorked: a.totalWorked + r.workedMs,
@@ -81,18 +97,19 @@ function summarize(rows: DayRow[]): Summary {
         brbViolDays: a.brbViolDays + (r.brbViol ? 1 : 0),
         lateInDays: a.lateInDays + (r.lateIn ? 1 : 0),
         earlyOutDays: a.earlyOutDays + (r.earlyOut ? 1 : 0),
+        autoLogoutDays: a.autoLogoutDays + (r.autoLogout ? 1 : 0),
         daysWorked: a.daysWorked + (r.workedMs > 0 ? 1 : 0),
-    }), { totalWorked: 0, totalBreak: 0, totalBrb: 0, breakCount: 0, brbCount: 0, breakViolDays: 0, brbViolDays: 0, lateInDays: 0, earlyOutDays: 0, daysWorked: 0 });
+    }), { totalWorked: 0, totalBreak: 0, totalBrb: 0, breakCount: 0, brbCount: 0, breakViolDays: 0, brbViolDays: 0, lateInDays: 0, earlyOutDays: 0, autoLogoutDays: 0, daysWorked: 0 });
 }
 
-function ReportTable({ rows, showDate, showName }: { rows: DayRow[]; showDate: boolean; showName: boolean; }) {
+function ReportTable({ rows, showDate, showName, onEdit }: { rows: DayRow[]; showDate: boolean; showName: boolean; onEdit: (r: DayRow) => void; }) {
     if (!rows.length) return <p className="text-center text-slate-500 font-medium text-sm py-16 bg-black/20 rounded-[2rem] border border-white/5">No data for this period.</p>;
     
     const gridCols = [
         showName ? 'minmax(150px, 1.5fr)' : null,
         showDate ? '90px' : null,
         showDate ? '80px' : null,
-        '70px', '70px', '80px', '70px', '80px', '70px', '80px', '100px', 'minmax(120px, 1.5fr)'
+        '70px', '70px', '80px', '70px', '80px', '70px', '80px', '100px', 'minmax(120px, 1.5fr)', '40px'
     ].filter(Boolean).join(' ');
 
     return (
@@ -112,6 +129,7 @@ function ReportTable({ rows, showDate, showName }: { rows: DayRow[]; showDate: b
                     <div className="text-[10px] font-black tracking-widest uppercase text-sky-400">Time</div>
                     <div className="text-[10px] font-black tracking-widest uppercase text-purple-400">⏱ Total Brk</div>
                     <div className="text-[10px] font-black tracking-widest uppercase text-rose-400">⚠ Violations</div>
+                    <div className="text-[10px] font-black tracking-widest uppercase text-slate-500 text-right">Edit</div>
                 </div>
 
                 {/* Rows */}
@@ -129,7 +147,13 @@ function ReportTable({ rows, showDate, showName }: { rows: DayRow[]; showDate: b
                             
                             <div className="text-[13px] text-emerald-400 font-mono font-bold tracking-tight">{r.punchIn ? formatTime(r.punchIn) : <span className="text-slate-600 font-sans">—</span>}</div>
                             <div className="text-[13px] font-mono font-bold tracking-tight">
-                                {r.punchOut ? <span className="text-rose-400">{formatTime(r.punchOut)}</span> : r.punchIn ? <span className="text-sky-400 animate-pulse font-extrabold text-[10px] uppercase tracking-widest bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/30">Active</span> : <span className="text-slate-600 font-sans">—</span>}
+                                {r.punchOut ? (
+                                    <span className={r.autoLogout ? 'text-red-400' : 'text-rose-400'}>{formatTime(r.punchOut)}</span>
+                                ) : r.punchIn ? (
+                                    <span className="text-sky-400 animate-pulse font-extrabold text-[10px] uppercase tracking-widest bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/30">Active</span>
+                                ) : (
+                                    <span className="text-slate-600 font-sans">—</span>
+                                )}
                             </div>
                             
                             <div className="text-[13px] text-indigo-400 font-mono font-black tracking-tight">{r.workedMs > 0 ? formatDuration(r.workedMs) : <span className="text-slate-600 font-sans">—</span>}</div>
@@ -148,7 +172,17 @@ function ReportTable({ rows, showDate, showName }: { rows: DayRow[]; showDate: b
                                 ) : <span className="text-slate-600 font-sans">—</span>}
                             </div>
                             
-                            <div className="min-w-0"><ViolBadge breakViol={r.breakViol} breakViolMs={r.breakViolMs} brbViol={r.brbViol} brbViolMs={r.brbViolMs} lateIn={r.lateIn} lateInMs={r.lateInMs} earlyOut={r.earlyOut} earlyOutMs={r.earlyOutMs} /></div>
+                            <div className="min-w-0"><ViolBadge breakViol={r.breakViol} breakViolMs={r.breakViolMs} brbViol={r.brbViol} brbViolMs={r.brbViolMs} lateIn={r.lateIn} lateInMs={r.lateInMs} earlyOut={r.earlyOut} earlyOutMs={r.earlyOutMs} autoLogout={r.autoLogout} /></div>
+                            
+                            <div className="flex justify-end pr-1">
+                                <button
+                                    onClick={() => onEdit(r)}
+                                    title="Edit Historical Logs"
+                                    className="p-1.5 text-slate-500 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                                >
+                                    <Pencil size={14} />
+                                </button>
+                            </div>
                         </div>
                     );
                 })}
@@ -162,7 +196,7 @@ function UserSummaryCard({ name, rows }: { name: string; rows: DayRow[] }) {
     if (s.daysWorked === 0) return null;
     const avgBreak = s.daysWorked > 0 ? s.totalBreak / s.daysWorked : 0;
     const avgBrb = s.daysWorked > 0 ? s.totalBrb / s.daysWorked : 0;
-    const hasViol = s.breakViolDays + s.brbViolDays > 0;
+    const hasViol = s.breakViolDays + s.brbViolDays + s.autoLogoutDays > 0;
     return (
         <div className={`panel-3d transition-all hover:scale-[1.01] ${hasViol ? 'border-rose-500/40 bg-rose-900/20 shadow-[-4px_-4px_10px_rgba(255,255,255,0.01),8px_8px_20px_rgba(225,29,72,0.2),inset_0_1px_1px_rgba(255,255,255,0.08)]' : 'p-5'}`}>
             <div className="flex items-center justify-between mb-4">
@@ -170,7 +204,7 @@ function UserSummaryCard({ name, rows }: { name: string; rows: DayRow[] }) {
                     <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-600 to-blue-800 border border-blue-400/30 flex items-center justify-center text-sm font-extrabold text-white shadow-lg">{name[0].toUpperCase()}</div>
                     <p className="text-base font-extrabold text-white tracking-tight">{name}</p>
                 </div>
-                {hasViol && <span className="flex items-center gap-1.5 text-xs text-rose-400 font-bold bg-rose-500/20 border border-rose-500/30 px-3 py-1 rounded-full shadow-[0_0_10px_rgba(244,63,94,0.3)] animate-pulse"><AlertTriangle size={12} /> {s.breakViolDays + s.brbViolDays} violation{(s.breakViolDays + s.brbViolDays) > 1 ? 's' : ''}</span>}
+                {hasViol && <span className="flex items-center gap-1.5 text-xs text-rose-400 font-bold bg-rose-500/20 border border-rose-500/30 px-3 py-1 rounded-full shadow-[0_0_10px_rgba(244,63,94,0.3)] animate-pulse"><AlertTriangle size={12} /> {s.breakViolDays + s.brbViolDays + s.autoLogoutDays} violation{(s.breakViolDays + s.brbViolDays + s.autoLogoutDays) > 1 ? 's' : ''}</span>}
             </div>
             <div className="grid grid-cols-3 gap-3 text-center">
                 {[
@@ -180,6 +214,7 @@ function UserSummaryCard({ name, rows }: { name: string; rows: DayRow[] }) {
                     { label: 'Avg BRB/day', val: formatDuration(avgBrb), color: avgBrb > BRB_LIMIT_MS ? 'text-sky-400' : 'text-blue-400' },
                     { label: 'Break Viols', val: s.breakViolDays, color: s.breakViolDays > 0 ? 'text-orange-400' : 'text-slate-500' },
                     { label: 'BRB Viols', val: s.brbViolDays, color: s.brbViolDays > 0 ? 'text-sky-400' : 'text-slate-500' },
+                    { label: 'Auto Outs', val: s.autoLogoutDays, color: s.autoLogoutDays > 0 ? 'text-red-400' : 'text-slate-500' },
                 ].map(stat => (
                     <div key={stat.label} className="bg-black/30 border border-white/5 rounded-[1rem] p-3 transition-colors hover:bg-black/50">
                         <p className="text-[10px] font-bold tracking-widest uppercase text-slate-500 mb-1">{stat.label}</p>
@@ -191,7 +226,7 @@ function UserSummaryCard({ name, rows }: { name: string; rows: DayRow[] }) {
     );
 }
 
-type ViolFilter = 'late_in' | 'break' | 'brb' | 'all' | null;
+type ViolFilter = 'late_in' | 'break' | 'brb' | 'auto_out' | 'all' | null;
 
 export default function MasterReports() {
     const [range, setRange] = useState<DateRange>('today');
@@ -222,6 +257,9 @@ export default function MasterReports() {
 
     const statusRef = useRef<HTMLDivElement>(null);
     const violRef = useRef<HTMLDivElement>(null);
+
+    const [selectedUserForEdit, setSelectedUserForEdit] = useState<{ user: User, date: string } | null>(null);
+    const currentAdminId = getCurrentUser()?.id ?? '';
 
     // Close client dropdown on outside click
     useEffect(() => {
@@ -361,7 +399,8 @@ export default function MasterReports() {
             : violationFilter === 'late_in' ? rFiltered.filter((r: DayRow) => r.lateIn)
                 : violationFilter === 'break' ? rFiltered.filter((r: DayRow) => r.breakViol)
                     : violationFilter === 'brb' ? rFiltered.filter((r: DayRow) => r.brbViol)
-                        : rFiltered.filter((r: DayRow) => r.lateIn || r.breakViol || r.brbViol || r.earlyOut)
+                        : violationFilter === 'auto_out' ? rFiltered.filter((r: DayRow) => r.autoLogout)
+                            : rFiltered.filter((r: DayRow) => r.lateIn || r.breakViol || r.brbViol || r.earlyOut || r.autoLogout)
         ).filter((r: DayRow) => {
             if (statusDropFilter === 'Active' && !r.punchIn && r.workedMs === 0) return false;
             if (statusDropFilter === 'Not Active' && (r.punchIn || r.workedMs > 0)) return false;
@@ -370,6 +409,7 @@ export default function MasterReports() {
             if (violDropFilter === 'Early Out' && !r.earlyOut) return false;
             if (violDropFilter === 'Break Exceed' && !r.breakViol) return false;
             if (violDropFilter === 'BRB Exceed' && !r.brbViol) return false;
+            if (violDropFilter === 'Auto Out' && !r.autoLogout) return false;
 
             return true;
         }).sort((a, b) => (b.breakMs + b.brbMs) - (a.breakMs + a.brbMs));
@@ -392,7 +432,7 @@ export default function MasterReports() {
 
     // Summary always based on un-violation-filtered data for the tile counts to stay stable
     const allS = summarize(filteredRows.filter(r => r.workedMs > 0));
-    const totalViol = baseS.breakViolDays + baseS.brbViolDays + baseS.lateInDays + baseS.earlyOutDays;
+    const totalViol = (baseS.breakViolDays || 0) + (baseS.brbViolDays || 0) + (baseS.lateInDays || 0) + (baseS.earlyOutDays || 0) + (baseS.autoLogoutDays || 0);
 
     return (
         <div className="space-y-5">
@@ -634,6 +674,7 @@ export default function MasterReports() {
                             { key: 'late_in' as ViolFilter, label: 'Late Logins', count: baseS.lateInDays, icon: '🔴', active: 'border-amber-500/60 bg-amber-500/10', idle: baseS.lateInDays > 0 ? 'border-amber-500/30 bg-amber-500/5' : 'border-white/8 bg-black/30', num: baseS.lateInDays > 0 ? 'text-amber-400' : 'text-slate-600' },
                             { key: 'break' as ViolFilter, label: 'Break Exceeds', count: baseS.breakViolDays, icon: '☕', active: 'border-orange-500/60 bg-orange-500/10', idle: baseS.breakViolDays > 0 ? 'border-orange-500/30 bg-orange-500/5' : 'border-white/8 bg-black/30', num: baseS.breakViolDays > 0 ? 'text-orange-400' : 'text-slate-600' },
                             { key: 'brb' as ViolFilter, label: 'BRB Exceeds', count: baseS.brbViolDays, icon: '🔄', active: 'border-sky-500/60 bg-sky-500/10', idle: baseS.brbViolDays > 0 ? 'border-sky-500/30 bg-sky-500/5' : 'border-white/8 bg-black/30', num: baseS.brbViolDays > 0 ? 'text-sky-400' : 'text-slate-600' },
+                            { key: 'auto_out' as ViolFilter, label: 'Auto Outs', count: baseS.autoLogoutDays, icon: '🚨', active: 'border-red-500/60 bg-red-500/10', idle: baseS.autoLogoutDays > 0 ? 'border-red-500/30 bg-red-500/5' : 'border-white/8 bg-black/30', num: baseS.autoLogoutDays > 0 ? 'text-red-400' : 'text-slate-600' },
                             { key: 'all' as ViolFilter, label: 'Total Violations', count: totalViol, icon: '⚠️', active: 'border-rose-500/60 bg-rose-500/10', idle: totalViol > 0 ? 'border-rose-500/30 bg-rose-500/5' : 'border-emerald-500/20 bg-emerald-500/5', num: totalViol > 0 ? 'text-rose-400' : 'text-emerald-400' },
                         ]).map(t => {
                             const isActive = violationFilter === t.key;
@@ -695,7 +736,25 @@ export default function MasterReports() {
                 <span className="flex items-center gap-1.5 bg-black/40 px-3 py-1.5 rounded-full border border-white/5"><AlertTriangle size={12} className="text-purple-400" /> Logout before 5:00 PM CST</span>
             </div>
 
-            {!loading && <ReportTable rows={filteredRows} showDate={isMultiDay} showName={true} />}
+            {!loading && <ReportTable rows={filteredRows} showDate={isMultiDay} showName={true} onEdit={(r) => {
+                const u = rows.find(x => x.userId === r.userId); // In practice we want the User object
+                getAllUsers().then(users => {
+                    const fullUser = users.find(u => u.id === r.userId);
+                    if (fullUser) setSelectedUserForEdit({ user: fullUser, date: r.date });
+                });
+            }} />}
+
+            <AnimatePresence>
+                {selectedUserForEdit && (
+                    <DailyLogEditor
+                        user={selectedUserForEdit.user}
+                        initialDate={selectedUserForEdit.date}
+                        currentUserId={currentAdminId}
+                        onClose={() => setSelectedUserForEdit(null)}
+                        onSave={() => buildRows()}
+                    />
+                )}
+            </AnimatePresence>
 
             {!loading && isMultiDay && uniqueUsers.length > 0 && (
                 <div className="space-y-4 pt-4 border-t border-white/10">

@@ -367,7 +367,9 @@ export function MonthlyLeaveCalendar({ leaves, selectedClients }: { leaves: Leav
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
-export default function MasterConsole({ currentUserId, isMaster }: { currentUserId: string, isMaster: boolean }) {
+function pad(n: number) { return String(n).padStart(2, '0'); }
+
+export default function MasterConsole({ isMaster, currentUserId }: { isMaster: boolean; currentUserId: string }) {
     const [records, setRecords] = useState<UserStatusRecord[]>([]);
     const [pending, setPending] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
@@ -392,13 +394,22 @@ export default function MasterConsole({ currentUserId, isMaster }: { currentUser
     const [addLogTime, setAddLogTime] = useState('08:00');
     const [addLogDate, setAddLogDate] = useState(getTodayKey());
     const [timelineDeleteConfirmId, setTimelineDeleteConfirmId] = useState<string | null>(null);
+    const [editingLogId, setEditingLogId] = useState<string | null>(null);
 
     // Subscribe to detail logs when admin opens slide-over
     useEffect(() => {
         if (selectedUserDetail) {
-            getLogs(selectedUserDetail.user.id, dateStr(new Date())).then(setDetailLogs);
+            getLogs(selectedUserDetail.user.id, addLogDate).then(setDetailLogs);
         }
-    }, [selectedUserDetail]);
+    }, [selectedUserDetail, addLogDate]);
+
+    function handleAdminEditLog(log: TimeLog) {
+        setEditingLogId(log.id);
+        setAddLogType(log.eventType);
+        setAddLogDate(log.date);
+        const d = new Date(log.timestamp);
+        setAddLogTime(`${pad(d.getHours())}:${pad(d.getMinutes())}`);
+    }
 
     async function handleAdminDeleteLog(id: string) {
         setTimelineDeleteConfirmId(id);
@@ -422,18 +433,32 @@ export default function MasterConsole({ currentUserId, isMaster }: { currentUser
         const [hStr, mStr] = addLogTime.split(':');
         d.setHours(parseInt(hStr, 10), parseInt(mStr, 10), 0, 0);
 
-        const newLog: TimeLog = {
-            id: generateUUID(),
-            eventType: addLogType as TimeLog['eventType'],
-            timestamp: d.getTime(), // Use the constructed Date's timestamp
-            date: addLogDate,       // Use the selected date string
-            addedBy: currentUserId
-        };
-        try {
-            await insertLog(selectedUserDetail.user.id, newLog);
-            const latest = await getLogs(selectedUserDetail.user.id, dateStr(d)); // Use 'd' for dateStr
-            setDetailLogs(latest);
-        } catch (e: any) { alert(e.message); }
+        if (editingLogId) {
+            try {
+                const { updateTimeLog } = await import('@/lib/store');
+                await updateTimeLog(editingLogId, {
+                    eventType: addLogType as TimeLog['eventType'],
+                    timestamp: d.getTime(),
+                    date: addLogDate
+                });
+                const latest = await getLogs(selectedUserDetail.user.id, addLogDate);
+                setDetailLogs(latest);
+                setEditingLogId(null);
+            } catch (e: any) { alert(e.message); }
+        } else {
+            const newLog: TimeLog = {
+                id: generateUUID(),
+                eventType: addLogType as TimeLog['eventType'],
+                timestamp: d.getTime(), // Use the constructed Date's timestamp
+                date: addLogDate,       // Use the selected date string
+                addedBy: currentUserId
+            };
+            try {
+                await insertLog(selectedUserDetail.user.id, newLog);
+                const latest = await getLogs(selectedUserDetail.user.id, addLogDate);
+                setDetailLogs(latest);
+            } catch (e: any) { alert(e.message); }
+        }
     }
 
     const dismissNote = useCallback((id: string) => {
@@ -917,7 +942,7 @@ export default function MasterConsole({ currentUserId, isMaster }: { currentUser
                                             <span className="text-[10px] text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">Admin Override Active</span>
                                         </div>
                                         <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-4">
-                                            <TimelineLog logs={detailLogs} isAdmin={true} onDeleteLog={handleAdminDeleteLog} />
+                                            <TimelineLog logs={detailLogs} isAdmin={true} onDeleteLog={handleAdminDeleteLog} onEditLog={handleAdminEditLog} />
                                         </div>
                                     </div>
 
@@ -953,9 +978,12 @@ export default function MasterConsole({ currentUserId, isMaster }: { currentUser
                                                     <CustomTimePicker value={addLogTime} onChange={setAddLogTime} />
                                                 </div>
                                             </div>
-                                            <button type="submit" className="w-full py-3 mt-2 rounded-xl bg-blue-500 hover:bg-blue-400 text-black text-xs font-black uppercase tracking-widest shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_8px_20px_rgba(59,130,246,0.2)] transition-all">
-                                                Insert Timeline Event
+                                            <button type="submit" className={`w-full py-3 mt-2 rounded-xl text-black text-xs font-black uppercase tracking-widest shadow-lg transition-all ${editingLogId ? 'bg-amber-500 hover:bg-amber-400 shadow-amber-500/20' : 'bg-blue-500 hover:bg-blue-400 shadow-blue-500/20'}`}>
+                                                {editingLogId ? 'Update Timeline Event' : 'Insert Timeline Event'}
                                             </button>
+                                            {editingLogId && (
+                                                <button type="button" onClick={() => { setEditingLogId(null); setAddLogType('punch_in'); }} className="w-full py-2 hover:text-white text-slate-500 text-[10px] font-bold uppercase tracking-widest">Cancel Edit</button>
+                                            )}
                                             <p className="text-[10px] text-slate-500 text-center px-4 leading-tight">This will permanently mutate the employee's timeline. Refresh the main console after inserting/deleting events to recalculate their status.</p>
                                         </form>
                                     </div>

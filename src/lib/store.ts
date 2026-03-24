@@ -1,6 +1,6 @@
 import { supabase, UserRow, LogRow } from './supabase';
 import { User, TimeLog, AppStatus, LeaveRecord, AppNotification } from '@/types';
-import { getTodayKey, generateUUID, getPastDaysZoned, getElapsedWeekdays, checkViolations, toZonedMinutes, getRealNow, parseShiftMins, COMBINED_LIMIT_MS, BREAK_LIMIT_MS, BRB_LIMIT_MS } from './timeUtils';
+import { getTodayKey, generateUUID, getPastDaysZoned, getElapsedWeekdays, checkViolations, toZonedMinutes, toZonedTimestamp, getRealNow, parseShiftMins, getRelativeDate, COMBINED_LIMIT_MS, BREAK_LIMIT_MS, BRB_LIMIT_MS } from './timeUtils';
 
 export interface ClientRow {
     id: string;
@@ -80,6 +80,9 @@ export async function getSmartLeaves(dates: string[]): Promise<SmartLeaveRecord[
     const smartLeaves: SmartLeaveRecord[] = [...realLeaves];
     const realLeaveSet = new Set(realLeaves.map(l => `${l.employee_name.toLowerCase().trim()}-${l.client_name.toLowerCase().trim()}-${l.date}`));
 
+    // Optimization: Fetch ALL logs for all users and all requested dates in ONE batch query
+    const logsBatch = await getLogsBatch(users.map(u => u.id), dates);
+
     for (const d of dates) {
         const [yr, mo, dy] = d.split('-').map(Number);
         const dow = new Date(yr, mo - 1, dy).getDay();
@@ -88,19 +91,11 @@ export async function getSmartLeaves(dates: string[]): Promise<SmartLeaveRecord[
 
         const isToday = d === getTodayKey();
 
-        // Fetch logs ONLY for this specific date to bypass Supabase 1000 row limit
-        // which was causing older dates to silently truncate and falsely flag as absent.
-        const { data: dailyLogsData } = await supabase
-            .from('time_logs')
-            .select('*')
-            .in('user_id', users.map(u => u.id))
-            .eq('date', d);
-
         for (const user of users) {
             const key = `${user.name.toLowerCase().trim()}-${user.clientName.toLowerCase().trim()}-${d}`;
             if (realLeaveSet.has(key)) continue;
 
-            const rawUserLogs = (dailyLogsData ?? []).filter((r: any) => r.user_id === user.id && r.date === d).map(rowToLog);
+            const rawUserLogs = logsBatch[`${user.id}-${d}`] || [];
             const virtualId = `virtual-${user.id}-${d}`;
 
             const userNowMins = toZonedMinutes(getRealNow(), user.timezone);
@@ -220,12 +215,29 @@ export async function upsertUser(user: User): Promise<User> {
         }, { onConflict: 'id' })
         .select().single();
     if (error) throw error;
+    clearUserCache();
     return rowToUser(data as UserRow);
 }
 
+let cachedUsers: User[] | null = null;
+let lastUserFetch = 0;
+const CACHE_TTL = 30000; // 30 seconds
+
 export async function getAllUsers(): Promise<User[]> {
+    const now = Date.now();
+    if (cachedUsers && (now - lastUserFetch < CACHE_TTL)) {
+        return cachedUsers;
+    }
+
     const { data } = await supabase.from('users').select('*').eq('is_master', false).order('client_name').order('name');
-    return (data ?? []).map(r => rowToUser(r as UserRow));
+    cachedUsers = (data ?? []).map(r => rowToUser(r as UserRow));
+    lastUserFetch = now;
+    return cachedUsers;
+}
+
+export function clearUserCache() {
+    cachedUsers = null;
+    lastUserFetch = 0;
 }
 
 export async function getPendingUsers(): Promise<User[]> {
@@ -235,11 +247,13 @@ export async function getPendingUsers(): Promise<User[]> {
 
 export async function approveUser(userId: string): Promise<void> {
     await supabase.from('users').update({ is_approved: true }).eq('id', userId);
+    clearUserCache();
 }
 
 export async function deleteUser(userId: string): Promise<void> {
     // Cascade deletes time_logs via FK
     await supabase.from('users').delete().eq('id', userId);
+    clearUserCache();
 }
 
 export async function updateUser(userId: string, updates: {
@@ -257,6 +271,7 @@ export async function updateUser(userId: string, updates: {
     if (updates.workMode !== undefined) payload.work_mode = updates.workMode;
     const { data, error } = await supabase.from('users').update(payload).eq('id', userId).select().single();
     if (error) throw error;
+    clearUserCache();
     return rowToUser(data as UserRow);
 }
 
@@ -311,6 +326,16 @@ export async function getLogsBatch(userIds: string[], dates: string[]): Promise<
 
 export async function deleteTimeLog(id: string): Promise<void> {
     const { error } = await supabase.from('time_logs').delete().eq('id', id);
+    if (error) throw error;
+}
+
+export async function updateTimeLog(id: string, updates: Partial<TimeLog>): Promise<void> {
+    const payload: Record<string, any> = {};
+    if (updates.eventType) payload.event_type = updates.eventType;
+    if (updates.timestamp) payload.timestamp = updates.timestamp;
+    if (updates.date) payload.date = updates.date;
+    
+    const { error } = await supabase.from('time_logs').update(payload).eq('id', id);
     if (error) throw error;
 }
 
@@ -389,57 +414,71 @@ export async function getAllUsersStatus(): Promise<UserStatusRecord[]> {
     const { data: usersData } = await supabase.from('users').select('*').eq('is_master', false).eq('is_approved', true);
     if (!usersData?.length) return [];
     const userIds = usersData.map((u: UserRow) => u.id);
-    const { data: logsData } = await supabase.from('time_logs').select('*').in('user_id', userIds).eq('date', today).order('timestamp', { ascending: true });
-    
-    const logsByUser: Record<string, TimeLog[]> = {};
-    userIds.forEach((id: string) => { logsByUser[id] = []; });
-    (logsData ?? []).forEach((r: LogRow) => { logsByUser[r.user_id]?.push(rowToLog(r)); });
-
-    const nowMins = toZonedMinutes(getRealNow(), 'America/Chicago');
     const penaltyLogsToInsert: any[] = [];
+    const yesterday = getRelativeDate(today, -1);
+    const checkDates = [yesterday, today]; // Check yesterday and today for lingering sessions
 
-    // ENFORCE AUTO LOGOUTS FOR TODAY
+    const { data: logsData } = await supabase
+        .from('time_logs')
+        .select('*')
+        .in('user_id', userIds)
+        .in('date', checkDates)
+        .order('timestamp', { ascending: true });
+    
+    const logsByUser: Record<string, Record<string, TimeLog[]>> = {};
+    userIds.forEach((id: string) => { logsByUser[id] = { [yesterday]: [], [today]: [] }; });
+    (logsData ?? []).forEach((r: LogRow) => {
+        if (!logsByUser[r.user_id]) return;
+        if (!logsByUser[r.user_id][r.date]) logsByUser[r.user_id][r.date] = [];
+        logsByUser[r.user_id][r.date].push(rowToLog(r));
+    });
+
     usersData.forEach((row: UserRow) => {
         const user = rowToUser(row);
-        const logs = logsByUser[user.id];
-        const currentStats = deriveStatus(logs);
-        
-        if (currentStats.status !== 'idle' && currentStats.status !== 'punched_out' && currentStats.status !== 'on_leave') {
-            const shiftEndMins = parseShiftMins(user.shiftEnd);
-            const userNowMins = toZonedMinutes(getRealNow(), user.timezone);
+        const shiftEndMins = parseShiftMins(user.shiftEnd);
+        const userNowMins = toZonedMinutes(getRealNow(), user.timezone);
+
+        for (const date of checkDates) {
+            const logs = logsByUser[user.id][date] || [];
+            if (!logs.length) continue;
+
+            const currentStats = deriveStatus(logs);
+            const isToday = date === today;
             
-            // Limit strict threshold: 90 mins over shift end
-            if (userNowMins > shiftEndMins + 90) {
-                const diffMins = userNowMins - (shiftEndMins + 80);
-                const penaltyTimestamp = getRealNow() - (diffMins * 60000); // Guarantees exact timestamp of (ShiftEnd + 80m)
+            if (currentStats.status !== 'idle' && currentStats.status !== 'punched_out' && currentStats.status !== 'on_leave') {
+                // For past dates, if shift is over, auto-logout immediately at shift end
+                // For today, if 90 mins past shift end, auto-logout
+                const shouldLogout = !isToday || (userNowMins > shiftEndMins + 90);
                 
-                const newLog = {
-                    id: generateUUID(),
-                    user_id: user.id,
-                    action: 'auto_logout',
-                    timestamp: penaltyTimestamp,
-                    date: today,
-                    added_by: 'system' // mark for audits
-                };
-                penaltyLogsToInsert.push(newLog);
-                
-                // Optimistically mutate current fetch
-                logs.push({
-                    id: newLog.id,
-                    eventType: 'auto_logout',
-                    timestamp: penaltyTimestamp,
-                    date: today,
-                    addedBy: 'system'
-                });
+                if (shouldLogout) {
+                    // Standardized penalty: 10 minutes before their scheduled shift end
+                    const penaltyTimestamp = toZonedTimestamp(date, user.shiftEnd, user.timezone) - (10 * 60000);
+                    
+                    const newLog = {
+                        id: generateUUID(),
+                        user_id: user.id,
+                        event_type: 'auto_logout',
+                        timestamp: penaltyTimestamp,
+                        date: date,
+                        added_by: 'system'
+                    };
+                    penaltyLogsToInsert.push(newLog);
+                    
+                    // Optimistically mutate for today's response if it happened today
+                    if (isToday) logsByUser[user.id][today].push(rowToLog(newLog as any));
+                }
             }
         }
     });
 
     if (penaltyLogsToInsert.length > 0) {
-        supabase.from('time_logs').insert(penaltyLogsToInsert).then(); // Fire-and-forget DB patch
+        supabase.from('time_logs').insert(penaltyLogsToInsert).then();
     }
 
-    return usersData.map((row: UserRow) => ({ user: rowToUser(row), ...deriveStatus(logsByUser[row.id] ?? []) }));
+    return usersData.map((row: UserRow) => ({ 
+        user: rowToUser(row), 
+        ...deriveStatus(logsByUser[row.id][today] ?? []) 
+    }));
 }
 
 // ─── 7-day break/BRB aggregation (for Violators Panel) ───────────────────────

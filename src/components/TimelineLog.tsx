@@ -14,11 +14,11 @@ const eventConfig = {
     auto_logout: { label: 'Auto Logout', icon: <Clock size={14} />, color: 'text-rose-500', dot: 'bg-rose-500' },
 };
 
-export default function TimelineLog({ logs, isAdmin, onDeleteLog }: { logs: TimeLog[]; isAdmin?: boolean; onDeleteLog?: (id: string) => void }) {
+export default function TimelineLog({ logs, isAdmin, onDeleteLog, onEditLog }: { logs: TimeLog[]; isAdmin?: boolean; onDeleteLog?: (id: string) => void; onEditLog?: (log: TimeLog) => void }) {
     if (!logs.length) return (
         <div className="text-center py-6 text-slate-500 text-sm">
             <Clock size={24} className="mx-auto mb-2 opacity-40" />
-            No events recorded yet today.
+            No events recorded for this date.
         </div>
     );
 
@@ -35,14 +35,27 @@ export default function TimelineLog({ logs, isAdmin, onDeleteLog }: { logs: Time
                         <span className="text-sm font-medium text-white flex-1">{cfg.label}</span>
                         {log.addedBy && <span className="text-xs text-amber-500 font-medium">master</span>}
                         <span className="text-xs text-slate-400 font-mono">{formatTime(log.timestamp)}</span>
-                        {isAdmin && onDeleteLog && (
-                            <button
-                                onClick={() => onDeleteLog(log.id)}
-                                title="Delete Log"
-                                className="ml-2 flex items-center justify-center w-7 h-7 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500 hover:text-white hover:border-rose-500 transition-all shadow-sm"
-                            >
-                                <Trash2 size={13} />
-                            </button>
+                        {isAdmin && (
+                            <div className="flex items-center gap-1.5 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                {onEditLog && (
+                                    <button
+                                        onClick={() => onEditLog(log)}
+                                        title="Edit Time"
+                                        className="flex items-center justify-center w-7 h-7 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500 hover:text-white hover:border-blue-500 transition-all shadow-sm"
+                                    >
+                                        <Clock size={13} />
+                                    </button>
+                                )}
+                                {onDeleteLog && (
+                                    <button
+                                        onClick={() => onDeleteLog(log.id)}
+                                        title="Delete Log"
+                                        className="flex items-center justify-center w-7 h-7 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500 hover:text-white hover:border-rose-500 transition-all shadow-sm"
+                                    >
+                                        <Trash2 size={13} />
+                                    </button>
+                                )}
+                            </div>
                         )}
                     </motion.div>
                 );

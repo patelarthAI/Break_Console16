@@ -22,7 +22,7 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 /** Convert ISO date string (YYYY-MM-DD) → DD-Mon-YY, e.g. "07-Jan-25" */
 function fmtDate(iso: string): string {
     const [yr, mo, dy] = iso.split('-');
-    return `${dy}-${MONTHS[parseInt(mo) - 1]}-${yr.slice(2)}`;
+    return `${dy}-${MONTHS[parseInt(mo, 10) - 1]}-${yr.slice(2)}`;
 }
 
 const LEAVE_TYPES = [
@@ -37,7 +37,7 @@ const LEAVE_TYPES = [
     'Paternity',
     'Paid Leave'
 ];
-const SYSTEM_LEAVE_TYPES = ['System: Absent', 'System: Half-Day'];
+const SYSTEM_LEAVE_TYPES = ['System: Absent', 'System: Half-Day', 'System: Declined'];
 const ALL_LEAVE_TYPES = [...LEAVE_TYPES, ...SYSTEM_LEAVE_TYPES];
 
 const LEAVE_META: Record<string, { dot: string; text: string; bg: string; border: string }> = {
@@ -53,6 +53,7 @@ const LEAVE_META: Record<string, { dot: string; text: string; bg: string; border
     'Paid Leave': { dot: '#10b981', text: 'text-emerald-400', bg: 'bg-emerald-500/8', border: 'border-emerald-500/20' },
     'System: Absent': { dot: '#fbbf24', text: 'text-amber-400', bg: 'bg-amber-500/8', border: 'border-amber-500/20' },
     'System: Half-Day': { dot: '#fbbf24', text: 'text-amber-400', bg: 'bg-amber-500/8', border: 'border-amber-500/20' },
+    'System: Declined': { dot: '#94a3b8', text: 'text-slate-400', bg: 'bg-slate-500/8', border: 'border-slate-500/20' },
 };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -215,11 +216,29 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
         success('Leave deleted', `${name}'s record has been removed.`);
     }
 
-    function declineSmartLeave(id: string) {
-        if (!id.startsWith('virtual-')) return;
-        // Session-only dismiss — reappears on page refresh so system can re-evaluate
-        setLeaves(prev => prev.filter(l => l.id !== id));
-        success('Leave Declined', 'The auto-generated record has been dismissed for this session.');
+    async function declineSmartLeave(l: any) {
+        if (!l.id.startsWith('virtual-')) return;
+        setSaving(true);
+        try {
+            const payload = { 
+                date: l.date, 
+                client_name: l.client_name, 
+                employee_name: l.employee_name, 
+                is_planned: false, 
+                reason: 'Declined by Admin', 
+                approver: currentUser.name, 
+                leave_type: 'System: Declined', 
+                day_count: 0 
+            };
+            const added = await addLeave(payload);
+            setLeaves(prev => prev.map(item => item.id === l.id ? added : item));
+            success('Leave Declined', 'The auto-generated record has been permanently declined.');
+        } catch (err) {
+            console.error(err);
+            toastError('Could not decline', 'Please check your connection and try again.');
+        } finally {
+            setSaving(false);
+        }
     }
 
     // Available periods derived from leave data
@@ -271,7 +290,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
     const lwpCount = useMemo(() => displayedLeaves.filter(l => l.leave_type.startsWith('LWP')).reduce((s, l) => s + Number(l.day_count), 0), [displayedLeaves]);
     const sickCount = useMemo(() => displayedLeaves.filter(l => l.leave_type.includes('Sick')).reduce((s, l) => s + Number(l.day_count), 0), [displayedLeaves]);
     const casualCount = useMemo(() => displayedLeaves.filter(l => l.leave_type.includes('Casual') || l.leave_type === 'Paid Leave' || l.leave_type.includes('Paternity')).reduce((s, l) => s + Number(l.day_count), 0), [displayedLeaves]);
-    const unplanned = useMemo(() => displayedLeaves.filter(l => !l.is_planned).length, [displayedLeaves]);
+    const unplanned = useMemo(() => displayedLeaves.filter(l => !l.is_planned && Number(l.day_count) > 0).length, [displayedLeaves]);
     const uniqueEmpls = useMemo(() => new Set(displayedLeaves.map(l => l.employee_name)).size, [displayedLeaves]);
 
     // Available years from data
@@ -552,7 +571,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                                         className="flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30 text-emerald-400 hover:from-emerald-500 hover:to-emerald-400 hover:text-emerald-950 transition-all shadow-[0_0_10px_rgba(16,185,129,0.1)] hover:shadow-[0_0_15px_rgba(16,185,129,0.4)] hover:scale-105 active:scale-95">
                                                         <CheckCircle size={14} className="drop-shadow-sm" />
                                                     </button>
-                                                    <button onClick={() => declineSmartLeave(l.id)} title="Decline"
+                                                    <button onClick={() => declineSmartLeave(l)} title="Decline"
                                                         className="flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-br from-rose-500/20 to-rose-600/10 border border-rose-500/30 text-rose-400 hover:from-rose-500 hover:to-rose-400 hover:text-rose-950 transition-all shadow-[0_0_10px_rgba(225,29,72,0.1)] hover:shadow-[0_0_15px_rgba(225,29,72,0.4)] hover:scale-105 active:scale-95">
                                                         <X size={14} className="drop-shadow-sm" />
                                                     </button>

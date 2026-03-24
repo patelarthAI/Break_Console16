@@ -62,6 +62,28 @@ function cstMinutes(ts: number) {
     return toZonedMinutes(ts, 'America/Chicago');
 }
 
+/** 
+ * Returns the UTC timestamp for a specific date and time in a given timezone.
+ * dateStr: YYYY-MM-DD
+ * timeStr: HH:MM
+ */
+export function toZonedTimestamp(dateStr: string, timeStr: string, timezone: string): number {
+    // 1. Get midnight UTC for that date
+    const utcMidnight = new Date(dateStr + 'T00:00:00Z').getTime();
+    
+    // 2. Find what time it is in the target timezone at UTC midnight
+    const localMinsAtUtcMidnight = toZonedMinutes(utcMidnight, timezone);
+    
+    // 3. Calculate adjustment to get to midnight in the target timezone
+    // If local time is 18:00 (1080 mins), we need to add 6h (360 mins) to get to midnight
+    const adjustmentMins = (1440 - localMinsAtUtcMidnight) % 1440;
+    const zonedMidnight = utcMidnight + (adjustmentMins * 60000);
+    
+    // 4. Add the requested time
+    const targetMins = parseShiftMins(timeStr);
+    return zonedMidnight + (targetMins * 60000);
+}
+
 export function checkViolations(
     breakMs: number,
     brbMs: number,
@@ -70,6 +92,7 @@ export function checkViolations(
     shiftStart = '08:00',
     shiftEnd = '17:00',
     timezone = 'America/Chicago',
+    logs?: TimeLog[],
 ) {
     const breakViolMs = Math.max(0, breakMs - BREAK_LIMIT_MS);
     const breakViol = breakViolMs > 0;
@@ -100,6 +123,12 @@ export function checkViolations(
         }
     }
 
+    let autoLogout = false;
+    if (punchOut && logs) {
+        const lastLog = logs[logs.length - 1];
+        if (lastLog?.eventType === 'auto_logout') autoLogout = true;
+    }
+
     return {
         breakViol,
         breakViolMs,
@@ -107,9 +136,10 @@ export function checkViolations(
         brbViolMs,
         lateIn,
         lateInMs,
-        earlyOut,
+        earlyOut: earlyOut && !autoLogout, // If auto-logout, we show autoLogout violation instead of earlyOut
         earlyOutMs,
-        any: breakViol || brbViol || lateIn || earlyOut,
+        autoLogout,
+        any: breakViol || brbViol || lateIn || earlyOut || autoLogout,
     };
 }
 
@@ -249,7 +279,8 @@ export function computeSession(logs: TimeLog[]): DaySession {
     for (const log of logs) {
         switch (log.eventType) {
             case 'punch_in': session.punchIn = log.timestamp; break;
-            case 'punch_out': session.punchOut = log.timestamp; break;
+            case 'punch_out': session.punchOut = log.timestamp; session.isAutoLogout = false; break;
+            case 'auto_logout': session.punchOut = log.timestamp; session.isAutoLogout = true; break;
             case 'break_start': breakStart = log.timestamp; break;
             case 'break_end':
                 if (breakStart !== null) { session.breaks.push({ start: breakStart, end: log.timestamp }); breakStart = null; }
@@ -269,10 +300,21 @@ export function computeTotalTime(records: (BreakRecord | BRBRecord)[], now: numb
     return records.reduce((acc, r) => acc + ((r.end ?? now) - r.start), 0);
 }
 
-export function computeWorkedTime(session: DaySession, now: number): number {
+export function computeWorkedTime(session: DaySession, now: number, date?: string, shiftEnd = '17:00'): number {
     if (!session.punchIn) return 0;
-    const end = session.punchOut ?? now;
-    const totalBreak = computeTotalTime(session.breaks, end); // use session end, not now, for closed sessions
+    
+    let end = session.punchOut ?? now;
+    
+    // If this is a past date and there's no punch out, cap it at shift end
+    if (date && !session.punchOut) {
+        const todayStr = dateStr(new Date(now));
+        if (date < todayStr) {
+            const shiftEndDate = new Date(date + 'T' + shiftEnd + ':00');
+            end = Math.min(end, shiftEndDate.getTime());
+        }
+    }
+    
+    const totalBreak = computeTotalTime(session.breaks, end);
     return Math.max(0, end - session.punchIn - totalBreak);
 }
 
