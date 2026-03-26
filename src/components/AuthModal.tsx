@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { User as UserIcon, Briefcase, Lock, Eye, EyeOff, CheckSquare, ChevronDown, Sparkles } from 'lucide-react';
 import { User } from '@/types';
 import { getUserByNameAndClient, upsertUser, setCurrentUser, getClients, ClientRow, getRememberedUser, rememberUser, forgetUser } from '@/lib/store';
+import { describeSupabaseError } from '@/lib/supabase';
 import { generateUUID } from '@/lib/timeUtils';
 
 const MASTER_PASS = '1234';
@@ -19,6 +20,22 @@ const WELCOME_QUOTES = [
 ];
 
 interface Props { onLogin: (user: User) => void; }
+
+function isNetworkLikeError(details: string): boolean {
+    const normalized = details.toLowerCase();
+    return (
+        normalized.includes('fetch')
+        || normalized.includes('network')
+        || normalized.includes('timeout')
+        || normalized.includes('headers timeout')
+        || normalized.includes('upstream request timeout')
+        || normalized.includes('failed to load clients')
+    );
+}
+
+function firstErrorLine(details: string): string {
+    return details.split('|')[0]?.split('\n')[0]?.trim() || 'Unexpected error.';
+}
 
 export default function AuthModal({ onLogin }: Props) {
     const [name, setName] = useState('');
@@ -42,7 +59,15 @@ export default function AuthModal({ onLogin }: Props) {
         setQuoteIdx(Math.floor(Math.random() * WELCOME_QUOTES.length));
         getClients()
             .then(setClients)
-            .catch(e => console.error('Failed to load clients:', e))
+            .catch((err: unknown) => {
+                const details = describeSupabaseError(err);
+                console.error('Failed to load clients:', details, err);
+                if (isNetworkLikeError(details)) {
+                    setError('Supabase is temporarily unavailable. Client data could not be loaded.');
+                } else {
+                    setError(`Unable to load clients. ${firstErrorLine(details)}`);
+                }
+            })
             .finally(() => setLoadingClients(false));
     }, []);
 
@@ -86,12 +111,13 @@ export default function AuthModal({ onLogin }: Props) {
                 setCurrentUser(user);
                 onLogin(user);
             }
-        } catch (err: any) {
-            console.error('Login error details:', err);
-            if (err.message?.includes('fetch') || err.name === 'TypeError') {
-                setError('Network timeout — the database is unreachable from this environment.');
+        } catch (err: unknown) {
+            const details = describeSupabaseError(err);
+            console.error('Login error details:', details, err);
+            if (isNetworkLikeError(details)) {
+                setError('Supabase is temporarily unavailable. Login cannot complete right now.');
             } else {
-                setError('Authentication failed — please check your connection.');
+                setError(`Authentication failed — ${firstErrorLine(details)}`);
             }
         } finally {
             setLoading(false);

@@ -502,19 +502,9 @@ export default function MasterConsole({ isMaster, currentUserId }: { isMaster: b
         return () => { ch.unsubscribe(); };
     }, []);
 
-    const refresh = useCallback(async () => {
-        const [data, pData, clientsData, leavesData] = await Promise.all([
-            getAllUsersStatus(), getPendingUsers(), getClients(), getLeaves()
-        ]);
-        if (!mountedRef.current) return;
-        setRecords(data);
-        recordsRef.current = data;
-        setPending(pData);
-        setClients(clientsData);
-        setLeaves(leavesData);
-        setLoading(false);
-        // Load discipline IDs in background (non-blocking)
-        get7DayBreakStats().then(stats => {
+    const loadCleanIds = useCallback(async () => {
+        try {
+            const stats = await get7DayBreakStats();
             const ids = new Set(
                 stats
                     .filter(s =>
@@ -526,19 +516,35 @@ export default function MasterConsole({ isMaster, currentUserId }: { isMaster: b
                     .map(s => s.user.id)
             );
             if (mountedRef.current) setCleanIds(ids);
-        }).catch(() => { });
+        } catch {
+            // Non-blocking vanity badge data should never take down the console.
+        }
+    }, []);
+
+    const refresh = useCallback(async () => {
+        const [data, pData, clientsData, leavesData] = await Promise.all([
+            getAllUsersStatus(), getPendingUsers(), getClients(), getLeaves()
+        ]);
+        if (!mountedRef.current) return;
+        setRecords(data);
+        recordsRef.current = data;
+        setPending(pData);
+        setClients(clientsData);
+        setLeaves(leavesData);
+        setLoading(false);
     }, []);
 
     useEffect(() => {
         mountedRef.current = true;
         refresh();
+        loadCleanIds();
         const channel = supabase
             .channel('mc_rt')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'time_logs' }, refresh)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, refresh)
             .subscribe();
         return () => { mountedRef.current = false; channel.unsubscribe(); };
-    }, [refresh]);
+    }, [refresh, loadCleanIds]);
 
     const doOverride = async (userId: string, action: 'break_end' | 'brb_end' | 'punch_out') => {
         await masterOverride(userId, action, currentUserId);

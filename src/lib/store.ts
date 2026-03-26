@@ -1,4 +1,4 @@
-import { supabase, UserRow, LogRow } from './supabase';
+import { supabase, UserRow, LogRow, describeSupabaseError } from './supabase';
 import { User, TimeLog, AppStatus, LeaveRecord, AppNotification } from '@/types';
 import { getTodayKey, generateUUID, getPastDaysZoned, getElapsedWeekdays, checkViolations, toZonedMinutes, toZonedTimestamp, getRealNow, parseShiftMins, getRelativeDate, COMBINED_LIMIT_MS, BREAK_LIMIT_MS, BRB_LIMIT_MS } from './timeUtils';
 
@@ -7,9 +7,15 @@ export interface ClientRow {
     name: string;
 }
 
+function assertSupabaseOk(error: unknown, action: string): void {
+    if (!error) return;
+    throw new Error(`${action}: ${describeSupabaseError(error)}`);
+}
+
 // ─── Clients ──────────────────────────────────────────────────────────────────
 export async function getClients(): Promise<ClientRow[]> {
-    const { data } = await supabase.from('clients').select('*').order('name');
+    const { data, error } = await supabase.from('clients').select('*').order('name');
+    assertSupabaseOk(error, 'Failed to load clients');
     return data ?? [];
 }
 
@@ -20,7 +26,8 @@ export async function addClient(name: string): Promise<ClientRow> {
 }
 
 export async function deleteClient(id: string): Promise<void> {
-    await supabase.from('clients').delete().eq('id', id);
+    const { error } = await supabase.from('clients').delete().eq('id', id);
+    assertSupabaseOk(error, 'Failed to delete client');
 }
 
 export async function renameClient(id: string, oldName: string, newName: string): Promise<void> {
@@ -42,7 +49,8 @@ export async function renameClient(id: string, oldName: string, newName: string)
 
 // ─── Leaves ───────────────────────────────────────────────────────────────────
 export async function getLeaves(): Promise<LeaveRecord[]> {
-    const { data } = await supabase.from('leaves').select('*').order('date', { ascending: false });
+    const { data, error } = await supabase.from('leaves').select('*').order('date', { ascending: false });
+    assertSupabaseOk(error, 'Failed to load leaves');
     return data ?? [];
 }
 
@@ -70,10 +78,11 @@ export interface SmartLeaveRecord extends LeaveRecord {
 export async function getSmartLeaves(dates: string[]): Promise<SmartLeaveRecord[]> {
     if (!dates.length) return [];
 
-    const { data: realLeavesData } = await supabase
+    const { data: realLeavesData, error: realLeavesError } = await supabase
         .from('leaves')
         .select('*')
         .order('date', { ascending: false });
+    assertSupabaseOk(realLeavesError, 'Failed to load leave records');
     const realLeaves = (realLeavesData ?? []) as SmartLeaveRecord[];
 
     const users = await getAllUsers();
@@ -209,11 +218,12 @@ function rowToUser(row: UserRow): User {
 
 // ─── User operations ──────────────────────────────────────────────────────────
 export async function getUserByNameAndClient(name: string, clientName: string): Promise<User | null> {
-    const { data } = await supabase
+    const { data, error } = await supabase
         .from('users').select('*')
         .ilike('name', name.trim())
         .ilike('client_name', clientName.trim())
         .maybeSingle();
+    assertSupabaseOk(error, 'Failed to load user');
     return data ? rowToUser(data as UserRow) : null;
 }
 
@@ -226,6 +236,9 @@ export async function upsertUser(user: User): Promise<User> {
             client_name: user.clientName,
             is_master: user.isMaster,
             is_approved: user.isApproved,
+            shift_start: user.shiftStart,
+            shift_end: user.shiftEnd,
+            timezone: user.timezone,
             work_mode: user.workMode ?? 'WFO',
         }, { onConflict: 'id' })
         .select().single();
@@ -244,7 +257,8 @@ export async function getAllUsers(): Promise<User[]> {
         return cachedUsers;
     }
 
-    const { data } = await supabase.from('users').select('*').eq('is_master', false).order('client_name').order('name');
+    const { data, error } = await supabase.from('users').select('*').eq('is_master', false).order('client_name').order('name');
+    assertSupabaseOk(error, 'Failed to load users');
     cachedUsers = (data ?? []).map(r => rowToUser(r as UserRow));
     lastUserFetch = now;
     return cachedUsers;
@@ -256,18 +270,21 @@ export function clearUserCache() {
 }
 
 export async function getPendingUsers(): Promise<User[]> {
-    const { data } = await supabase.from('users').select('*').eq('is_approved', false).eq('is_master', false);
+    const { data, error } = await supabase.from('users').select('*').eq('is_approved', false).eq('is_master', false);
+    assertSupabaseOk(error, 'Failed to load pending users');
     return (data ?? []).map(r => rowToUser(r as UserRow));
 }
 
 export async function approveUser(userId: string): Promise<void> {
-    await supabase.from('users').update({ is_approved: true }).eq('id', userId);
+    const { error } = await supabase.from('users').update({ is_approved: true }).eq('id', userId);
+    assertSupabaseOk(error, 'Failed to approve user');
     clearUserCache();
 }
 
 export async function deleteUser(userId: string): Promise<void> {
     // Cascade deletes time_logs via FK
-    await supabase.from('users').delete().eq('id', userId);
+    const { error } = await supabase.from('users').delete().eq('id', userId);
+    assertSupabaseOk(error, 'Failed to delete user');
     clearUserCache();
 }
 
@@ -301,10 +318,11 @@ function rowToLog(row: LogRow): TimeLog {
 
 export async function getLogs(userId: string, date?: string): Promise<TimeLog[]> {
     const d = date ?? getTodayKey();
-    const { data } = await supabase
+    const { data, error } = await supabase
         .from('time_logs').select('*')
         .eq('user_id', userId).eq('date', d)
         .order('timestamp', { ascending: true });
+    assertSupabaseOk(error, 'Failed to load time logs');
     return (data ?? []).map(r => rowToLog(r as LogRow));
 }
 
@@ -374,9 +392,10 @@ export async function deleteUserLogsForToday(userId: string): Promise<void> {
 }
 
 export async function getLogDatesForMonth(userId: string, yearMonth: string): Promise<string[]> {
-    const { data } = await supabase
+    const { data, error } = await supabase
         .from('time_logs').select('date')
         .eq('user_id', userId).like('date', `${yearMonth}-%`);
+    assertSupabaseOk(error, 'Failed to load monthly log dates');
     const set = new Set((data ?? []).map((r: { date: string }) => r.date));
     return [...set].sort();
 }
@@ -438,21 +457,25 @@ function deriveStatus(logs: TimeLog[]): Omit<UserStatusRecord, 'user'> {
     return { status, punchIn, punchOut, breakStart, brbStart, workStart, workedMs, breakCount, brbCount };
 }
 
-export async function getAllUsersStatus(): Promise<UserStatusRecord[]> {
+export async function getAllUsersStatus(clientName?: string): Promise<UserStatusRecord[]> {
     const today = getTodayKey();
-    const { data: usersData } = await supabase.from('users').select('*').eq('is_master', false).eq('is_approved', true);
+    let usersQuery = supabase.from('users').select('*').eq('is_master', false).eq('is_approved', true);
+    if (clientName) usersQuery = usersQuery.eq('client_name', clientName);
+    const { data: usersData, error: usersError } = await usersQuery;
+    assertSupabaseOk(usersError, 'Failed to load approved users');
     if (!usersData?.length) return [];
     const userIds = usersData.map((u: UserRow) => u.id);
     const penaltyLogsToInsert: any[] = [];
     const yesterday = getRelativeDate(today, -1);
     const checkDates = [yesterday, today]; // Check yesterday and today for lingering sessions
 
-    const { data: logsData } = await supabase
+    const { data: logsData, error: logsError } = await supabase
         .from('time_logs')
         .select('*')
         .in('user_id', userIds)
         .in('date', checkDates)
         .order('timestamp', { ascending: true });
+    assertSupabaseOk(logsError, 'Failed to load status logs');
     
     const logsByUser: Record<string, Record<string, TimeLog[]>> = {};
     userIds.forEach((id: string) => { logsByUser[id] = { [yesterday]: [], [today]: [] }; });
@@ -532,15 +555,17 @@ export async function get7DayBreakStats(): Promise<UserBreakStats[]> {
     const days = getPastDaysZoned(5, true);
 
 
-    const { data: usersData } = await supabase.from('users').select('*').eq('is_master', false).eq('is_approved', true);
+    const { data: usersData, error: usersError } = await supabase.from('users').select('*').eq('is_master', false).eq('is_approved', true);
+    assertSupabaseOk(usersError, 'Failed to load users for break stats');
     if (!usersData?.length) return [];
 
     const userIds = usersData.map((u: UserRow) => u.id);
-    const { data: logsData } = await supabase
+    const { data: logsData, error: logsError } = await supabase
         .from('time_logs').select('*')
         .in('user_id', userIds)
         .in('date', days)
         .order('timestamp', { ascending: true });
+    assertSupabaseOk(logsError, 'Failed to load break stats logs');
 
     const BREAK_LIMIT = 75 * 60 * 1000;
     const BRB_LIMIT = 10 * 60 * 1000;
@@ -618,15 +643,17 @@ export async function getWeeklyBreakStats(): Promise<WeeklyBreakStats[]> {
 
     if (expectedDays === 0) return [];
 
-    const { data: usersData } = await supabase.from('users').select('*').eq('is_master', false).eq('is_approved', true);
+    const { data: usersData, error: usersError } = await supabase.from('users').select('*').eq('is_master', false).eq('is_approved', true);
+    assertSupabaseOk(usersError, 'Failed to load users for weekly stats');
     if (!usersData?.length) return [];
 
     const userIds = usersData.map((u: UserRow) => u.id);
-    const { data: logsData } = await supabase
+    const { data: logsData, error: logsError } = await supabase
         .from('time_logs').select('*')
         .in('user_id', userIds)
         .in('date', days)
         .order('timestamp', { ascending: true });
+    assertSupabaseOk(logsError, 'Failed to load weekly stats logs');
 
     const COMBINED_LIMIT = 85 * 60 * 1000;
 
@@ -679,10 +706,12 @@ export async function getActiveNotifications(userId: string): Promise<AppNotific
     // We want active notifications that have NOT been dismissed by this user
     // A query with a left join/filter is tricky in Supabase without a custom view,
     // so we'll fetch all active notifications and all dismissals for this user, then filter locally.
-    const [{ data: notifs }, { data: dismissals }] = await Promise.all([
+    const [{ data: notifs, error: notifsError }, { data: dismissals, error: dismissalsError }] = await Promise.all([
         supabase.from('notifications').select('*').eq('is_active', true).order('created_at', { ascending: false }),
         supabase.from('notification_dismissals').select('notification_id').eq('user_id', userId)
     ]);
+    assertSupabaseOk(notifsError, 'Failed to load active notifications');
+    assertSupabaseOk(dismissalsError, 'Failed to load dismissed notifications');
 
     const dismissedIds = new Set((dismissals ?? []).map((d: any) => d.notification_id));
 
@@ -695,7 +724,8 @@ export async function getActiveNotifications(userId: string): Promise<AppNotific
 }
 
 export async function getAllNotifications(): Promise<AppNotification[]> {
-    const { data } = await supabase.from('notifications').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('notifications').select('*').order('created_at', { ascending: false });
+    assertSupabaseOk(error, 'Failed to load notifications');
     return (data ?? []).map((n: any) => ({
         id: n.id, message: n.message, createdBy: n.created_by,
         createdAt: n.created_at, isActive: n.is_active

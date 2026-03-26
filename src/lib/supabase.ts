@@ -1,16 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_EXTERNAL_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const SUPABASE_EXTERNAL_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
-// In the browser, route through the Next.js API proxy to bypass corporate network blocks.
-// On the server (SSR/API routes), connect directly.
-const url = typeof window !== 'undefined'
-    ? `${window.location.origin}/api/supabase`
-    : SUPABASE_EXTERNAL_URL;
+if (!SUPABASE_EXTERNAL_URL || !SUPABASE_ANON_KEY) {
+    throw new Error('Supabase environment variables are missing.');
+}
 
-console.log('[Supabase] Initializing client via proxy:', url);
-export const supabase = createClient(url, key, {
+if (typeof window !== 'undefined') {
+    console.info(`[Supabase] Browser client using direct connection: ${SUPABASE_EXTERNAL_URL}`);
+}
+
+export const supabase = createClient(SUPABASE_EXTERNAL_URL, SUPABASE_ANON_KEY, {
     auth: { 
         persistSession: true,
         autoRefreshToken: true,
@@ -18,6 +19,23 @@ export const supabase = createClient(url, key, {
     },
     realtime: { params: { eventsPerSecond: 10 } },
 });
+
+export function describeSupabaseError(error: unknown): string {
+    if (!error) return 'Unknown Supabase error.';
+    if (error instanceof Error) return error.message || error.name;
+    if (typeof error === 'string') return error;
+
+    if (typeof error === 'object') {
+        const record = error as Record<string, unknown>;
+        const parts = [record.message, record.details, record.hint, record.code, record.status]
+            .filter((value): value is string | number => typeof value === 'string' || typeof value === 'number')
+            .map(String);
+
+        if (parts.length > 0) return parts.join(' | ');
+    }
+
+    return 'Unexpected Supabase error.';
+}
 
 // ─── Type helpers matching Supabase rows ──────────────────────────────────────
 export interface UserRow {
