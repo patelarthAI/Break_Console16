@@ -44,35 +44,58 @@ export default function BreakDashboard({ currentUserId, isMaster, clientName }: 
     const [leaves, setLeaves] = useState<LeaveRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const mountedRef = useRef(true);
+    const refreshTimerRef = useRef<number | null>(null);
     const [quoteIdx, setQuoteIdx] = useState(0);
+    const scopedClient = !isMaster && clientName ? clientName : undefined;
 
     useEffect(() => {
         const id = setInterval(() => setQuoteIdx(i => (i + 1) % QUOTES.length), 6000);
         return () => clearInterval(id);
     }, []);
 
-    const refresh = useCallback(async () => {
-        const scopedClient = !isMaster && clientName ? clientName : undefined;
-        const leavesPromise = isMaster ? getLeaves() : Promise.resolve([] as LeaveRecord[]);
-        const [data, leavesData] = await Promise.all([
-            getAllUsersStatus(scopedClient),
-            leavesPromise
-        ]);
+    const loadStatus = useCallback(async (force = false) => {
+        const data = await getAllUsersStatus(scopedClient, force);
         if (!mountedRef.current) return;
         setRecords(data.filter(r => r.user.id !== currentUserId));
+    }, [scopedClient, currentUserId]);
+
+    const loadLeaves = useCallback(async (force = false) => {
+        const leavesData = await getLeaves(scopedClient, force);
+        if (!mountedRef.current) return;
         setLeaves(leavesData);
+    }, [scopedClient]);
+
+    const refresh = useCallback(async (force = false) => {
+        await Promise.all([
+            loadStatus(force),
+            loadLeaves(force)
+        ]);
+        if (!mountedRef.current) return;
         setLoading(false);
-    }, [isMaster, clientName, currentUserId]);
+    }, [loadLeaves, loadStatus]);
+
+    const scheduleStatusRefresh = useCallback(() => {
+        if (refreshTimerRef.current) return;
+        refreshTimerRef.current = window.setTimeout(() => {
+            refreshTimerRef.current = null;
+            void loadStatus(true);
+        }, 400);
+    }, [loadStatus]);
 
     useEffect(() => {
         mountedRef.current = true;
-        refresh();
+        void refresh(true);
         const channel = supabase
             .channel(`team_status_${currentUserId}`)
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'time_logs' }, refresh)
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'time_logs' }, scheduleStatusRefresh)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'leaves' }, () => { void loadLeaves(true); })
             .subscribe();
-        return () => { mountedRef.current = false; channel.unsubscribe(); };
-    }, [refresh, currentUserId]);
+        return () => {
+            mountedRef.current = false;
+            if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current);
+            channel.unsubscribe();
+        };
+    }, [refresh, scheduleStatusRefresh, loadLeaves, currentUserId]);
 
     const onBreak = records.filter(r => r.status === 'on_break');
     const onBrb = records.filter(r => r.status === 'on_brb');
@@ -205,30 +228,30 @@ export default function BreakDashboard({ currentUserId, isMaster, clientName }: 
                 </div>
             )}
             {/* 2026 Monthly Calendar — Only visible to admins */}
-            {isMaster && (
-                <div className="rounded-[1.5rem] bg-gradient-to-b from-[#0a0a14]/80 to-[#05050f]/80 backdrop-blur-xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-hidden relative group">
-                    <div className="absolute inset-0 bg-violet-500/[0.02] group-hover:bg-violet-500/[0.05] transition-colors pointer-events-none" />
-                    <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-white/5 bg-white/[0.02]">
-                        <div className="flex items-center gap-2.5">
-                            <div className="p-1.5 rounded-lg bg-violet-500/20 border border-violet-500/30">
-                                <Clock size={14} className="text-violet-400 drop-shadow-[0_0_8px_rgba(139,92,246,0.5)]" />
-                            </div>
-                            <span className="text-[11px] font-black tracking-[0.2em] uppercase text-violet-400/90">2026 Leave Calendar</span>
+            <div className="rounded-[1.5rem] bg-gradient-to-b from-[#0a0a14]/80 to-[#05050f]/80 backdrop-blur-xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-hidden relative group">
+                <div className="absolute inset-0 bg-violet-500/[0.02] group-hover:bg-violet-500/[0.05] transition-colors pointer-events-none" />
+                <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-white/5 bg-white/[0.02]">
+                    <div className="flex items-center gap-2.5">
+                        <div className="p-1.5 rounded-lg bg-violet-500/20 border border-violet-500/30">
+                            <Clock size={14} className="text-violet-400 drop-shadow-[0_0_8px_rgba(139,92,246,0.5)]" />
                         </div>
-                    </div>
-                    <div className="p-4">
-                        <MonthlyLeaveCalendar leaves={leaves} selectedClients={clientName ? [clientName] : []} />
+                        <span className="text-[11px] font-black tracking-[0.2em] uppercase text-violet-400/90">
+                            {isMaster ? '2026 Leave Calendar' : `${clientName ?? 'Team'} Leave Calendar`}
+                        </span>
                     </div>
                 </div>
-            )}
+                <div className="p-4">
+                    <MonthlyLeaveCalendar leaves={leaves} selectedClients={clientName ? [clientName] : []} />
+                </div>
+            </div>
 
-            {isMaster && (
+            <>
                 <>
                     {/* Aura Maxxers — Global Ranking */}
                     <div className="rounded-[2.5rem] bg-gradient-to-b from-[#0a0a14]/80 to-[#05050f]/80 backdrop-blur-3xl border border-white/10 shadow-[0_32px_64px_rgba(0,0,0,0.6)] overflow-hidden relative group">
                         <div className="absolute inset-0 bg-emerald-500/[0.02] group-hover:bg-emerald-500/[0.04] transition-colors pointer-events-none" />
                         <div className="p-6">
-                            <StarPerformers />
+                            <StarPerformers clientName={scopedClient} />
                         </div>
                     </div>
 
@@ -236,11 +259,11 @@ export default function BreakDashboard({ currentUserId, isMaster, clientName }: 
                     <div className="rounded-[2.5rem] bg-gradient-to-b from-[#0a0a14]/80 to-[#05050f]/80 backdrop-blur-3xl border border-white/10 shadow-[0_32px_64px_rgba(0,0,0,0.6)] overflow-hidden relative group">
                         <div className="absolute inset-0 bg-rose-500/[0.02] group-hover:bg-rose-500/[0.04] transition-colors pointer-events-none" />
                         <div className="p-6">
-                            <ViolatorsPanel />
+                            <ViolatorsPanel clientName={scopedClient} />
                         </div>
                     </div>
                 </>
-            )}
+            </>
         </div>
     );
 }

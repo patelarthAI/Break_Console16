@@ -44,7 +44,11 @@ const RANKS = [
     },
 ];
 
-export default function ViolatorsPanel() {
+interface Props {
+    clientName?: string;
+}
+
+export default function ViolatorsPanel({ clientName }: Props) {
     const [campers, setCampers] = useState<WeeklyBreakStats[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -53,7 +57,7 @@ export default function ViolatorsPanel() {
     async function load(showSpinner = false) {
         if (showSpinner) setRefreshing(true);
         try {
-            const data = await getWeeklyBreakStats();
+            const data = await getWeeklyBreakStats(clientName, showSpinner);
             // Lobby Campers criteria:
             // 1. At least 1 day of data
             // 2. Avg combined Break + BRB exceeds COMBINED_LIMIT
@@ -73,7 +77,11 @@ export default function ViolatorsPanel() {
         }
     }
 
-    useEffect(() => { load(); }, []);
+    useEffect(() => {
+        load();
+        const id = window.setInterval(() => { void load(); }, 5 * 60 * 1000);
+        return () => window.clearInterval(id);
+    }, [clientName]);
 
     return (
         <div className="flex flex-col gap-3">

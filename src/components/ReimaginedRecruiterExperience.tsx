@@ -12,8 +12,8 @@ import {
   LogOut,
   Search,
 } from 'lucide-react';
-import { AppNotification, AppStatus, TimeLog, User } from '@/types';
-import { dismissNotification, getActiveNotifications, getAllUsersStatus, getLeaves } from '@/lib/store';
+import { AppNotification, AppStatus, LeaveRecord, TimeLog, User } from '@/types';
+import { dismissNotification, getActiveNotifications, getAllUsersStatus, getLeavesPage } from '@/lib/store';
 import { parseShiftMins, formatDuration } from '@/lib/timeUtils';
 import { supabase } from '@/lib/supabase';
 import {
@@ -70,7 +70,7 @@ export default function ReimaginedRecruiterExperience({
   const [teamSearch, setTeamSearch] = useState('');
   const [activeNotifications, setActiveNotifications] = useState<AppNotification[]>([]);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
-  const [leaves, setLeaves] = useState<Awaited<ReturnType<typeof getLeaves>>>([]);
+  const [leaves, setLeaves] = useState<LeaveRecord[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -110,8 +110,8 @@ export default function ReimaginedRecruiterExperience({
     }
 
     async function loadLeavesList() {
-      const data = await getLeaves();
-      if (!cancelled) setLeaves(data.filter((entry) => entry.client_name === user.clientName));
+      const data = await getLeavesPage({ clientName: user.clientName, page: 1, pageSize: 8 });
+      if (!cancelled) setLeaves(data.items);
     }
 
     void loadActive();

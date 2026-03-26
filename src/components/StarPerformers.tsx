@@ -39,7 +39,11 @@ const RANKS = [
     },
 ];
 
-export default function StarPerformers() {
+interface Props {
+    clientName?: string;
+}
+
+export default function StarPerformers({ clientName }: Props) {
     const [stars, setStars] = useState<WeeklyBreakStats[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -48,7 +52,7 @@ export default function StarPerformers() {
     async function load(showSpinner = false) {
         if (showSpinner) setRefreshing(true);
         try {
-            const data = await getWeeklyBreakStats();
+            const data = await getWeeklyBreakStats(clientName, showSpinner);
             // Aura Maxxers criteria:
             // 1. WFO only
             // 2. Logged in every elapsed weekday (daysChecked === expectedDays)
@@ -76,7 +80,11 @@ export default function StarPerformers() {
         }
     }
 
-    useEffect(() => { load(); }, []);
+    useEffect(() => {
+        load();
+        const id = window.setInterval(() => { void load(); }, 5 * 60 * 1000);
+        return () => window.clearInterval(id);
+    }, [clientName]);
 
     return (
         <div className="flex flex-col gap-3">

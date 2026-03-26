@@ -1,10 +1,17 @@
 import { supabase, UserRow, LogRow, describeSupabaseError } from './supabase';
 import { User, TimeLog, AppStatus, LeaveRecord, AppNotification } from '@/types';
-import { getTodayKey, generateUUID, getPastDaysZoned, getElapsedWeekdays, checkViolations, toZonedMinutes, toZonedTimestamp, getRealNow, parseShiftMins, getRelativeDate, COMBINED_LIMIT_MS, BREAK_LIMIT_MS, BRB_LIMIT_MS } from './timeUtils';
+import { getTodayKey, generateUUID, getPastDaysZoned, getElapsedWeekdays, checkViolations, toZonedMinutes, toZonedTimestamp, getRealNow, parseShiftMins } from './timeUtils';
 
 export interface ClientRow {
     id: string;
     name: string;
+}
+
+export interface PaginatedLeaveResult {
+    items: LeaveRecord[];
+    total: number;
+    page: number;
+    pageSize: number;
 }
 
 function assertSupabaseOk(error: unknown, action: string): void {
@@ -12,22 +19,135 @@ function assertSupabaseOk(error: unknown, action: string): void {
     throw new Error(`${action}: ${describeSupabaseError(error)}`);
 }
 
+const USER_SELECT = 'id,name,client_name,is_master,is_approved,shift_start,shift_end,timezone,work_mode';
+const LOG_SELECT = 'id,user_id,event_type,timestamp,date,added_by';
+const CLIENT_SELECT = 'id,name';
+const CLIENTS_CACHE_TTL_MS = 5 * 60 * 1000;
+const LEAVES_CACHE_TTL_MS = 60 * 1000;
+const STATS_CACHE_TTL_MS = 60 * 1000;
+
+interface CacheEntry<T> {
+    data: T;
+    fetchedAt: number;
+}
+
+const queryCache = new Map<string, CacheEntry<unknown>>();
+const inFlightQueries = new Map<string, Promise<unknown>>();
+
+async function withCachedQuery<T>(key: string, ttlMs: number, load: () => Promise<T>, force = false): Promise<T> {
+    if (!force) {
+        const cached = queryCache.get(key) as CacheEntry<T> | undefined;
+        if (cached && (Date.now() - cached.fetchedAt) < ttlMs) return cached.data;
+
+        const inFlight = inFlightQueries.get(key) as Promise<T> | undefined;
+        if (inFlight) return inFlight;
+    }
+
+    const promise = load()
+        .then((data) => {
+            queryCache.set(key, { data, fetchedAt: Date.now() });
+            return data;
+        })
+        .finally(() => {
+            inFlightQueries.delete(key);
+        });
+
+    inFlightQueries.set(key, promise as Promise<unknown>);
+    return promise;
+}
+
+function invalidateCache(prefix: string): void {
+    for (const key of Array.from(queryCache.keys())) {
+        if (key.startsWith(prefix)) queryCache.delete(key);
+    }
+    for (const key of Array.from(inFlightQueries.keys())) {
+        if (key.startsWith(prefix)) inFlightQueries.delete(key);
+    }
+}
+
+function clearClientCache(): void {
+    invalidateCache('clients');
+}
+
+function clearLeaveCache(): void {
+    invalidateCache('leaves:');
+}
+
+function clearStatsCache(): void {
+    invalidateCache('weekly-stats:');
+    invalidateCache('seven-day-break-stats:');
+    invalidateCache('status:');
+}
+
+function getLogBucketKey(userId: string, date: string): string {
+    return `${userId}|${date}`;
+}
+
+function buildLogsByUserDate(rows: LogRow[]): Map<string, TimeLog[]> {
+    const logsByUserDate = new Map<string, TimeLog[]>();
+
+    for (const row of rows) {
+        const key = getLogBucketKey(row.user_id, row.date);
+        const bucket = logsByUserDate.get(key);
+        const log = rowToLog(row);
+        if (bucket) bucket.push(log);
+        else logsByUserDate.set(key, [log]);
+    }
+
+    return logsByUserDate;
+}
+
+function getLogsForUserDate(logsByUserDate: Map<string, TimeLog[]>, userId: string, date: string): TimeLog[] {
+    return logsByUserDate.get(getLogBucketKey(userId, date)) ?? [];
+}
+
+function withSyntheticAutoLogout(logs: TimeLog[], user: User, date: string): TimeLog[] {
+    if (!logs.length) return logs;
+
+    const stats = deriveStatus(logs);
+    if (stats.status === 'idle' || stats.status === 'punched_out' || stats.status === 'on_leave') {
+        return logs;
+    }
+
+    const userNowMins = toZonedMinutes(getRealNow(), user.timezone);
+    const shiftEndMins = parseShiftMins(user.shiftEnd);
+    if (userNowMins <= shiftEndMins + 90) return logs;
+
+    const penaltyTimestamp = toZonedTimestamp(date, user.shiftEnd, user.timezone) - (10 * 60000);
+    return [
+        ...logs,
+        {
+            id: `synthetic-auto-logout-${user.id}-${date}`,
+            eventType: 'auto_logout' as TimeLog['eventType'],
+            timestamp: penaltyTimestamp,
+            date,
+            addedBy: 'system',
+        }
+    ].sort((a, b) => a.timestamp - b.timestamp);
+}
+
 // ─── Clients ──────────────────────────────────────────────────────────────────
-export async function getClients(): Promise<ClientRow[]> {
-    const { data, error } = await supabase.from('clients').select('*').order('name');
-    assertSupabaseOk(error, 'Failed to load clients');
-    return data ?? [];
+export async function getClients(force = false): Promise<ClientRow[]> {
+    return withCachedQuery('clients', CLIENTS_CACHE_TTL_MS, async () => {
+        const { data, error } = await supabase.from('clients').select(CLIENT_SELECT).order('name');
+        assertSupabaseOk(error, 'Failed to load clients');
+        return data ?? [];
+    }, force);
 }
 
 export async function addClient(name: string): Promise<ClientRow> {
     const { data, error } = await supabase.from('clients').insert({ name: name.trim() }).select().single();
     if (error) throw error;
+    clearClientCache();
     return data as ClientRow;
 }
 
 export async function deleteClient(id: string): Promise<void> {
     const { error } = await supabase.from('clients').delete().eq('id', id);
     assertSupabaseOk(error, 'Failed to delete client');
+    clearClientCache();
+    clearLeaveCache();
+    clearStatsCache();
 }
 
 export async function renameClient(id: string, oldName: string, newName: string): Promise<void> {
@@ -45,29 +165,86 @@ export async function renameClient(id: string, oldName: string, newName: string)
     // 3. Cascade rename across leaves
     const { error: lErr } = await supabase.from('leaves').update({ client_name: freshName }).eq('client_name', oldName);
     if (lErr) console.warn('Failed to cascade rename to leaves:', lErr);
+
+    clearClientCache();
+    clearLeaveCache();
+    clearUserCache();
+    clearStatsCache();
 }
 
 // ─── Leaves ───────────────────────────────────────────────────────────────────
-export async function getLeaves(): Promise<LeaveRecord[]> {
-    const { data, error } = await supabase.from('leaves').select('*').order('date', { ascending: false });
-    assertSupabaseOk(error, 'Failed to load leaves');
-    return data ?? [];
+export async function getLeaves(clientName?: string, force = false): Promise<LeaveRecord[]> {
+    return withCachedQuery(`leaves:${clientName ?? '*'}`, LEAVES_CACHE_TTL_MS, async () => {
+        let query = supabase
+            .from('leaves')
+            .select('*')
+            .order('date', { ascending: false })
+            .order('created_at', { ascending: false });
+        if (clientName) query = query.eq('client_name', clientName);
+        const { data, error } = await query;
+        assertSupabaseOk(error, 'Failed to load leaves');
+        return data ?? [];
+    }, force);
+}
+
+export async function getLeavesPage(options?: {
+    clientName?: string;
+    page?: number;
+    pageSize?: number;
+    force?: boolean;
+}): Promise<PaginatedLeaveResult> {
+    const {
+        clientName,
+        page = 1,
+        pageSize = 25,
+        force = false,
+    } = options ?? {};
+
+    const safePage = Math.max(1, Math.floor(page));
+    const safePageSize = Math.min(100, Math.max(1, Math.floor(pageSize)));
+    const from = (safePage - 1) * safePageSize;
+    const to = from + safePageSize - 1;
+    const cacheKey = `leaves:page:${clientName ?? '*'}:${safePage}:${safePageSize}`;
+
+    return withCachedQuery(cacheKey, LEAVES_CACHE_TTL_MS, async () => {
+        let query = supabase
+            .from('leaves')
+            .select('*', { count: 'exact' })
+            .order('date', { ascending: false })
+            .order('created_at', { ascending: false })
+            .range(from, to);
+
+        if (clientName) query = query.eq('client_name', clientName);
+
+        const { data, error, count } = await query;
+        assertSupabaseOk(error, 'Failed to load leave records');
+
+        return {
+            items: (data ?? []) as LeaveRecord[],
+            total: count ?? 0,
+            page: safePage,
+            pageSize: safePageSize,
+        };
+    }, force);
 }
 
 export async function addLeave(leave: Omit<LeaveRecord, 'id' | 'created_at'>): Promise<LeaveRecord> {
     const { data, error } = await supabase.from('leaves').insert([leave]).select().single();
     if (error) throw error;
+    clearLeaveCache();
     return data as LeaveRecord;
 }
 
 export async function deleteLeave(id: string): Promise<void> {
     const { error } = await supabase.from('leaves').delete().eq('id', id);
     if (error) throw error;
+    clearLeaveCache();
 }
 
 export async function updateLeave(id: string, updates: Partial<LeaveRecord>): Promise<LeaveRecord> {
     const { data, error } = await supabase.from('leaves').update(updates).eq('id', id).select().single();
     if (error) throw error;
+    clearLeaveCache();
     return data as LeaveRecord;
 }
 
@@ -219,7 +396,7 @@ function rowToUser(row: UserRow): User {
 // ─── User operations ──────────────────────────────────────────────────────────
 export async function getUserByNameAndClient(name: string, clientName: string): Promise<User | null> {
     const { data, error } = await supabase
-        .from('users').select('*')
+        .from('users').select(USER_SELECT)
         .ilike('name', name.trim())
         .ilike('client_name', clientName.trim())
         .maybeSingle();
@@ -244,6 +421,7 @@ export async function upsertUser(user: User): Promise<User> {
         .select().single();
     if (error) throw error;
     clearUserCache();
+    clearStatsCache();
     return rowToUser(data as UserRow);
 }
 
@@ -257,7 +435,7 @@ export async function getAllUsers(): Promise<User[]> {
         return cachedUsers;
     }
 
-    const { data, error } = await supabase.from('users').select('*').eq('is_master', false).order('client_name').order('name');
+    const { data, error } = await supabase.from('users').select(USER_SELECT).eq('is_master', false).order('client_name').order('name');
     assertSupabaseOk(error, 'Failed to load users');
     cachedUsers = (data ?? []).map(r => rowToUser(r as UserRow));
     lastUserFetch = now;
@@ -270,7 +448,7 @@ export function clearUserCache() {
 }
 
 export async function getPendingUsers(): Promise<User[]> {
-    const { data, error } = await supabase.from('users').select('*').eq('is_approved', false).eq('is_master', false);
+    const { data, error } = await supabase.from('users').select(USER_SELECT).eq('is_approved', false).eq('is_master', false);
     assertSupabaseOk(error, 'Failed to load pending users');
     return (data ?? []).map(r => rowToUser(r as UserRow));
 }
@@ -279,6 +457,7 @@ export async function approveUser(userId: string): Promise<void> {
     const { error } = await supabase.from('users').update({ is_approved: true }).eq('id', userId);
     assertSupabaseOk(error, 'Failed to approve user');
     clearUserCache();
+    clearStatsCache();
 }
 
 export async function deleteUser(userId: string): Promise<void> {
@@ -286,6 +465,7 @@ export async function deleteUser(userId: string): Promise<void> {
     const { error } = await supabase.from('users').delete().eq('id', userId);
     assertSupabaseOk(error, 'Failed to delete user');
     clearUserCache();
+    clearStatsCache();
 }
 
 export async function updateUser(userId: string, updates: {
@@ -304,6 +484,7 @@ export async function updateUser(userId: string, updates: {
     const { data, error } = await supabase.from('users').update(payload).eq('id', userId).select().single();
     if (error) throw error;
     clearUserCache();
+    clearStatsCache();
     return rowToUser(data as UserRow);
 }
 
@@ -319,7 +500,7 @@ function rowToLog(row: LogRow): TimeLog {
 export async function getLogs(userId: string, date?: string): Promise<TimeLog[]> {
     const d = date ?? getTodayKey();
     const { data, error } = await supabase
-        .from('time_logs').select('*')
+        .from('time_logs').select(LOG_SELECT)
         .eq('user_id', userId).eq('date', d)
         .order('timestamp', { ascending: true });
     assertSupabaseOk(error, 'Failed to load time logs');
@@ -332,6 +513,7 @@ export async function insertLog(userId: string, log: TimeLog): Promise<void> {
         timestamp: log.timestamp, date: log.date, added_by: log.addedBy ?? null,
     });
     if (error) throw error;
+    clearStatsCache();
 }
 
 export async function getLogsForDate(userId: string, date: string): Promise<TimeLog[]> {
@@ -348,7 +530,7 @@ export async function getLogsBatch(userIds: string[], dates: string[]): Promise<
 
     while (hasMore) {
         const { data, error } = await supabase
-            .from('time_logs').select('*')
+            .from('time_logs').select(LOG_SELECT)
             .in('user_id', userIds)
             .in('date', dates)
             .order('timestamp', { ascending: true })
@@ -374,6 +556,7 @@ export async function getLogsBatch(userIds: string[], dates: string[]): Promise<
 export async function deleteTimeLog(id: string): Promise<void> {
     const { error } = await supabase.from('time_logs').delete().eq('id', id);
     if (error) throw error;
+    clearStatsCache();
 }
 
 export async function updateTimeLog(id: string, updates: Partial<TimeLog>): Promise<void> {
@@ -384,11 +567,13 @@ export async function updateTimeLog(id: string, updates: Partial<TimeLog>): Prom
     
     const { error } = await supabase.from('time_logs').update(payload).eq('id', id);
     if (error) throw error;
+    clearStatsCache();
 }
 
 export async function deleteUserLogsForToday(userId: string): Promise<void> {
     const { error } = await supabase.from('time_logs').delete().eq('user_id', userId).eq('date', getTodayKey());
     if (error) throw error;
+    clearStatsCache();
 }
 
 export async function getLogDatesForMonth(userId: string, yearMonth: string): Promise<string[]> {
@@ -457,80 +642,45 @@ function deriveStatus(logs: TimeLog[]): Omit<UserStatusRecord, 'user'> {
     return { status, punchIn, punchOut, breakStart, brbStart, workStart, workedMs, breakCount, brbCount };
 }
 
-export async function getAllUsersStatus(clientName?: string): Promise<UserStatusRecord[]> {
-    const today = getTodayKey();
-    let usersQuery = supabase.from('users').select('*').eq('is_master', false).eq('is_approved', true);
-    if (clientName) usersQuery = usersQuery.eq('client_name', clientName);
-    const { data: usersData, error: usersError } = await usersQuery;
-    assertSupabaseOk(usersError, 'Failed to load approved users');
-    if (!usersData?.length) return [];
-    const userIds = usersData.map((u: UserRow) => u.id);
-    const penaltyLogsToInsert: any[] = [];
-    const yesterday = getRelativeDate(today, -1);
-    const checkDates = [yesterday, today]; // Check yesterday and today for lingering sessions
+export async function getAllUsersStatus(clientName?: string, force = false): Promise<UserStatusRecord[]> {
+    return withCachedQuery(`status:${clientName ?? '*'}`, 2000, async () => {
+        const today = getTodayKey();
+        let usersQuery = supabase
+            .from('users')
+            .select(USER_SELECT)
+            .eq('is_master', false)
+            .eq('is_approved', true);
+        if (clientName) usersQuery = usersQuery.eq('client_name', clientName);
 
-    const { data: logsData, error: logsError } = await supabase
-        .from('time_logs')
-        .select('*')
-        .in('user_id', userIds)
-        .in('date', checkDates)
-        .order('timestamp', { ascending: true });
-    assertSupabaseOk(logsError, 'Failed to load status logs');
-    
-    const logsByUser: Record<string, Record<string, TimeLog[]>> = {};
-    userIds.forEach((id: string) => { logsByUser[id] = { [yesterday]: [], [today]: [] }; });
-    (logsData ?? []).forEach((r: LogRow) => {
-        if (!logsByUser[r.user_id]) return;
-        if (!logsByUser[r.user_id][r.date]) logsByUser[r.user_id][r.date] = [];
-        logsByUser[r.user_id][r.date].push(rowToLog(r));
-    });
+        const { data: usersData, error: usersError } = await usersQuery.order('client_name').order('name');
+        assertSupabaseOk(usersError, 'Failed to load approved users');
+        if (!usersData?.length) return [];
 
-    usersData.forEach((row: UserRow) => {
-        const user = rowToUser(row);
-        const shiftEndMins = parseShiftMins(user.shiftEnd);
-        const userNowMins = toZonedMinutes(getRealNow(), user.timezone);
+        const userIds = usersData.map((u: UserRow) => u.id);
+        const { data: logsData, error: logsError } = await supabase
+            .from('time_logs')
+            .select(LOG_SELECT)
+            .in('user_id', userIds)
+            .eq('date', today)
+            .order('timestamp', { ascending: true });
+        assertSupabaseOk(logsError, 'Failed to load status logs');
 
-        for (const date of checkDates) {
-            const logs = logsByUser[user.id][date] || [];
-            if (!logs.length) continue;
+        const logsByUserDate = buildLogsByUserDate((logsData ?? []) as LogRow[]);
 
-            const currentStats = deriveStatus(logs);
-            const isToday = date === today;
-            
-            if (currentStats.status !== 'idle' && currentStats.status !== 'punched_out' && currentStats.status !== 'on_leave') {
-                // For past dates, if shift is over, auto-logout immediately at shift end
-                // For today, if 90 mins past shift end, auto-logout
-                const shouldLogout = !isToday || (userNowMins > shiftEndMins + 90);
-                
-                if (shouldLogout) {
-                    // Standardized penalty: 10 minutes before their scheduled shift end
-                    const penaltyTimestamp = toZonedTimestamp(date, user.shiftEnd, user.timezone) - (10 * 60000);
-                    
-                    const newLog = {
-                        id: generateUUID(),
-                        user_id: user.id,
-                        event_type: 'auto_logout',
-                        timestamp: penaltyTimestamp,
-                        date: date,
-                        added_by: 'system'
-                    };
-                    penaltyLogsToInsert.push(newLog);
-                    
-                    // Optimistically mutate for today's response if it happened today
-                    if (isToday) logsByUser[user.id][today].push(rowToLog(newLog as any));
-                }
-            }
-        }
-    });
+        return usersData.map((row: UserRow) => {
+            const user = rowToUser(row);
+            const todaysLogs = withSyntheticAutoLogout(
+                getLogsForUserDate(logsByUserDate, user.id, today),
+                user,
+                today
+            );
 
-    if (penaltyLogsToInsert.length > 0) {
-        supabase.from('time_logs').insert(penaltyLogsToInsert).then();
-    }
-
-    return usersData.map((row: UserRow) => ({ 
-        user: rowToUser(row), 
-        ...deriveStatus(logsByUser[row.id][today] ?? []) 
-    }));
+            return {
+                user,
+                ...deriveStatus(todaysLogs),
+            };
+        });
+    }, force);
 }
 
 // ─── 7-day break/BRB aggregation (for Violators Panel) ───────────────────────
@@ -550,74 +700,99 @@ export interface UserBreakStats {
     brbCounts: number[];
 }
 
-export async function get7DayBreakStats(): Promise<UserBreakStats[]> {
-    // Last 5 completed days (not including today)
-    const days = getPastDaysZoned(5, true);
+export async function get7DayBreakStats(clientName?: string, force = false): Promise<UserBreakStats[]> {
+    return withCachedQuery(`seven-day-break-stats:${clientName ?? '*'}`, STATS_CACHE_TTL_MS, async () => {
+        const days = getPastDaysZoned(5, true);
+        let usersQuery = supabase
+            .from('users')
+            .select(USER_SELECT)
+            .eq('is_master', false)
+            .eq('is_approved', true);
+        if (clientName) usersQuery = usersQuery.eq('client_name', clientName);
 
+        const { data: usersData, error: usersError } = await usersQuery.order('client_name').order('name');
+        assertSupabaseOk(usersError, 'Failed to load users for break stats');
+        if (!usersData?.length) return [];
 
-    const { data: usersData, error: usersError } = await supabase.from('users').select('*').eq('is_master', false).eq('is_approved', true);
-    assertSupabaseOk(usersError, 'Failed to load users for break stats');
-    if (!usersData?.length) return [];
+        const userIds = usersData.map((u: UserRow) => u.id);
+        const { data: logsData, error: logsError } = await supabase
+            .from('time_logs')
+            .select(LOG_SELECT)
+            .in('user_id', userIds)
+            .in('date', days)
+            .order('timestamp', { ascending: true });
+        assertSupabaseOk(logsError, 'Failed to load break stats logs');
 
-    const userIds = usersData.map((u: UserRow) => u.id);
-    const { data: logsData, error: logsError } = await supabase
-        .from('time_logs').select('*')
-        .in('user_id', userIds)
-        .in('date', days)
-        .order('timestamp', { ascending: true });
-    assertSupabaseOk(logsError, 'Failed to load break stats logs');
+        const logsByUserDate = buildLogsByUserDate((logsData ?? []) as LogRow[]);
+        const combinedLimit = 85 * 60 * 1000;
 
-    const BREAK_LIMIT = 75 * 60 * 1000;
-    const BRB_LIMIT = 10 * 60 * 1000;
-    const COMBINED_LIMIT = 85 * 60 * 1000; // 1h 25m
+        return usersData.map((row: UserRow) => {
+            const user = rowToUser(row);
+            let totalBreakMs = 0;
+            let totalBrbMs = 0;
+            let breakViolDays = 0;
+            let brbViolDays = 0;
+            let combinedViolDays = 0;
+            let daysChecked = 0;
+            let lateInDays = 0;
+            let earlyOutDays = 0;
+            const breakCounts: number[] = [];
+            const brbCounts: number[] = [];
 
-    return usersData.map((row: UserRow) => {
-        const user = rowToUser(row);
-        let totalBreakMs = 0, totalBrbMs = 0, breakViolDays = 0, brbViolDays = 0, combinedViolDays = 0, daysChecked = 0;
-        let lateInDays = 0, earlyOutDays = 0;
-        const breakCounts: number[] = [];
-        const brbCounts: number[] = [];
+            for (const day of days) {
+                const dayLogs = getLogsForUserDate(logsByUserDate, row.id, day);
+                if (!dayLogs.length) continue;
+                daysChecked++;
 
-        for (const day of days) {
-            const dayLogs = (logsData ?? []).filter((l: LogRow) => l.user_id === row.id && l.date === day).map(rowToLog);
-            if (!dayLogs.length) continue;
-            daysChecked++;
+                let breakStart: number | null = null;
+                let brbStart: number | null = null;
+                let dayPunchIn: number | undefined;
+                let dayPunchOut: number | undefined;
+                let dayBreakMs = 0;
+                let dayBrbMs = 0;
+                let dayBreakCount = 0;
+                let dayBrbCount = 0;
 
-            // Compute break/BRB/punch for this day
-            let breakStart: number | null = null, brbStart: number | null = null;
-            let dayPunchIn: number | undefined, dayPunchOut: number | undefined;
-            let dayBreakMs = 0, dayBrbMs = 0, dayBreakCount = 0, dayBrbCount = 0;
+                for (const log of dayLogs) {
+                    if (log.eventType === 'punch_in' && !dayPunchIn) dayPunchIn = log.timestamp;
+                    if (log.eventType === 'punch_out') dayPunchOut = log.timestamp;
+                    if (log.eventType === 'break_start') { breakStart = log.timestamp; dayBreakCount++; }
+                    if (log.eventType === 'break_end' && breakStart) { dayBreakMs += (log.timestamp - breakStart); breakStart = null; }
+                    if (log.eventType === 'brb_start') { brbStart = log.timestamp; dayBrbCount++; }
+                    if (log.eventType === 'brb_end' && brbStart) { dayBrbMs += (log.timestamp - brbStart); brbStart = null; }
+                }
 
-            for (const log of dayLogs) {
-                if (log.eventType === 'punch_in' && !dayPunchIn) dayPunchIn = log.timestamp;
-                if (log.eventType === 'punch_out') dayPunchOut = log.timestamp;
-                if (log.eventType === 'break_start') { breakStart = log.timestamp; dayBreakCount++; }
-                if (log.eventType === 'break_end' && breakStart) { dayBreakMs += (log.timestamp - breakStart); breakStart = null; }
-                if (log.eventType === 'brb_start') { brbStart = log.timestamp; dayBrbCount++; }
-                if (log.eventType === 'brb_end' && brbStart) { dayBrbMs += (log.timestamp - brbStart); brbStart = null; }
+                const violations = checkViolations(dayBreakMs, dayBrbMs, dayPunchIn, dayPunchOut, user.shiftStart, user.shiftEnd, user.timezone);
+
+                totalBreakMs += dayBreakMs;
+                totalBrbMs += dayBrbMs;
+                if (violations.breakViol) breakViolDays++;
+                if (violations.brbViol) brbViolDays++;
+                if (violations.lateIn) lateInDays++;
+                if (violations.earlyOut) earlyOutDays++;
+                if ((dayBreakMs + dayBrbMs) > combinedLimit) combinedViolDays++;
+
+                breakCounts.push(dayBreakCount);
+                brbCounts.push(dayBrbCount);
             }
 
-            const v = checkViolations(dayBreakMs, dayBrbMs, dayPunchIn, dayPunchOut, user.shiftStart, user.shiftEnd, user.timezone);
-
-            totalBreakMs += dayBreakMs;
-            totalBrbMs += dayBrbMs;
-            if (v.breakViol) breakViolDays++;
-            if (v.brbViol) brbViolDays++;
-            if (v.lateIn) lateInDays++;
-            if (v.earlyOut) earlyOutDays++;
-            if ((dayBreakMs + dayBrbMs) > COMBINED_LIMIT) combinedViolDays++;
-
-            breakCounts.push(dayBreakCount);
-            brbCounts.push(dayBrbCount);
-        }
-
-        return {
-            user, totalBreakMs, totalBrbMs, breakViolDays, brbViolDays, combinedViolDays,
-            lateInDays, earlyOutDays, daysChecked, breakCounts, brbCounts,
-            avgBreakMs: daysChecked > 0 ? totalBreakMs / daysChecked : 0,
-            avgBrbMs: daysChecked > 0 ? totalBrbMs / daysChecked : 0,
-        };
-    });
+            return {
+                user,
+                totalBreakMs,
+                totalBrbMs,
+                breakViolDays,
+                brbViolDays,
+                combinedViolDays,
+                lateInDays,
+                earlyOutDays,
+                daysChecked,
+                breakCounts,
+                brbCounts,
+                avgBreakMs: daysChecked > 0 ? totalBreakMs / daysChecked : 0,
+                avgBrbMs: daysChecked > 0 ? totalBrbMs / daysChecked : 0,
+            };
+        });
+    }, force);
 }
 
 // ─── Weekly Break Stats (for Aura Maxxers & Lobby Campers) ───────────────────
@@ -637,67 +812,95 @@ export interface WeeklyBreakStats {
     isLastWeek: boolean;     // true when showing last week's data (on Mondays)
 }
 
-export async function getWeeklyBreakStats(): Promise<WeeklyBreakStats[]> {
-    const { days, isLastWeek } = getElapsedWeekdays();
-    const expectedDays = days.length;
+export async function getWeeklyBreakStats(clientName?: string, force = false): Promise<WeeklyBreakStats[]> {
+    return withCachedQuery(`weekly-stats:${clientName ?? '*'}`, STATS_CACHE_TTL_MS, async () => {
+        const { days, isLastWeek } = getElapsedWeekdays();
+        const expectedDays = days.length;
+        if (expectedDays === 0) return [];
 
-    if (expectedDays === 0) return [];
+        let usersQuery = supabase
+            .from('users')
+            .select(USER_SELECT)
+            .eq('is_master', false)
+            .eq('is_approved', true);
+        if (clientName) usersQuery = usersQuery.eq('client_name', clientName);
 
-    const { data: usersData, error: usersError } = await supabase.from('users').select('*').eq('is_master', false).eq('is_approved', true);
-    assertSupabaseOk(usersError, 'Failed to load users for weekly stats');
-    if (!usersData?.length) return [];
+        const { data: usersData, error: usersError } = await usersQuery.order('client_name').order('name');
+        assertSupabaseOk(usersError, 'Failed to load users for weekly stats');
+        if (!usersData?.length) return [];
 
-    const userIds = usersData.map((u: UserRow) => u.id);
-    const { data: logsData, error: logsError } = await supabase
-        .from('time_logs').select('*')
-        .in('user_id', userIds)
-        .in('date', days)
-        .order('timestamp', { ascending: true });
-    assertSupabaseOk(logsError, 'Failed to load weekly stats logs');
+        const userIds = usersData.map((u: UserRow) => u.id);
+        const { data: logsData, error: logsError } = await supabase
+            .from('time_logs')
+            .select(LOG_SELECT)
+            .in('user_id', userIds)
+            .in('date', days)
+            .order('timestamp', { ascending: true });
+        assertSupabaseOk(logsError, 'Failed to load weekly stats logs');
 
-    const COMBINED_LIMIT = 85 * 60 * 1000;
+        const logsByUserDate = buildLogsByUserDate((logsData ?? []) as LogRow[]);
+        const combinedLimit = 85 * 60 * 1000;
 
-    return usersData.map((row: UserRow) => {
-        const user = rowToUser(row);
-        let totalBreakMs = 0, totalBrbMs = 0, breakViolDays = 0, brbViolDays = 0, combinedViolDays = 0, daysChecked = 0;
-        let lateInDays = 0, earlyOutDays = 0;
+        return usersData.map((row: UserRow) => {
+            const user = rowToUser(row);
+            let totalBreakMs = 0;
+            let totalBrbMs = 0;
+            let breakViolDays = 0;
+            let brbViolDays = 0;
+            let combinedViolDays = 0;
+            let daysChecked = 0;
+            let lateInDays = 0;
+            let earlyOutDays = 0;
 
-        for (const day of days) {
-            const dayLogs = (logsData ?? []).filter((l: LogRow) => l.user_id === row.id && l.date === day).map(rowToLog);
-            if (!dayLogs.length) continue;
-            daysChecked++;
+            for (const day of days) {
+                const dayLogs = getLogsForUserDate(logsByUserDate, row.id, day);
+                if (!dayLogs.length) continue;
+                daysChecked++;
 
-            let breakStart: number | null = null, brbStart: number | null = null;
-            let dayPunchIn: number | undefined, dayPunchOut: number | undefined;
-            let dayBreakMs = 0, dayBrbMs = 0;
+                let breakStart: number | null = null;
+                let brbStart: number | null = null;
+                let dayPunchIn: number | undefined;
+                let dayPunchOut: number | undefined;
+                let dayBreakMs = 0;
+                let dayBrbMs = 0;
 
-            for (const log of dayLogs) {
-                if (log.eventType === 'punch_in' && !dayPunchIn) dayPunchIn = log.timestamp;
-                if (log.eventType === 'punch_out') dayPunchOut = log.timestamp;
-                if (log.eventType === 'break_start') { breakStart = log.timestamp; }
-                if (log.eventType === 'break_end' && breakStart) { dayBreakMs += (log.timestamp - breakStart); breakStart = null; }
-                if (log.eventType === 'brb_start') { brbStart = log.timestamp; }
-                if (log.eventType === 'brb_end' && brbStart) { dayBrbMs += (log.timestamp - brbStart); brbStart = null; }
+                for (const log of dayLogs) {
+                    if (log.eventType === 'punch_in' && !dayPunchIn) dayPunchIn = log.timestamp;
+                    if (log.eventType === 'punch_out') dayPunchOut = log.timestamp;
+                    if (log.eventType === 'break_start') breakStart = log.timestamp;
+                    if (log.eventType === 'break_end' && breakStart) { dayBreakMs += (log.timestamp - breakStart); breakStart = null; }
+                    if (log.eventType === 'brb_start') brbStart = log.timestamp;
+                    if (log.eventType === 'brb_end' && brbStart) { dayBrbMs += (log.timestamp - brbStart); brbStart = null; }
+                }
+
+                const violations = checkViolations(dayBreakMs, dayBrbMs, dayPunchIn, dayPunchOut, user.shiftStart, user.shiftEnd, user.timezone);
+
+                totalBreakMs += dayBreakMs;
+                totalBrbMs += dayBrbMs;
+                if (violations.breakViol) breakViolDays++;
+                if (violations.brbViol) brbViolDays++;
+                if (violations.lateIn) lateInDays++;
+                if (violations.earlyOut) earlyOutDays++;
+                if ((dayBreakMs + dayBrbMs) > combinedLimit) combinedViolDays++;
             }
 
-            const v = checkViolations(dayBreakMs, dayBrbMs, dayPunchIn, dayPunchOut, user.shiftStart, user.shiftEnd, user.timezone);
-
-            totalBreakMs += dayBreakMs;
-            totalBrbMs += dayBrbMs;
-            if (v.breakViol) breakViolDays++;
-            if (v.brbViol) brbViolDays++;
-            if (v.lateIn) lateInDays++;
-            if (v.earlyOut) earlyOutDays++;
-            if ((dayBreakMs + dayBrbMs) > COMBINED_LIMIT) combinedViolDays++;
-        }
-
-        return {
-            user, totalBreakMs, totalBrbMs, breakViolDays, brbViolDays, combinedViolDays,
-            lateInDays, earlyOutDays, daysChecked, expectedDays, isLastWeek,
-            avgBreakMs: daysChecked > 0 ? totalBreakMs / daysChecked : 0,
-            avgBrbMs: daysChecked > 0 ? totalBrbMs / daysChecked : 0,
-        };
-    });
+            return {
+                user,
+                totalBreakMs,
+                totalBrbMs,
+                breakViolDays,
+                brbViolDays,
+                combinedViolDays,
+                lateInDays,
+                earlyOutDays,
+                daysChecked,
+                expectedDays,
+                isLastWeek,
+                avgBreakMs: daysChecked > 0 ? totalBreakMs / daysChecked : 0,
+                avgBrbMs: daysChecked > 0 ? totalBrbMs / daysChecked : 0,
+            };
+        });
+    }, force);
 }
 
 // ─── Notifications ────────────────────────────────────────────────────────────

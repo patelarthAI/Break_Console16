@@ -99,7 +99,15 @@ export default function BrigadeAdminDashboard({ user, onLogout }: Props) {
   useEffect(() => {
     let cancelled = false;
 
+    if (activeView !== 'dashboard') {
+      setLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
     async function loadDashboard() {
+      setLoading(true);
       try {
         const [nextStatuses, nextLeaves, nextBreakStats] = await Promise.all([
           getAllUsersStatus(),
@@ -131,7 +139,7 @@ export default function BrigadeAdminDashboard({ user, onLogout }: Props) {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, []);
+  }, [activeView]);
 
   const todayLeaveKeys = new Set(
     leaveRecords

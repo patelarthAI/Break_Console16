@@ -3,6 +3,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
+  ChevronLeft,
+  ChevronRight,
   Check,
   Download,
   Pencil,
@@ -30,7 +32,7 @@ import {
   getAllUsers,
   getAllUsersStatus,
   getClients,
-  getLeaves,
+  getLeavesPage,
   getLogsBatch,
   getPendingUsers,
   renameClient,
@@ -75,6 +77,8 @@ interface Props {
   view: AdminView;
 }
 
+const LEAVE_PAGE_SIZE = 25;
+
 export default function ReimaginedAdminExperience({ user, view }: Props) {
   const { success, error: toastError, info } = useToast();
   const [statusRecords, setStatusRecords] = useState<UserStatusRecord[]>([]);
@@ -83,6 +87,9 @@ export default function ReimaginedAdminExperience({ user, view }: Props) {
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [leaves, setLeaves] = useState<LeaveRecord[]>([]);
+  const [leavePage, setLeavePage] = useState(1);
+  const [leaveTotal, setLeaveTotal] = useState(0);
+  const [leavesLoading, setLeavesLoading] = useState(false);
   const [reportRows, setReportRows] = useState<ReportRow[]>([]);
   const [reportRange, setReportRange] = useState<ReportRange>('today');
   const [reportsLoading, setReportsLoading] = useState(false);
@@ -173,9 +180,9 @@ export default function ReimaginedAdminExperience({ user, view }: Props) {
 
   useEffect(() => {
     if (view !== 'leave') return;
-    void loadLeavesList();
+    void loadLeavesList(leavePage);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view]);
+  }, [view, leavePage]);
 
   async function refreshPresence() {
     setStatusesLoading(true);
@@ -205,13 +212,17 @@ export default function ReimaginedAdminExperience({ user, view }: Props) {
     }
   }
 
-  async function loadLeavesList() {
+  async function loadLeavesList(page = leavePage, force = false) {
+    setLeavesLoading(true);
     try {
-      const data = await getLeaves();
-      setLeaves(data);
+      const data = await getLeavesPage({ page, pageSize: LEAVE_PAGE_SIZE, force });
+      setLeaves(data.items);
+      setLeaveTotal(data.total);
     } catch (error) {
       console.error('Failed to load leaves', error);
       toastError('Unable to load leave records', 'Please try again in a moment.');
+    } finally {
+      setLeavesLoading(false);
     }
   }
 
@@ -383,7 +394,8 @@ export default function ReimaginedAdminExperience({ user, view }: Props) {
         is_planned: leaveDraft.isPlanned,
       });
 
-      setLeaves((current) => [created, ...current].sort((left, right) => right.date.localeCompare(left.date)));
+      if (leavePage !== 1) setLeavePage(1);
+      else await loadLeavesList(1, true);
       setLeaveDraft((current) => ({ ...current, employeeName: '', reason: '', dayCount: '1' }));
       success('Leave added', `${created.employee_name} was added to the leave desk.`);
     } catch (error) {
@@ -431,7 +443,10 @@ export default function ReimaginedAdminExperience({ user, view }: Props) {
           break;
         case 'leave':
           await deleteLeave(confirmState.id);
-          setLeaves((current) => current.filter((entry) => entry.id !== confirmState.id));
+          const nextTotal = Math.max(0, leaveTotal - 1);
+          const nextPage = Math.min(leavePage, Math.max(1, Math.ceil(nextTotal / LEAVE_PAGE_SIZE)));
+          if (nextPage !== leavePage) setLeavePage(nextPage);
+          else await loadLeavesList(nextPage, true);
           success('Leave removed', `${confirmState.name} was removed from the leave desk.`);
           break;
       }
@@ -442,6 +457,13 @@ export default function ReimaginedAdminExperience({ user, view }: Props) {
       setConfirmState(null);
     }
   }
+
+  const leaveTotalPages = Math.max(1, Math.ceil(leaveTotal / LEAVE_PAGE_SIZE));
+  const leaveRangeStart = leaveTotal === 0 ? 0 : ((leavePage - 1) * LEAVE_PAGE_SIZE) + 1;
+  const leaveRangeEnd = leaveTotal === 0 ? 0 : leaveRangeStart + leaves.length - 1;
+  const plannedLeavesOnPage = leaves.filter((entry) => entry.is_planned).length;
+  const unplannedLeavesOnPage = leaves.filter((entry) => !entry.is_planned).length;
+  const pageClientCount = new Set(leaves.map((entry) => entry.client_name)).size;
 
   function handleExportReport() {
     if (!reportRows.length) return;
@@ -1053,15 +1075,51 @@ export default function ReimaginedAdminExperience({ user, view }: Props) {
             </Surface>
 
             <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-1">
-              <MetricTile label="Planned" value={String(leaves.filter((entry) => entry.is_planned).length)} detail="Scheduled absences" accent="text-sky-200" />
-              <MetricTile label="Unplanned" value={String(leaves.filter((entry) => !entry.is_planned).length)} detail="Unexpected absences" accent="text-[#f4c27a]" />
-              <MetricTile label="Impacted clients" value={String(new Set(leaves.map((entry) => entry.client_name)).size)} detail="Unique client groups" accent="text-white" />
+              <MetricTile label="Total entries" value={String(leaveTotal)} detail={`${leaveTotalPages} page${leaveTotalPages === 1 ? '' : 's'} available`} accent="text-white" />
+              <MetricTile label="Planned on page" value={String(plannedLeavesOnPage)} detail="Scheduled absences in this slice" accent="text-sky-200" />
+              <MetricTile label="Unplanned on page" value={String(unplannedLeavesOnPage)} detail={`${pageClientCount} client group${pageClientCount === 1 ? '' : 's'} shown`} accent="text-[#f4c27a]" />
             </div>
           </div>
 
           <Surface className="space-y-6">
             <SectionHeading kicker="Leave board" title="A cleaner history of planned and unplanned time away." body="Each card shows who is away, for which client, and the note behind the entry." />
-            {leaves.length === 0 ? (
+            {leaveTotal > 0 && (
+              <div className="flex flex-col gap-3 rounded-[1.4rem] border border-white/8 bg-white/[0.03] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-slate-300">
+                  Showing <span className="font-semibold text-white">{leaveRangeStart}-{leaveRangeEnd}</span> of <span className="font-semibold text-white">{leaveTotal}</span> leave records.
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setLeavePage((current) => Math.max(1, current - 1))}
+                    disabled={leavePage === 1 || leavesLoading}
+                    className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <ChevronLeft size={14} className="mr-1 inline-block" />
+                    Prev
+                  </button>
+                  <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    Page {leavePage} of {leaveTotalPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setLeavePage((current) => Math.min(leaveTotalPages, current + 1))}
+                    disabled={leavePage >= leaveTotalPages || leavesLoading}
+                    className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Next
+                    <ChevronRight size={14} className="ml-1 inline-block" />
+                  </button>
+                </div>
+              </div>
+            )}
+            {leavesLoading ? (
+              <div className="space-y-4">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <div key={index} className="competition-panel h-[10rem] animate-pulse rounded-[1.6rem] bg-white/5" />
+                ))}
+              </div>
+            ) : leaves.length === 0 ? (
               <EmptyState title="No leave entries yet." body="The leave board will populate as soon as planned or unplanned absences are recorded." />
             ) : (
               <div className="space-y-4">

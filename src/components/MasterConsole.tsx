@@ -465,6 +465,9 @@ export default function MasterConsole({ isMaster, currentUserId }: { isMaster: b
         setNotifications(prev => prev.filter(n => n.id !== id));
     }, []);
 
+    const statusRefreshTimerRef = useRef<number | null>(null);
+    const metaRefreshTimerRef = useRef<number | null>(null);
+
     // Close dropdown on outside click
     useEffect(() => {
         if (!clientFilterOpen) return;
@@ -502,9 +505,9 @@ export default function MasterConsole({ isMaster, currentUserId }: { isMaster: b
         return () => { ch.unsubscribe(); };
     }, []);
 
-    const loadCleanIds = useCallback(async () => {
+    const loadCleanIds = useCallback(async (force = false) => {
         try {
-            const stats = await get7DayBreakStats();
+            const stats = await get7DayBreakStats(undefined, force);
             const ids = new Set(
                 stats
                     .filter(s =>
@@ -521,40 +524,74 @@ export default function MasterConsole({ isMaster, currentUserId }: { isMaster: b
         }
     }, []);
 
-    const refresh = useCallback(async () => {
-        const [data, pData, clientsData, leavesData] = await Promise.all([
-            getAllUsersStatus(), getPendingUsers(), getClients(), getLeaves()
-        ]);
+    const refreshStatus = useCallback(async (force = false) => {
+        const data = await getAllUsersStatus(undefined, force);
         if (!mountedRef.current) return;
         setRecords(data);
         recordsRef.current = data;
-        setPending(pData);
-        setClients(clientsData);
-        setLeaves(leavesData);
         setLoading(false);
     }, []);
 
+    const refreshMeta = useCallback(async (force = false) => {
+        const [pData, clientsData, leavesData] = await Promise.all([
+            getPendingUsers(), getClients(force), getLeaves(undefined, force)
+        ]);
+        if (!mountedRef.current) return;
+        setPending(pData);
+        setClients(clientsData);
+        setLeaves(leavesData);
+    }, []);
+
+    const refresh = useCallback(async (force = false) => {
+        await Promise.all([refreshStatus(force), refreshMeta(force)]);
+        setLoading(false);
+    }, [refreshMeta, refreshStatus]);
+
+    const scheduleStatusRefresh = useCallback(() => {
+        if (statusRefreshTimerRef.current) return;
+        statusRefreshTimerRef.current = window.setTimeout(() => {
+            statusRefreshTimerRef.current = null;
+            void refreshStatus(true);
+        }, 400);
+    }, [refreshStatus]);
+
+    const scheduleMetaRefresh = useCallback(() => {
+        if (metaRefreshTimerRef.current) return;
+        metaRefreshTimerRef.current = window.setTimeout(() => {
+            metaRefreshTimerRef.current = null;
+            void refresh(true);
+        }, 600);
+    }, [refresh]);
+
     useEffect(() => {
         mountedRef.current = true;
-        refresh();
-        loadCleanIds();
+        void refresh(true);
+        void loadCleanIds(true);
+        const cleanIdInterval = window.setInterval(() => { void loadCleanIds(true); }, 10 * 60 * 1000);
         const channel = supabase
             .channel('mc_rt')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'time_logs' }, refresh)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, refresh)
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'time_logs' }, scheduleStatusRefresh)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, scheduleMetaRefresh)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'leaves' }, scheduleMetaRefresh)
             .subscribe();
-        return () => { mountedRef.current = false; channel.unsubscribe(); };
-    }, [refresh, loadCleanIds]);
+        return () => {
+            mountedRef.current = false;
+            window.clearInterval(cleanIdInterval);
+            if (statusRefreshTimerRef.current) window.clearTimeout(statusRefreshTimerRef.current);
+            if (metaRefreshTimerRef.current) window.clearTimeout(metaRefreshTimerRef.current);
+            channel.unsubscribe();
+        };
+    }, [refresh, loadCleanIds, scheduleMetaRefresh, scheduleStatusRefresh]);
 
     const doOverride = async (userId: string, action: 'break_end' | 'brb_end' | 'punch_out') => {
         await masterOverride(userId, action, currentUserId);
         setConfirmEnd(null);
-        await refresh();
+        await refresh(true);
     };
 
-    const doApprove = async (userId: string) => { await approveUser(userId); await refresh(); };
-    const doReject = async (userId: string) => { await deleteUser(userId); await refresh(); };
-    const doClearLogs = async (userId: string) => { await deleteUserLogsForToday(userId); setConfirmDelete(null); await refresh(); };
+    const doApprove = async (userId: string) => { await approveUser(userId); await refresh(true); };
+    const doReject = async (userId: string) => { await deleteUser(userId); await refresh(true); };
+    const doClearLogs = async (userId: string) => { await deleteUserLogsForToday(userId); setConfirmDelete(null); await refresh(true); };
 
     const todayStr = useMemo(() => dateStr(new Date()), []);
 
@@ -747,7 +784,7 @@ export default function MasterConsole({ isMaster, currentUserId }: { isMaster: b
                             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
                                 {filteredRecords.length} Match{filteredRecords.length !== 1 ? 'es' : ''}
                             </span>
-                            <button onClick={refresh} className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-white/5 transition-all">
+                            <button onClick={() => void refresh(true)} className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-white/5 transition-all">
                                 <RefreshCw size={14} />
                             </button>
                         </div>
