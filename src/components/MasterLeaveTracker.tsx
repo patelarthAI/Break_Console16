@@ -4,15 +4,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     FileSpreadsheet, Plus, Trash2, Download, CheckCircle,
     Edit2, X, ChevronDown, ChevronUp, CalendarCheck2,
-    TrendingDown, AlertCircle, Filter, Search, Users2, Briefcase, Calendar
+    TrendingDown, AlertCircle, Filter, Search, Users2, Briefcase, Calendar,
+    ChevronLeft, ChevronRight
 } from 'lucide-react';
 import {
     getAllUsers, getSmartLeaves, getClients, ClientRow,
-    addLeave, updateLeave, deleteLeave
+    addLeave, updateLeave, deleteLeave, getLeavesPage, SmartLeaveRecord
 } from '@/lib/store';
 import { User, LeaveRecord } from '@/types';
-import { supabase } from '@/lib/supabase';
-import { formatDuration, formatTime, dateStr, getPastDaysZoned, exportExcel } from '@/lib/timeUtils';
+import { formatDuration, dateStr, getPastDaysZoned, exportExcel } from '@/lib/timeUtils';
 import { useToast } from '@/components/Toast';
 import ConfirmDialog from '@/components/ConfirmDialog';
 
@@ -39,6 +39,7 @@ const LEAVE_TYPES = [
 ];
 const SYSTEM_LEAVE_TYPES = ['System: Absent', 'System: Half-Day', 'System: Declined'];
 const ALL_LEAVE_TYPES = [...LEAVE_TYPES, ...SYSTEM_LEAVE_TYPES];
+const LEAVE_PAGE_SIZE = 25;
 
 const LEAVE_META: Record<string, { dot: string; text: string; bg: string; border: string }> = {
     'Sick Leave': { dot: '#a78bfa', text: 'text-violet-400', bg: 'bg-violet-500/8', border: 'border-violet-500/20' },
@@ -103,6 +104,9 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
     // Data
     const [leaves, setLeaves] = useState<LeaveRecord[]>([]);
+    const [smartLeaves, setSmartLeaves] = useState<SmartLeaveRecord[]>([]);
+    const [totalLeaves, setTotalLeaves] = useState(0);
+    const [currentPage, setCurrentPage] = useState(1);
     const [clients, setClients] = useState<ClientRow[]>([]);
     const [allUsers, setAllUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
@@ -134,19 +138,64 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
     const [filterMonth, setFilterMonth] = useState('');
     const [sortConfig, setSortConfig] = useState<{ key: string, dir: 'asc' | 'desc' }>({ key: 'Date', dir: 'desc' });
 
-    useEffect(() => { loadData(); }, []);
+    useEffect(() => {
+        void loadMeta();
+    }, []);
 
-    async function loadData() {
-        setLoading(true);
+    useEffect(() => {
+        void loadLeavesPage();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentPage, filterClient, filterEmployee, filterLeaveType, search, filterYear, filterMonth, sortConfig.key, sortConfig.dir]);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [filterClient, filterEmployee, filterLeaveType, search, filterYear, filterMonth, sortConfig.key, sortConfig.dir]);
+
+    async function loadMeta() {
         try {
-            const [l, c, u] = await Promise.all([
-                getSmartLeaves(getPastDaysZoned(14, false)), // Last 14 days of smart lookups
+            const [c, u] = await Promise.all([
                 getClients(),
                 getAllUsers()
             ]);
-            setLeaves(l); setClients(c); setAllUsers(u.filter(u => !u.isMaster));
-        } catch (err) { console.error(err); }
-        finally { setLoading(false); }
+            setClients(c);
+            setAllUsers(u.filter(u => !u.isMaster));
+        } catch (err) {
+            console.error(err);
+            toastError('Could not load leave metadata', 'Please try again in a moment.');
+        }
+    }
+
+    async function loadLeavesPage(force = false, page = currentPage) {
+        setLoading(true);
+        try {
+            const [historyPage, recentSmart] = await Promise.all([
+                getLeavesPage({
+                    clientName: filterClient || undefined,
+                    employeeName: filterEmployee || undefined,
+                    leaveType: filterLeaveType || undefined,
+                    search: search || undefined,
+                    year: filterYear || undefined,
+                    month: filterMonth || undefined,
+                    sortKey: sortConfig.key,
+                    sortDir: sortConfig.dir,
+                    page,
+                    pageSize: LEAVE_PAGE_SIZE,
+                    force,
+                }),
+                page === 1
+                    ? getSmartLeaves(getPastDaysZoned(14, false), { includeHistoricalLeaves: false })
+                    : Promise.resolve([] as SmartLeaveRecord[]),
+            ]);
+
+            setLeaves(historyPage.items);
+            setTotalLeaves(historyPage.total);
+            setSmartLeaves(page === 1 ? recentSmart : []);
+        } catch (err) {
+            console.error(err);
+            toastError('Could not load leave records', 'The leave board is temporarily unavailable.');
+        } finally {
+            setLoading(false);
+        }
     }
 
     const availableEmployees = selectedClient
@@ -173,13 +222,16 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
         // Duplicate prevention
         if (!editingId) {
-            const lowName = employeeName.toLowerCase().trim();
-            const lowClient = selectedClient.toLowerCase().trim();
-            const dup = leaves.find(l => 
-                l.employee_name.toLowerCase().trim() === lowName && 
-                l.client_name.toLowerCase().trim() === lowClient &&
-                l.date === date
-            );
+            const existing = await getLeavesPage({
+                clientName: selectedClient,
+                employeeName,
+                year: date.slice(0, 4),
+                month: date.slice(5, 7),
+                page: 1,
+                pageSize: 100,
+                force: true,
+            });
+            const dup = existing.items.find((item) => item.date === date);
             if (dup) {
                 toastError('Duplicate entry blocked', `${employeeName} already has a record for ${fmtDate(date)}. Only one entry per day is allowed.`);
                 return;
@@ -190,18 +242,14 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
         try {
             const payload = { date, client_name: selectedClient, employee_name: employeeName, is_planned: isPlanned, reason: reason || null, approver: currentUser.name, leave_type: leaveType, day_count: dayCount };
             if (editingId && !editingId.startsWith('virtual-')) {
-                const updated = await updateLeave(editingId, payload);
-                setLeaves(prev => prev.map(l => l.id === editingId ? updated : l));
+                await updateLeave(editingId, payload);
                 success('Record updated', `${employeeName}'s leave on ${date} has been saved.`);
             } else {
-                const added = await addLeave(payload);
-                if (editingId && editingId.startsWith('virtual-')) {
-                    setLeaves(prev => prev.map(l => l.id === editingId ? added : l));
-                } else {
-                    setLeaves(prev => [added, ...prev]);
-                }
+                await addLeave(payload);
                 success('Leave recorded', `${employeeName} · ${leaveType} · ${date}`);
             }
+            if (currentPage !== 1) setCurrentPage(1);
+            else await loadLeavesPage(true, 1);
             resetForm(); setDrawerOpen(false);
         } catch (err) { console.error(err); toastError('Could not save leave', 'Check the `leaves` table in Supabase and try again.'); }
         finally { setSaving(false); }
@@ -210,9 +258,12 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
     async function handleDelete(id: string) {
         await deleteLeave(id);
         const name = leaves.find(l => l.id === id)?.employee_name ?? 'Record';
-        setLeaves(prev => prev.filter(l => l.id !== id));
         if (editingId === id) cancelEdit();
         setDeleteId(null);
+        const nextTotal = Math.max(0, totalLeaves - 1);
+        const nextPage = Math.min(currentPage, Math.max(1, Math.ceil(nextTotal / LEAVE_PAGE_SIZE)));
+        if (nextPage !== currentPage) setCurrentPage(nextPage);
+        else await loadLeavesPage(true, nextPage);
         success('Leave deleted', `${name}'s record has been removed.`);
     }
 
@@ -231,7 +282,8 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                 leave_type: 'Dismissed',
                 day_count: 0
             });
-            setLeaves(prev => prev.filter(item => item.id !== l.id));
+            if (currentPage !== 1) setCurrentPage(1);
+            else await loadLeavesPage(true, 1);
             success('Leave Dismissed', 'This absence has been permanently dismissed.');
         } catch (err) {
             console.error(err);
@@ -241,34 +293,21 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
         }
     }
 
-    // Available periods derived from leave data
-    const availableYearMonths = useMemo(() => {
-        const set = new Set(leaves.map(l => l.date.slice(0, 7))); // 'YYYY-MM'
-        return [...set].sort().reverse();
-    }, [leaves]);
-
-    // Filtered + searched data
-    const displayedLeaves = useMemo(() => {
-        let result = leaves.filter(l => {
+    const filteredSmartLeaves = useMemo(() => {
+        const q = search.toLowerCase().trim();
+        const result = smartLeaves.filter((l) => {
             if (filterClient && l.client_name !== filterClient) return false;
             if (filterEmployee && l.employee_name !== filterEmployee) return false;
-            if (filterYear) {
-                if (!l.date.startsWith(filterYear)) return false;
-                if (filterMonth && l.date.slice(5, 7) !== filterMonth) return false;
-            }
-            if (filterLeaveType) {
-                if (l.leave_type.toLowerCase() !== filterLeaveType.toLowerCase()) return false;
-            }
-            if (search) {
-                const q = search.toLowerCase();
-                if (!l.employee_name.toLowerCase().includes(q) && !l.client_name.toLowerCase().includes(q) && !l.leave_type.toLowerCase().includes(q)) return false;
-            }
+            if (filterYear && !l.date.startsWith(filterYear)) return false;
+            if (filterMonth && l.date.slice(5, 7) !== filterMonth) return false;
+            if (filterLeaveType && l.leave_type.toLowerCase() !== filterLeaveType.toLowerCase()) return false;
+            if (q && !l.employee_name.toLowerCase().includes(q) && !l.client_name.toLowerCase().includes(q) && !l.leave_type.toLowerCase().includes(q)) return false;
             return true;
         });
 
         result.sort((a, b) => {
-            let aVal: any = '';
-            let bVal: any = '';
+            let aVal: string | number = '';
+            let bVal: string | number = '';
             switch (sortConfig.key) {
                 case 'Date': aVal = a.date; bVal = b.date; break;
                 case 'Employee': aVal = a.employee_name; bVal = b.employee_name; break;
@@ -277,30 +316,34 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                 case 'Duration': aVal = a.day_count; bVal = b.day_count; break;
                 case 'Planned': aVal = a.is_planned ? 1 : 0; bVal = b.is_planned ? 1 : 0; break;
                 case 'Reason': aVal = a.reason || ''; bVal = b.reason || ''; break;
-                case 'Logged by': aVal = (a as any).is_smart ? 'System Gen' : (a.approver || ''); bVal = (b as any).is_smart ? 'System Gen' : (b.approver || ''); break;
+                case 'Logged by': aVal = a.is_smart ? 'System Gen' : (a.approver || ''); bVal = b.is_smart ? 'System Gen' : (b.approver || ''); break;
+                default: break;
             }
             if (aVal < bVal) return sortConfig.dir === 'asc' ? -1 : 1;
             if (aVal > bVal) return sortConfig.dir === 'asc' ? 1 : -1;
             return 0;
         });
+
         return result;
-    }, [leaves, filterClient, filterEmployee, filterLeaveType, search, filterYear, filterMonth, sortConfig]);
+    }, [smartLeaves, filterClient, filterEmployee, filterLeaveType, search, filterYear, filterMonth, sortConfig]);
 
-    const totalDays = useMemo(() => displayedLeaves.reduce((s, l) => s + Number(l.day_count), 0), [displayedLeaves]);
-    const lwpCount = useMemo(() => displayedLeaves.filter(l => l.leave_type.startsWith('LWP')).reduce((s, l) => s + Number(l.day_count), 0), [displayedLeaves]);
-    const sickCount = useMemo(() => displayedLeaves.filter(l => l.leave_type.includes('Sick')).reduce((s, l) => s + Number(l.day_count), 0), [displayedLeaves]);
-    const casualCount = useMemo(() => displayedLeaves.filter(l => l.leave_type.includes('Casual') || l.leave_type === 'Paid Leave' || l.leave_type.includes('Paternity')).reduce((s, l) => s + Number(l.day_count), 0), [displayedLeaves]);
-    const unplanned = useMemo(() => displayedLeaves.filter(l => !l.is_planned && Number(l.day_count) > 0).length, [displayedLeaves]);
-    const uniqueEmpls = useMemo(() => new Set(displayedLeaves.map(l => l.employee_name)).size, [displayedLeaves]);
+    const visibleLeaves = useMemo(() => (currentPage === 1 ? [...filteredSmartLeaves, ...leaves] : leaves), [currentPage, filteredSmartLeaves, leaves]);
+    const displayedLeaves = visibleLeaves;
 
-    // Available years from data
+    const totalDays = useMemo(() => visibleLeaves.reduce((s, l) => s + Number(l.day_count), 0), [visibleLeaves]);
+    const lwpCount = useMemo(() => visibleLeaves.filter(l => l.leave_type.startsWith('LWP')).reduce((s, l) => s + Number(l.day_count), 0), [visibleLeaves]);
+    const sickCount = useMemo(() => visibleLeaves.filter(l => l.leave_type.includes('Sick')).reduce((s, l) => s + Number(l.day_count), 0), [visibleLeaves]);
+    const casualCount = useMemo(() => visibleLeaves.filter(l => l.leave_type.includes('Casual') || l.leave_type === 'Paid Leave' || l.leave_type.includes('Paternity')).reduce((s, l) => s + Number(l.day_count), 0), [visibleLeaves]);
+    const unplanned = useMemo(() => visibleLeaves.filter(l => !l.is_planned && Number(l.day_count) > 0).length, [visibleLeaves]);
+    const uniqueEmpls = useMemo(() => new Set(visibleLeaves.map(l => l.employee_name)).size, [visibleLeaves]);
+
     const availableYears = useMemo(() => {
-        return [...new Set(leaves.map(l => l.date.slice(0, 4)))].sort().reverse();
-    }, [leaves]);
+        return [...new Set([...leaves, ...filteredSmartLeaves].map(l => l.date.slice(0, 4)))].sort().reverse();
+    }, [leaves, filteredSmartLeaves]);
 
     function handleExport() {
         const header = ['Date', 'Client', 'Name', 'Planned', 'Reason', 'Approver', 'Leave Type', 'Count'];
-        const data = displayedLeaves.map(l => [
+        const data = visibleLeaves.map(l => [
             fmtDate(l.date),
             l.client_name,
             l.employee_name,
@@ -317,9 +360,15 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
     // Unique employee names scoped to selected client (for filter dropdown)
     const filterableEmployees = useMemo(() => {
-        const pool = filterClient ? leaves.filter(l => l.client_name === filterClient) : leaves;
-        return [...new Set(pool.map(l => l.employee_name))].sort();
-    }, [leaves, filterClient]);
+        const pool = filterClient
+            ? allUsers.filter(u => u.clientName === filterClient).map(u => u.name)
+            : allUsers.map(u => u.name);
+        return [...new Set(pool)].sort();
+    }, [allUsers, filterClient]);
+
+    const totalPages = Math.max(1, Math.ceil(totalLeaves / LEAVE_PAGE_SIZE));
+    const pageStart = totalLeaves === 0 ? 0 : ((currentPage - 1) * LEAVE_PAGE_SIZE) + 1;
+    const pageEnd = totalLeaves === 0 ? 0 : pageStart + leaves.length - 1;
 
     return (
         <div className="flex flex-col gap-6">
@@ -347,7 +396,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                 <div className="flex items-center gap-3">
                     <div className="w-px h-6 bg-white/10 mx-1" />
 
-                    <button onClick={handleExport} disabled={displayedLeaves.length === 0}
+                    <button onClick={handleExport} disabled={visibleLeaves.length === 0}
                         className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white/[0.04] border border-white/8 text-slate-300 text-xs font-semibold hover:bg-white/[0.08] hover:text-white transition-all disabled:opacity-30 disabled:pointer-events-none">
                         <Download size={14} /> Export CSV
                     </button>
@@ -473,7 +522,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                         )}
                     </div>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 flex-shrink-0 ml-3">
-                        {displayedLeaves.length} record{displayedLeaves.length !== 1 ? 's' : ''}
+                        {visibleLeaves.length} record{visibleLeaves.length !== 1 ? 's' : ''}
                     </span>
                 </div>
                 )}
@@ -501,12 +550,58 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                         </div>
 
                         {/* Body Slots */}
+                        {currentPage === 1 && filteredSmartLeaves.length > 0 && !loading && (
+                            <div className="mb-2 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4">
+                                <div className="mb-3 flex items-center justify-between gap-3">
+                                    <div>
+                                        <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-400">Recent System Alerts</p>
+                                        <p className="text-xs text-slate-500">These are recent auto-detected leave exceptions from the last 14 days.</p>
+                                    </div>
+                                    <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-amber-300">
+                                        {filteredSmartLeaves.length} alert{filteredSmartLeaves.length === 1 ? '' : 's'}
+                                    </span>
+                                </div>
+                                <div className="space-y-3">
+                                    {filteredSmartLeaves.map((l) => (
+                                        <div key={l.id} className="grid grid-cols-[100px_minmax(150px,2fr)_minmax(130px,1fr)_minmax(160px,1.5fr)_90px_90px_minmax(140px,1.5fr)_100px_90px] gap-4 px-5 py-3.5 items-center rounded-2xl border border-amber-500/15 bg-black/20">
+                                            <div className="font-mono text-[11px] font-bold text-slate-400/80 uppercase tracking-widest">{fmtDate(l.date)}</div>
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <span className="w-8 h-8 rounded-xl bg-[linear-gradient(145deg,rgba(255,255,255,0.05),rgba(255,255,255,0.01))] border border-white/10 text-[11px] font-black text-white flex items-center justify-center flex-shrink-0">{l.employee_name[0]}</span>
+                                                <span className="text-[13px] font-bold text-white truncate">{l.employee_name}</span>
+                                            </div>
+                                            <div className="min-w-0">
+                                                <span className="inline-block max-w-full truncate text-[9px] font-black uppercase tracking-widest text-slate-400 bg-black/40 border border-white/5 px-2.5 py-1.5 rounded-lg">{l.client_name}</span>
+                                            </div>
+                                            <div><TypeBadge type={l.leave_type} isSmart /></div>
+                                            <div className={`text-[11px] font-black tracking-wider uppercase ${l.day_count === 1 ? 'text-blue-400' : 'text-amber-400'}`}>{l.day_count === 1 ? 'Full' : 'Half'}</div>
+                                            <div>
+                                                <span className="inline-flex items-center gap-1 text-amber-500/90 text-[10px] uppercase tracking-widest font-black bg-amber-500/10 px-2 py-1 rounded-md border border-amber-500/20"><AlertCircle size={10} /> Auto</span>
+                                            </div>
+                                            <div className="min-w-0 text-slate-500 text-[11px] font-semibold truncate" title={l.reason || ''}>
+                                                <span className="text-amber-500/70 text-[9px] font-black uppercase tracking-widest">{(l.reason || '').replace(/System Auto-Generated:\s*/i, '').replace(/No punch-in recorded/i, 'No Punch In').replace(/Half-Day/i, 'Less Hours')}</span>
+                                            </div>
+                                            <div className="truncate text-slate-500 text-[11px] font-bold"><span className="text-indigo-400/70 italic">System Gen</span></div>
+                                            <div className="flex items-center justify-end gap-1.5 w-full">
+                                                <button onClick={() => startEdit(l)} title="Approve & Save"
+                                                    className="flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30 text-emerald-400 hover:from-emerald-500 hover:to-emerald-400 hover:text-emerald-950 transition-all">
+                                                    <CheckCircle size={14} />
+                                                </button>
+                                                <button onClick={() => void declineSmartLeave(l)} title="Decline"
+                                                    className="flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-br from-rose-500/20 to-rose-600/10 border border-rose-500/30 text-rose-400 hover:from-rose-500 hover:to-rose-400 hover:text-rose-950 transition-all">
+                                                    <X size={14} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                         {loading ? (
                             <div className="py-20 flex flex-col items-center justify-center gap-3">
                                 <div className="w-6 h-6 border-2 border-slate-800 border-t-indigo-500 rounded-full animate-spin shadow-[0_0_15px_rgba(99,102,241,0.4)]" />
                                 <p className="text-xs font-bold tracking-widest uppercase text-slate-500">Loading records…</p>
                             </div>
-                        ) : displayedLeaves.length === 0 ? (
+                        ) : leaves.length === 0 && filteredSmartLeaves.length === 0 ? (
                             <div className="py-24 flex flex-col items-center justify-center gap-4">
                                 <div className="w-16 h-16 rounded-3xl bg-white/[0.02] border border-white/5 flex items-center justify-center shadow-[inset_0_2px_10px_rgba(255,255,255,0.02)]">
                                     <CalendarCheck2 size={28} className="text-slate-600" />
@@ -524,7 +619,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                             </div>
                         ) : (
                             <AnimatePresence initial={false}>
-                                {displayedLeaves.map((l, i) => (
+                                {leaves.map((l) => (
                                     <motion.div key={l.id}
                                         initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
                                         transition={{ duration: 0.2 }}
@@ -598,7 +693,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                 </div>
 
                 {/* Table Footer */}
-                {displayedLeaves.length > 0 && (
+                {visibleLeaves.length > 0 && (
                     <div className="flex items-center justify-between px-5 py-2.5 border-t border-white/[0.05] bg-black/10">
                         <p className="text-[11px] text-slate-700 font-medium">
                             {displayedLeaves.length} records · {uniqueEmpls} {uniqueEmpls === 1 ? 'employee' : 'employees'}
@@ -612,6 +707,30 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                     <span className="text-red-400 font-black">{lwpCount}</span> <span className="text-slate-600">LWP</span>
                                 </p>
                             )}
+                            <p className="text-[11px] text-slate-600 font-medium">
+                                History page <span className="text-white font-black">{currentPage}</span> of <span className="text-white font-black">{totalPages}</span>
+                            </p>
+                            <p className="text-[11px] text-slate-600 font-medium">
+                                Showing <span className="text-white font-black">{pageStart}-{pageEnd}</span> of <span className="text-white font-black">{totalLeaves}</span>
+                            </p>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                                    disabled={currentPage === 1 || loading}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-3 py-1.5 text-[11px] font-bold text-slate-300 transition-all disabled:opacity-30 disabled:pointer-events-none hover:bg-white/5"
+                                >
+                                    <ChevronLeft size={12} /> Prev
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                                    disabled={currentPage >= totalPages || loading}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-3 py-1.5 text-[11px] font-bold text-slate-300 transition-all disabled:opacity-30 disabled:pointer-events-none hover:bg-white/5"
+                                >
+                                    Next <ChevronRight size={12} />
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}

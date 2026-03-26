@@ -14,6 +14,20 @@ export interface PaginatedLeaveResult {
     pageSize: number;
 }
 
+export interface LeavePageOptions {
+    clientName?: string;
+    employeeName?: string;
+    leaveType?: string;
+    search?: string;
+    year?: string;
+    month?: string;
+    sortKey?: string;
+    sortDir?: 'asc' | 'desc';
+    page?: number;
+    pageSize?: number;
+    force?: boolean;
+}
+
 function assertSupabaseOk(error: unknown, action: string): void {
     if (!error) return;
     throw new Error(`${action}: ${describeSupabaseError(error)}`);
@@ -187,14 +201,61 @@ export async function getLeaves(clientName?: string, force = false): Promise<Lea
     }, force);
 }
 
-export async function getLeavesPage(options?: {
-    clientName?: string;
-    page?: number;
-    pageSize?: number;
-    force?: boolean;
-}): Promise<PaginatedLeaveResult> {
+function sanitizeSearchTerm(term: string): string {
+    return term.replace(/[,%]/g, ' ').trim();
+}
+
+function applyLeaveDateFilter<T extends {
+    gte: (column: string, value: string) => T;
+    lt: (column: string, value: string) => T;
+}>(query: T, year?: string, month?: string): T {
+    if (!year) return query;
+
+    if (month) {
+        const nextMonth = month === '12'
+            ? `${Number(year) + 1}-01-01`
+            : `${year}-${String(Number(month) + 1).padStart(2, '0')}-01`;
+        return query.gte('date', `${year}-${month}-01`).lt('date', nextMonth);
+    }
+
+    return query.gte('date', `${year}-01-01`).lt('date', `${Number(year) + 1}-01-01`);
+}
+
+function applyLeaveSort<T extends {
+    order: (column: string, options?: { ascending?: boolean; nullsFirst?: boolean }) => T;
+}>(query: T, sortKey?: string, sortDir: 'asc' | 'desc' = 'desc'): T {
+    const ascending = sortDir === 'asc';
+    switch (sortKey) {
+        case 'Employee':
+            return query.order('employee_name', { ascending }).order('date', { ascending: false });
+        case 'Client':
+            return query.order('client_name', { ascending }).order('date', { ascending: false });
+        case 'Leave Type':
+            return query.order('leave_type', { ascending }).order('date', { ascending: false });
+        case 'Duration':
+            return query.order('day_count', { ascending }).order('date', { ascending: false });
+        case 'Planned':
+            return query.order('is_planned', { ascending }).order('date', { ascending: false });
+        case 'Reason':
+            return query.order('reason', { ascending, nullsFirst: false }).order('date', { ascending: false });
+        case 'Logged by':
+            return query.order('approver', { ascending, nullsFirst: false }).order('date', { ascending: false });
+        case 'Date':
+        default:
+            return query.order('date', { ascending }).order('created_at', { ascending });
+    }
+}
+
+export async function getLeavesPage(options?: LeavePageOptions): Promise<PaginatedLeaveResult> {
     const {
         clientName,
+        employeeName,
+        leaveType,
+        search,
+        year,
+        month,
+        sortKey,
+        sortDir = 'desc',
         page = 1,
         pageSize = 25,
         force = false,
@@ -204,17 +265,23 @@ export async function getLeavesPage(options?: {
     const safePageSize = Math.min(100, Math.max(1, Math.floor(pageSize)));
     const from = (safePage - 1) * safePageSize;
     const to = from + safePageSize - 1;
-    const cacheKey = `leaves:page:${clientName ?? '*'}:${safePage}:${safePageSize}`;
+    const normalizedSearch = search ? sanitizeSearchTerm(search) : '';
+    const cacheKey = `leaves:page:${clientName ?? '*'}:${employeeName ?? '*'}:${leaveType ?? '*'}:${year ?? '*'}:${month ?? '*'}:${sortKey ?? 'Date'}:${sortDir}:${normalizedSearch || '*'}:${safePage}:${safePageSize}`;
 
     return withCachedQuery(cacheKey, LEAVES_CACHE_TTL_MS, async () => {
         let query = supabase
             .from('leaves')
             .select('*', { count: 'exact' })
-            .order('date', { ascending: false })
-            .order('created_at', { ascending: false })
             .range(from, to);
 
         if (clientName) query = query.eq('client_name', clientName);
+        if (employeeName) query = query.eq('employee_name', employeeName);
+        if (leaveType) query = query.ilike('leave_type', leaveType);
+        query = applyLeaveDateFilter(query, year, month);
+        if (normalizedSearch) {
+            query = query.or(`employee_name.ilike.%${normalizedSearch}%,client_name.ilike.%${normalizedSearch}%,leave_type.ilike.%${normalizedSearch}%`);
+        }
+        query = applyLeaveSort(query, sortKey, sortDir);
 
         const { data, error, count } = await query;
         assertSupabaseOk(error, 'Failed to load leave records');
@@ -252,13 +319,21 @@ export interface SmartLeaveRecord extends LeaveRecord {
     is_smart?: boolean;
 }
 
-export async function getSmartLeaves(dates: string[]): Promise<SmartLeaveRecord[]> {
+export async function getSmartLeaves(dates: string[], options?: { includeHistoricalLeaves?: boolean }): Promise<SmartLeaveRecord[]> {
     if (!dates.length) return [];
+    const includeHistoricalLeaves = options?.includeHistoricalLeaves ?? true;
 
-    const { data: realLeavesData, error: realLeavesError } = await supabase
+    let realLeavesQuery = supabase
         .from('leaves')
         .select('*')
-        .order('date', { ascending: false });
+        .order('date', { ascending: false })
+        .order('created_at', { ascending: false });
+
+    if (!includeHistoricalLeaves) {
+        realLeavesQuery = realLeavesQuery.in('date', dates);
+    }
+
+    const { data: realLeavesData, error: realLeavesError } = await realLeavesQuery;
     assertSupabaseOk(realLeavesError, 'Failed to load leave records');
     const realLeaves = (realLeavesData ?? []) as SmartLeaveRecord[];
 
