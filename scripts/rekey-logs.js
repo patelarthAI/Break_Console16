@@ -4,10 +4,24 @@ const path = require('path');
 
 // Load env from .env.local
 const envFile = fs.readFileSync(path.join(__dirname, '../.env.local'), 'utf8');
-const env = Object.fromEntries(envFile.split('\n').filter(l => l.includes('=')).map(l => l.split('=')));
+const env = {};
+envFile.split('\n').forEach(line => {
+    const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+    if (match) {
+        let value = match[2] || '';
+        // Remove surrounding quotes if they exist
+        if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
+        if (value.startsWith("'") && value.endsWith("'")) value = value.slice(1, -1);
+        env[match[1]] = value.trim();
+    }
+});
 
-const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL.trim();
-const supabaseKey = env.NEXT_PUBLIC_SUPABASE_ANON_KEY.trim();
+const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+if (!supabaseUrl || !supabaseKey) {
+    console.error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local");
+    process.exit(1);
+}
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Simplified dateStr logic from timeUtils.ts
