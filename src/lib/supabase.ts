@@ -11,13 +11,37 @@ if (typeof window !== 'undefined') {
     console.info(`[Supabase] Browser client using direct connection: ${SUPABASE_EXTERNAL_URL}`);
 }
 
+// ─── Resilient fetch wrapper with timeout ─────────────────────────────────────
+const SUPABASE_FETCH_TIMEOUT_MS = 15_000; // 15 seconds
+
+function resilientFetch(url: RequestInfo | URL, options?: RequestInit): Promise<Response> {
+    const controller = new AbortController();
+    const existingSignal = options?.signal;
+
+    // If the caller already has an AbortSignal, listen to it too
+    if (existingSignal) {
+        existingSignal.addEventListener('abort', () => controller.abort(existingSignal.reason));
+    }
+
+    const timeout = setTimeout(() => controller.abort('Supabase request timed out'), SUPABASE_FETCH_TIMEOUT_MS);
+
+    return fetch(url, { ...options, signal: controller.signal })
+        .finally(() => clearTimeout(timeout));
+}
+
 export const supabase = createClient(SUPABASE_EXTERNAL_URL, SUPABASE_ANON_KEY, {
     auth: { 
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true
     },
-    realtime: { params: { eventsPerSecond: 10 } },
+    realtime: {
+        params: { eventsPerSecond: 10 },
+        timeout: 30_000,          // 30s connection timeout (default is 10s, too aggressive)
+    },
+    global: {
+        fetch: resilientFetch,
+    },
 });
 
 export function describeSupabaseError(error: unknown): string {

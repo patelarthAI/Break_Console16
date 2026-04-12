@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { BellRing, CheckCircle2 } from 'lucide-react';
 import { AppNotification } from '@/types';
 import { dismissNotification, getActiveNotifications } from '@/lib/store';
-import { supabase } from '@/lib/supabase';
+import { subscribe } from '@/lib/realtime';
 
 export default function PremiumNotificationPanel({ userId }: { userId: string }) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -22,34 +22,30 @@ export default function PremiumNotificationPanel({ userId }: { userId: string })
 
     load();
 
-    const channel = supabase
-      .channel('public:notifications')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload) => {
-        const next = payload.new;
-        if (!next.is_active) return;
-
-        const incoming: AppNotification = {
-          id: next.id,
-          message: next.message,
-          createdBy: next.created_by,
-          createdAt: next.created_at,
-          isActive: next.is_active,
-        };
-
-        setNotifications((prev) => (prev.some((item) => item.id === incoming.id) ? prev : [incoming, ...prev]));
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'notifications' }, (payload) => {
-        if (!payload.new.is_active) {
-          setNotifications((prev) => prev.filter((item) => item.id !== payload.new.id));
-        }
-      })
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'notifications' }, (payload) => {
-        setNotifications((prev) => prev.filter((item) => item.id !== payload.old.id));
-      })
-      .subscribe();
+    // Subscribe to all notification changes via shared channel
+    const unsubInsert = subscribe('notifications', 'INSERT', async () => {
+      try {
+        const active = await getActiveNotifications(userId);
+        setNotifications(active);
+      } catch { /* ignore */ }
+    });
+    const unsubUpdate = subscribe('notifications', 'UPDATE', async () => {
+      try {
+        const active = await getActiveNotifications(userId);
+        setNotifications(active);
+      } catch { /* ignore */ }
+    });
+    const unsubDelete = subscribe('notifications', 'DELETE', async () => {
+      try {
+        const active = await getActiveNotifications(userId);
+        setNotifications(active);
+      } catch { /* ignore */ }
+    });
 
     return () => {
-      supabase.removeChannel(channel);
+      unsubInsert();
+      unsubUpdate();
+      unsubDelete();
     };
   }, [userId]);
 

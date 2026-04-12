@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bell, CheckCircle, Info } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { subscribe } from '@/lib/realtime';
 import { AppNotification, User, TimeLog } from '@/types';
 import { getActiveNotifications, dismissNotification, getUserByNameAndClient, getLogs } from '@/lib/store';
 import { checkViolations, formatDuration, getTodayKey, getRealDate, dateStr, computeSession, computeTotalTime, getRealNow, BREAK_LIMIT_MS } from '@/lib/timeUtils';
@@ -87,29 +88,25 @@ export default function NotificationPanel({ userId }: { userId: string }) {
 
                 scan();
 
-                // 3. Subscription for Admin Broadcasts
-                const channel = supabase.channel('public:notifications')
-                    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, p => {
-                        const n = p.new; if (!n.is_active) return;
-                        setNotifications(prev => prev.some(x => x.id === n.id) ? prev : [{ id: n.id, message: n.message, createdBy: n.created_by, createdAt: n.created_at, isActive: n.is_active }, ...prev]);
-                    })
-                    .subscribe();
+                // 3. Subscription for Admin Broadcasts (via shared channel)
+                const unsubNotifs = subscribe('notifications', 'INSERT', async () => {
+                    const active = await getActiveNotifications(userId);
+                    if (isMounted) setNotifications(active);
+                });
 
-                // 4. Subscription for User's Own Logs (to update ticker instantly on punch)
-                const userLogsChannel = supabase.channel(`user-logs-${userId}`)
-                    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'time_logs', filter: `user_id=eq.${userId}` }, async () => {
-                        const fresh = await getLogs(userId, getTodayKey());
-                        if (isMounted) { setTodayLogs(fresh); scan(); }
-                    })
-                    .subscribe();
+                // 4. Subscription for User's Own Logs (via shared channel)
+                const unsubLogs = subscribe('time_logs', 'INSERT', async () => {
+                    const fresh = await getLogs(userId, getTodayKey());
+                    if (isMounted) { setTodayLogs(fresh); scan(); }
+                });
 
                 // 5. Minute timer for active overstays
                 const timer = setInterval(scan, 60000);
 
                 return () => {
                     isMounted = false;
-                    supabase.removeChannel(channel);
-                    supabase.removeChannel(userLogsChannel);
+                    unsubNotifs();
+                    unsubLogs();
                     clearInterval(timer);
                 };
             } catch (err) { console.error('Failed to load notifications', err); }

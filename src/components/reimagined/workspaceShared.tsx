@@ -2,7 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { AppStatus, User } from '@/types';
+import { AppStatus, User, TimeLog } from '@/types';
 import { UserStatusRecord } from '@/lib/store';
 import { getRelativeDate, getTodayKey, formatDuration } from '@/lib/timeUtils';
 import type { ReactNode } from 'react';
@@ -11,19 +11,21 @@ export type LiveStatus = Exclude<AppStatus, 'on_leave'>;
 export type AdminView = 'dashboard' | 'reports' | 'leave' | 'settings';
 export type RecruiterView = 'shift' | 'team';
 export type WorkspaceView = AdminView | RecruiterView;
-export type ReportRange = 'today' | 'yesterday' | 'week' | 'month';
+export type ReportMode = 'day' | 'range';
+export type ReportRange = 'today' | 'yesterday' | 'week' | 'month' | 'custom';
 
 export interface ReportRow {
   user: User;
+  date: string;
   liveStatus: LiveStatus;
   workedMs: number;
   breakMs: number;
   brbMs: number;
   violationCount: number;
   violationTags: string[];
-  activeDays: number;
   firstPunch?: number;
   lastPunch?: number;
+  logs: TimeLog[];
 }
 
 export interface EditUserDraft {
@@ -99,6 +101,7 @@ export const REPORT_RANGE_LABELS: Record<ReportRange, string> = {
   yesterday: 'Yesterday',
   week: 'Last 7 days',
   month: 'Last 30 days',
+  custom: 'Custom Range',
 };
 
 export const TIMEZONE_OPTIONS = [

@@ -4,15 +4,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     FileSpreadsheet, Plus, Trash2, Download, CheckCircle,
     Edit2, X, ChevronDown, ChevronUp, CalendarCheck2,
-    TrendingDown, AlertCircle, Filter, Search, Users2, Briefcase, Calendar,
+    AlertCircle, Filter, Search, Users2, Briefcase, Calendar,
     ChevronLeft, ChevronRight
 } from 'lucide-react';
 import {
-    getAllUsers, getSmartLeaves, getClients, ClientRow,
-    addLeave, updateLeave, deleteLeave, getLeavesPage, SmartLeaveRecord
+    getAllUsers, getClients, ClientRow,
+    addLeave, updateLeave, deleteLeave, getLeavesPage, getLeaveSummary, SmartLeaveRecord, LeaveSummary
 } from '@/lib/store';
 import { User, LeaveRecord } from '@/types';
-import { formatDuration, dateStr, getPastDaysZoned, exportExcel } from '@/lib/timeUtils';
+import { dateStr, exportExcel } from '@/lib/timeUtils';
 import { useToast } from '@/components/Toast';
 import ConfirmDialog from '@/components/ConfirmDialog';
 
@@ -37,7 +37,7 @@ const LEAVE_TYPES = [
     'Paternity',
     'Paid Leave'
 ];
-const SYSTEM_LEAVE_TYPES = ['System: Absent', 'System: Half-Day', 'System: Declined'];
+const SYSTEM_LEAVE_TYPES = ['System: Absent', 'System: Half-Day'];
 const ALL_LEAVE_TYPES = [...LEAVE_TYPES, ...SYSTEM_LEAVE_TYPES];
 const LEAVE_PAGE_SIZE = 25;
 
@@ -54,7 +54,6 @@ const LEAVE_META: Record<string, { dot: string; text: string; bg: string; border
     'Paid Leave': { dot: '#10b981', text: 'text-emerald-400', bg: 'bg-emerald-500/8', border: 'border-emerald-500/20' },
     'System: Absent': { dot: '#fbbf24', text: 'text-amber-400', bg: 'bg-amber-500/8', border: 'border-amber-500/20' },
     'System: Half-Day': { dot: '#fbbf24', text: 'text-amber-400', bg: 'bg-amber-500/8', border: 'border-amber-500/20' },
-    'System: Declined': { dot: '#94a3b8', text: 'text-slate-400', bg: 'bg-slate-500/8', border: 'border-slate-500/20' },
 };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -100,12 +99,23 @@ function SelectWrap({ children }: { children: React.ReactNode }) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function MasterLeaveTracker({ currentUser }: { currentUser: User }) {
-    const { success, error: toastError, warning } = useToast();
+    const { success, error: toastError } = useToast();
 
     // Data
     const [leaves, setLeaves] = useState<LeaveRecord[]>([]);
     const [smartLeaves, setSmartLeaves] = useState<SmartLeaveRecord[]>([]);
     const [totalLeaves, setTotalLeaves] = useState(0);
+    const [summary, setSummary] = useState<LeaveSummary>({
+        totalEntries: 0,
+        totalDays: 0,
+        plannedEntries: 0,
+        unplannedEntries: 0,
+        sickDays: 0,
+        casualDays: 0,
+        lwpDays: 0,
+        uniqueEmployees: 0,
+        uniqueClients: 0,
+    });
     const [currentPage, setCurrentPage] = useState(1);
     const [clients, setClients] = useState<ClientRow[]>([]);
     const [allUsers, setAllUsers] = useState<User[]>([]);
@@ -168,28 +178,31 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
     async function loadLeavesPage(force = false, page = currentPage) {
         setLoading(true);
         try {
-            const [historyPage, recentSmart] = await Promise.all([
+            const filters = {
+                clientName: filterClient || undefined,
+                employeeName: filterEmployee || undefined,
+                leaveType: filterLeaveType || undefined,
+                search: search || undefined,
+                year: filterYear || undefined,
+                month: filterMonth || undefined,
+                force,
+            };
+
+            const [historyPage, nextSummary] = await Promise.all([
                 getLeavesPage({
-                    clientName: filterClient || undefined,
-                    employeeName: filterEmployee || undefined,
-                    leaveType: filterLeaveType || undefined,
-                    search: search || undefined,
-                    year: filterYear || undefined,
-                    month: filterMonth || undefined,
+                    ...filters,
                     sortKey: sortConfig.key,
                     sortDir: sortConfig.dir,
                     page,
                     pageSize: LEAVE_PAGE_SIZE,
-                    force,
                 }),
-                page === 1
-                    ? getSmartLeaves(getPastDaysZoned(14, false), { includeHistoricalLeaves: false })
-                    : Promise.resolve([] as SmartLeaveRecord[]),
+                getLeaveSummary(filters),
             ]);
 
             setLeaves(historyPage.items);
             setTotalLeaves(historyPage.total);
-            setSmartLeaves(page === 1 ? recentSmart : []);
+            setSummary(nextSummary);
+            setSmartLeaves([]);
         } catch (err) {
             console.error(err);
             toastError('Could not load leave records', 'The leave board is temporarily unavailable.');
@@ -220,24 +233,6 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
         e.preventDefault();
         if (!selectedClient || !employeeName) return;
 
-        // Duplicate prevention
-        if (!editingId) {
-            const existing = await getLeavesPage({
-                clientName: selectedClient,
-                employeeName,
-                year: date.slice(0, 4),
-                month: date.slice(5, 7),
-                page: 1,
-                pageSize: 100,
-                force: true,
-            });
-            const dup = existing.items.find((item) => item.date === date);
-            if (dup) {
-                toastError('Duplicate entry blocked', `${employeeName} already has a record for ${fmtDate(date)}. Only one entry per day is allowed.`);
-                return;
-            }
-        }
-
         setSaving(true);
         try {
             const payload = { date, client_name: selectedClient, employee_name: employeeName, is_planned: isPlanned, reason: reason || null, approver: currentUser.name, leave_type: leaveType, day_count: dayCount };
@@ -256,38 +251,59 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
     }
 
     async function handleDelete(id: string) {
-        await deleteLeave(id);
-        const name = leaves.find(l => l.id === id)?.employee_name ?? 'Record';
+        const targetLeave = leaves.find(l => l.id === id) || smartLeaves.find(l => l.id === id);
+        const isSystem = targetLeave?.leave_type?.startsWith('System:');
+        
+        if (isSystem) {
+            await updateLeave(id, { leave_type: 'Dismissed', reason: 'Dismissed by Admin' });
+        } else {
+            await deleteLeave(id);
+        }
+        
+        const name = targetLeave?.employee_name ?? 'Record';
         if (editingId === id) cancelEdit();
         setDeleteId(null);
         const nextTotal = Math.max(0, totalLeaves - 1);
         const nextPage = Math.min(currentPage, Math.max(1, Math.ceil(nextTotal / LEAVE_PAGE_SIZE)));
+        const filters = {
+            clientName: filterClient || undefined,
+            employeeName: filterEmployee || undefined,
+            leaveType: filterLeaveType || undefined,
+            search: search || undefined,
+            year: filterYear || undefined,
+            month: filterMonth || undefined,
+            force: true,
+        };
+
+        setLeaves((current) => current.filter((leave) => leave.id !== id));
+        setSmartLeaves((current) => current.filter((leave) => leave.id !== id));
+        setTotalLeaves(nextTotal);
+        setSummary(await getLeaveSummary(filters));
+
         if (nextPage !== currentPage) setCurrentPage(nextPage);
-        else await loadLeavesPage(true, nextPage);
-        success('Leave deleted', `${name}'s record has been removed.`);
+        success(isSystem ? 'Leave dismissed' : 'Leave deleted', `${name}'s record has been removed.`);
     }
 
-    async function declineSmartLeave(l: any) {
-        if (!l.id.startsWith('virtual-')) return;
+    async function declineSmartLeave(l: SmartLeaveRecord) {
         setSaving(true);
         try {
-            // Persist a 'Dismissed' record so getSmartLeaves skips this user+date on refresh
-            await addLeave({
-                date: l.date,
-                client_name: l.client_name,
-                employee_name: l.employee_name,
-                is_planned: false,
-                reason: 'Dismissed by Admin',
-                approver: currentUser.name,
-                leave_type: 'Dismissed',
-                day_count: 0
-            });
-            if (currentPage !== 1) setCurrentPage(1);
-            else await loadLeavesPage(true, 1);
-            success('Leave Dismissed', 'This absence has been permanently dismissed.');
+            await updateLeave(l.id, { leave_type: 'Dismissed', reason: 'Dismissed by Admin' });
+            setSmartLeaves((current) => current.filter((leave) => leave.id !== l.id));
+            setLeaves((current) => current.filter((leave) => leave.id !== l.id));
+            setTotalLeaves((current) => Math.max(0, current - 1));
+            setSummary(await getLeaveSummary({
+                clientName: filterClient || undefined,
+                employeeName: filterEmployee || undefined,
+                leaveType: filterLeaveType || undefined,
+                search: search || undefined,
+                year: filterYear || undefined,
+                month: filterMonth || undefined,
+                force: true,
+            }));
+            success('System leave removed', 'The auto-generated leave was permanently deleted.');
         } catch (err) {
             console.error(err);
-            toastError('Could not dismiss', 'Please check your connection and try again.');
+            toastError('Could not delete system leave', 'Please check your connection and try again.');
         } finally {
             setSaving(false);
         }
@@ -330,16 +346,16 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
     const visibleLeaves = useMemo(() => (currentPage === 1 ? [...filteredSmartLeaves, ...leaves] : leaves), [currentPage, filteredSmartLeaves, leaves]);
     const displayedLeaves = visibleLeaves;
 
-    const totalDays = useMemo(() => visibleLeaves.reduce((s, l) => s + Number(l.day_count), 0), [visibleLeaves]);
-    const lwpCount = useMemo(() => visibleLeaves.filter(l => l.leave_type.startsWith('LWP')).reduce((s, l) => s + Number(l.day_count), 0), [visibleLeaves]);
-    const sickCount = useMemo(() => visibleLeaves.filter(l => l.leave_type.includes('Sick')).reduce((s, l) => s + Number(l.day_count), 0), [visibleLeaves]);
-    const casualCount = useMemo(() => visibleLeaves.filter(l => l.leave_type.includes('Casual') || l.leave_type === 'Paid Leave' || l.leave_type.includes('Paternity')).reduce((s, l) => s + Number(l.day_count), 0), [visibleLeaves]);
-    const unplanned = useMemo(() => visibleLeaves.filter(l => !l.is_planned && Number(l.day_count) > 0).length, [visibleLeaves]);
-    const uniqueEmpls = useMemo(() => new Set(visibleLeaves.map(l => l.employee_name)).size, [visibleLeaves]);
+    const totalDays = summary.totalDays;
+    const lwpCount = summary.lwpDays;
+    const sickCount = summary.sickDays;
+    const casualCount = summary.casualDays;
+    const unplanned = summary.unplannedEntries;
+    const uniqueEmpls = summary.uniqueEmployees;
 
     const availableYears = useMemo(() => {
-        return [...new Set([...leaves, ...filteredSmartLeaves].map(l => l.date.slice(0, 4)))].sort().reverse();
-    }, [leaves, filteredSmartLeaves]);
+        return [...new Set(leaves.map(l => l.date.slice(0, 4)))].sort().reverse();
+    }, [leaves]);
 
     function handleExport() {
         const header = ['Date', 'Client', 'Name', 'Planned', 'Reason', 'Approver', 'Leave Type', 'Count'];

@@ -1,9 +1,9 @@
-'use client';
+'use client';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Coffee, RotateCcw, Users, Clock, Sparkles } from 'lucide-react';
 import { getAllUsersStatus, UserStatusRecord, getLeaves } from '@/lib/store';
-import { supabase } from '@/lib/supabase';
+import { subscribe } from '@/lib/realtime';
 import { formatDuration } from '@/lib/timeUtils';
 import StarPerformers from './StarPerformers';
 import ViolatorsPanel from './ViolatorsPanel';
@@ -85,15 +85,13 @@ export default function BreakDashboard({ currentUserId, isMaster, clientName }: 
     useEffect(() => {
         mountedRef.current = true;
         void refresh(true);
-        const channel = supabase
-            .channel(`team_status_${currentUserId}`)
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'time_logs' }, scheduleStatusRefresh)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'leaves' }, () => { void loadLeaves(true); })
-            .subscribe();
+        const unsub1 = subscribe('time_logs', 'INSERT', scheduleStatusRefresh);
+        const unsub2 = subscribe('leaves', '*', () => { void loadLeaves(true); });
         return () => {
             mountedRef.current = false;
             if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current);
-            channel.unsubscribe();
+            unsub1();
+            unsub2();
         };
     }, [refresh, scheduleStatusRefresh, loadLeaves, currentUserId]);
 

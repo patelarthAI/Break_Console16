@@ -66,7 +66,7 @@ export default function ViolatorsPanel({ clientName }: Props) {
             // 5. Sort by worst offender first
             // 6. Top 3 only
             const violators = data
-                .filter(s => s.daysChecked >= 1 && (s.avgBreakMs + s.avgBrbMs) > COMBINED_LIMIT_MS)
+                .filter(s => s.daysChecked >= 1 && s.user.workMode === 'WFO' && (s.avgBreakMs + s.avgBrbMs) > COMBINED_LIMIT_MS)
                 .sort((a, b) => (b.avgBreakMs + b.avgBrbMs) - (a.avgBreakMs + a.avgBrbMs))
                 .slice(0, 3);
             setCampers(violators);

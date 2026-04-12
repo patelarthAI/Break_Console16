@@ -15,7 +15,7 @@ import {
 import { AppNotification, AppStatus, LeaveRecord, TimeLog, User } from '@/types';
 import { dismissNotification, getActiveNotifications, getAllUsersStatus, getLeavesPage } from '@/lib/store';
 import { parseShiftMins, formatDuration } from '@/lib/timeUtils';
-import { supabase } from '@/lib/supabase';
+import { subscribe } from '@/lib/realtime';
 import {
   ActionTile,
   EmptyState,
@@ -117,16 +117,13 @@ export default function ReimaginedRecruiterExperience({
     void loadActive();
     void loadLeavesList();
 
-    const channel = supabase
-      .channel(`workspace-notifications-${user.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () => {
-        void loadActive();
-      })
-      .subscribe();
+    const unsubNotifs = subscribe('notifications', '*', () => {
+      void loadActive();
+    });
 
     return () => {
       cancelled = true;
-      void supabase.removeChannel(channel);
+      unsubNotifs();
     };
   }, [user.clientName, user.id]);
 

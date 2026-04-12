@@ -215,7 +215,7 @@
 .statNumber {
   color: var(--card-value);
   font-family: var(--font-display);
-  font-size: 26px;
+  font-size: 20px;
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1;
@@ -366,11 +366,11 @@
 
 .employeeRow {
   display: grid;
-  grid-template-columns: 38px minmax(0, 1fr) auto auto;
+  grid-template-columns: 32px minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 12px;
-  min-height: 52px;
-  padding: 10px 14px;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 12px;
   border: 1px solid var(--border-soft);
   border-radius: 8px;
   background: var(--bg-card);
@@ -386,12 +386,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
   color: #ffffff;
   font-family: var(--font-display);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -405,7 +405,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-body);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
 }
 
@@ -413,11 +413,11 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  margin-top: 2px;
+  gap: 5px;
+  margin-top: 1px;
   color: var(--text-muted);
   font-family: var(--font-body);
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .metaDot {

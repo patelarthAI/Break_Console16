@@ -1,10 +1,12 @@
 'use client';
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Briefcase, FileText, Calendar, ChevronLeft, ChevronRight, Download, AlertTriangle, CheckCircle, BarChart2, Users, X, ChevronDown, Filter } from 'lucide-react';
+import { Briefcase, FileText, Calendar, ChevronLeft, ChevronRight, Download, AlertTriangle, CheckCircle, BarChart2, Users, X, ChevronDown, Filter, Zap, Globe, ShieldAlert, Search } from 'lucide-react';
 import { getAllUsers, getLogsForDate, getLogDatesForMonth, getClients, ClientRow, getLogsBatch, getCurrentUser } from '@/lib/store';
 import { TimeLog, User } from '@/types';
 import DailyLogEditor from './DailyLogEditor';
+import CustomSelect from './ui/CustomSelect';
+import DateRangePicker, { type DateRangeValue } from './ui/DateRangePicker';
 import { Pencil } from 'lucide-react';
 import {
     computeSession, computeWorkedTime, computeTotalTime,
@@ -13,7 +15,7 @@ import {
     BREAK_LIMIT_MS, BRB_LIMIT_MS, checkViolations,
 } from '@/lib/timeUtils';
 
-type DateRange = 'today' | 'yesterday' | 'week' | 'month';
+type DateRange = 'today' | 'yesterday' | 'week' | 'month' | 'custom';
 
 function pad(n: number) { return String(n).padStart(2, '0'); }
 
@@ -113,23 +115,23 @@ function ReportTable({ rows, showDate, showName, onEdit }: { rows: DayRow[]; sho
     ].filter(Boolean).join(' ');
 
     return (
-        <div className="overflow-x-auto rounded-[2rem] p-4 relative panel-3d shadow-2xl">
-            <div className="min-w-[950px] flex flex-col gap-3">
-                {/* Headers */}
-                <div className="grid gap-4 px-5 py-3 rounded-xl bg-white/[0.03] border border-white/[0.05] shadow-[inset_0_1px_0_rgba(255,255,255,0.02)] items-center" style={{ gridTemplateColumns: gridCols }}>
-                    {showName && <div className="text-[10px] font-black tracking-widest uppercase text-slate-500">Name</div>}
-                    {showDate && <div className="text-[10px] font-black tracking-widest uppercase text-slate-500">Date</div>}
-                    {showDate && <div className="text-[10px] font-black tracking-widest uppercase text-slate-500">Day</div>}
-                    <div className="text-[10px] font-black tracking-widest uppercase text-emerald-500/80">In</div>
-                    <div className="text-[10px] font-black tracking-widest uppercase text-rose-500/80">Out</div>
-                    <div className="text-[10px] font-black tracking-widest uppercase text-indigo-400">Worked</div>
-                    <div className="text-[10px] font-black tracking-widest uppercase text-orange-400">Breaks</div>
-                    <div className="text-[10px] font-black tracking-widest uppercase text-orange-400">Time</div>
-                    <div className="text-[10px] font-black tracking-widest uppercase text-sky-400">BRBs</div>
-                    <div className="text-[10px] font-black tracking-widest uppercase text-sky-400">Time</div>
-                    <div className="text-[10px] font-black tracking-widest uppercase text-purple-400">⏱ Total Brk</div>
-                    <div className="text-[10px] font-black tracking-widest uppercase text-rose-400">⚠ Violations</div>
-                    <div className="text-[10px] font-black tracking-widest uppercase text-slate-500 text-right">Edit</div>
+        <div className="overflow-visible rounded-3xl relative">
+            <div className="min-w-[1000px] flex flex-col gap-3">
+                {/* Sticky Header */}
+                <div className="sticky top-0 z-50 grid gap-4 px-6 py-4 rounded-2xl bg-[#0a001a]/80 border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.5)] items-center backdrop-blur-3xl" style={{ gridTemplateColumns: gridCols }}>
+                    {showName && <div className="text-[10px] font-black tracking-[0.2em] uppercase text-slate-500">Recruiter Protocol</div>}
+                    {showDate && <div className="text-[10px] font-black tracking-[0.2em] uppercase text-slate-500">Timeline</div>}
+                    {showDate && <div className="text-[10px] font-black tracking-[0.2em] uppercase text-slate-500">Day</div>}
+                    <div className="text-[10px] font-black tracking-[0.2em] uppercase text-emerald-500/80">Arrival</div>
+                    <div className="text-[10px] font-black tracking-[0.2em] uppercase text-rose-500/80">Departure</div>
+                    <div className="text-[10px] font-black tracking-[0.2em] uppercase text-indigo-400">Net Active</div>
+                    <div className="text-[10px] font-black tracking-[0.2em] uppercase text-orange-400">Breaks</div>
+                    <div className="text-[10px] font-black tracking-[0.2em] uppercase text-orange-400">Total</div>
+                    <div className="text-[10px] font-black tracking-[0.2em] uppercase text-sky-400">BRBs</div>
+                    <div className="text-[10px] font-black tracking-[0.2em] uppercase text-sky-400">Total</div>
+                    <div className="text-[10px] font-black tracking-[0.2em] uppercase text-purple-400">Idle Pool</div>
+                    <div className="text-[10px] font-black tracking-[0.2em] uppercase text-rose-400">Compliance</div>
+                    <div className="text-[10px] font-black tracking-[0.2em] uppercase text-slate-500 text-right opacity-0">Actions</div>
                 </div>
 
                 {/* Rows */}
@@ -229,48 +231,39 @@ function UserSummaryCard({ name, rows }: { name: string; rows: DayRow[] }) {
 type ViolFilter = 'late_in' | 'break' | 'brb' | 'auto_out' | 'all' | null;
 
 export default function MasterReports() {
-    const [range, setRange] = useState<DateRange>('today');
-    const [weekOffset, setWeekOffset] = useState(0);
-    const [monthOffset, setMonthOffset] = useState(0);
+    /* ── Date range (new unified picker) ──────────────────────────── */
+    const todayStr = dateStr(new Date());
+    const [dateRange, setDateRange] = useState<DateRangeValue>({
+        preset: 'today',
+        startDate: todayStr,
+        endDate: todayStr,
+    });
+
+    // Derive a legacy range type for display logic
+    const range: DateRange = dateRange.preset === 'today' ? 'today'
+        : dateRange.preset === 'yesterday' ? 'yesterday'
+        : ['thisWeek', 'lastWeek', 'last7'].includes(dateRange.preset ?? '') ? 'week'
+        : ['thisMonth', 'lastMonth', 'last30'].includes(dateRange.preset ?? '') ? 'month'
+        : 'custom';
+
     const [rows, setRows] = useState<DayRow[]>([]);
     const [loading, setLoading] = useState(false);
-    const [memoizedRange, setMemoizedRange] = useState<DateRange>('today'); // To avoid flicker
     const [clients, setClients] = useState<ClientRow[]>([]);
     const [selectedClients, setSelectedClients] = useState<string[]>([]);
-    const [clientDropOpen, setClientDropOpen] = useState(false);
-    const clientDropRef = useRef<HTMLDivElement>(null);
     const [loadingClients, setLoadingClients] = useState(true);
     // Name search + chips
     const [recruiterSearch, setRecruiterSearch] = useState('');
     const [selectedRecruiters, setSelectedRecruiters] = useState<string[]>([]);
-    const recruiterRef = useRef<HTMLDivElement>(null);
 
-    // Violation filter tile (Legacy)
+    // Violation filter tile
     const [violationFilter, setViolationFilter] = useState<ViolFilter>(null);
 
-    // New Dynamic Filters
-    const [statusDropFilter, setStatusDropFilter] = useState<string>(''); // 'Active', 'Not Active'
-    const [violDropFilter, setViolDropFilter] = useState<string>(''); // 'BRB Exceed', 'Break Exceed', 'Late In', 'Early Out'
-
-    const [statusDropOpen, setStatusDropOpen] = useState(false);
-    const [violDropOpen, setViolDropOpen] = useState(false);
-
-    const statusRef = useRef<HTMLDivElement>(null);
-    const violRef = useRef<HTMLDivElement>(null);
+    // Dynamic Filters
+    const [statusDropFilter, setStatusDropFilter] = useState<string>('');
+    const [violDropFilter, setViolDropFilter] = useState<string>('');
 
     const [selectedUserForEdit, setSelectedUserForEdit] = useState<{ user: User, date: string } | null>(null);
     const currentAdminId = getCurrentUser()?.id ?? '';
-
-    // Close client dropdown on outside click
-    useEffect(() => {
-        function handleOutside(e: MouseEvent) {
-            if (clientDropRef.current && !clientDropRef.current.contains(e.target as Node)) setClientDropOpen(false);
-            if (statusRef.current && !statusRef.current.contains(e.target as Node)) setStatusDropOpen(false);
-            if (violRef.current && !violRef.current.contains(e.target as Node)) setViolDropOpen(false);
-        }
-        document.addEventListener('mousedown', handleOutside);
-        return () => document.removeEventListener('mousedown', handleOutside);
-    }, []);
 
     useEffect(() => {
         getClients().then(data => {
@@ -282,25 +275,25 @@ export default function MasterReports() {
         });
     }, []);
 
+    /* ── Generate dates from dateRange ────────────────────────────── */
+    const generateDatesFromRange = useCallback((): string[] => {
+        const start = new Date(dateRange.startDate + 'T00:00');
+        const end = new Date(dateRange.endDate + 'T00:00');
+        const dates: string[] = [];
+        const cursor = new Date(start);
+        while (cursor <= end) {
+            dates.push(dateStr(cursor));
+            cursor.setDate(cursor.getDate() + 1);
+        }
+        return dates;
+    }, [dateRange.startDate, dateRange.endDate]);
+
     const buildRows = useCallback(async () => {
         setLoading(true);
         try {
             const users = (await getAllUsers()).filter((u) => !u.isMaster);
             const userIds = users.map(u => u.id);
-            const now = new Date();
-            let dates: string[] = [];
-
-            if (range === 'today') {
-                dates = [dateStr(now)];
-            } else if (range === 'yesterday') {
-                const yest = new Date(now); yest.setDate(yest.getDate() - 1);
-                dates = [dateStr(yest)];
-            } else if (range === 'week') {
-                dates = getWeekDates(weekOffset);
-            } else if (range === 'month') {
-                const refDate = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
-                dates = getMonthWorkDates(yearMonthStr(refDate));
-            }
+            const dates = generateDatesFromRange();
 
             const logsByDay = await getLogsBatch(userIds, dates);
             
@@ -312,9 +305,10 @@ export default function MasterReports() {
                 }
             }
             
-            setRows(['week', 'month'].includes(range) ? newRows.filter(r => r.punchIn || r.workedMs > 0) : newRows);
+            const isMultiDayRange = dates.length > 1;
+            setRows(isMultiDayRange ? newRows.filter(r => r.punchIn || r.workedMs > 0) : newRows);
         } finally { setLoading(false); }
-    }, [range, weekOffset, monthOffset]);
+    }, [generateDatesFromRange]);
 
     // Build rows whenever range/offsets change
     useEffect(() => { buildRows(); }, [buildRows]);
@@ -383,12 +377,7 @@ export default function MasterReports() {
         ], 'data-report');
     };
 
-
-
-
-    const now = new Date();
-    const refDate = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
-    const isMultiDay = ['week', 'month'].includes(range);
+    const isMultiDay = dateRange.startDate !== dateRange.endDate;
 
     // Memoized derived data
     const { filteredRows, baseS, uniqueUsers, recruiterFiltered, avgWorkedMs, uniqueUserCount } = useMemo(() => {
@@ -437,224 +426,118 @@ export default function MasterReports() {
     return (
         <div className="space-y-5">
             {/* ── Header row ────────────────────────────────────────────── */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <div className="p-2 bg-gradient-to-br from-blue-600/20 to-blue-500/10 rounded-xl border border-blue-500/30 shadow-[inset_0_0_15px_rgba(59,130,246,0.2)]">
-                        <FileText size={20} className="text-blue-400 drop-shadow-[0_0_8px_rgba(59,130,246,0.8)]" />
+            {/* ── Header row (2026 Vibrant) ────────────────────────────────────────────── */}
+            <div className="flex items-center justify-between gap-6 mb-8">
+                <div className="flex items-center gap-4">
+                    <div className="relative">
+                        <div className="absolute inset-0 bg-indigo-500/20 blur-xl rounded-full animate-pulse" />
+                        <div className="relative w-14 h-14 bg-[#0a001a] border border-white/10 rounded-2xl flex items-center justify-center">
+                            <FileText size={28} className="text-indigo-400" />
+                        </div>
                     </div>
-                    <h2 className="font-black text-white text-lg tracking-tight">Data Reports</h2>
-                    <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400 border border-white/10 bg-white/5 px-2.5 py-1 rounded-full">Mon–Fri</span>
+                    <div>
+                        <h2 className="text-3xl font-black text-white tracking-tighter mb-1">Analytical Intelligence</h2>
+                        <div className="flex items-center gap-2">
+                           <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                           <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Operational Reports 2026</span>
+                        </div>
+                    </div>
                 </div>
-                <motion.button onClick={handleCSV} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} disabled={filteredRows.length === 0}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 border border-emerald-400/30 text-white text-xs font-bold tracking-wider hover:from-emerald-500 hover:to-emerald-400 transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-40 disabled:grayscale">
-                    <Download size={14} /> Export Excel
+                <motion.button 
+                    onClick={handleCSV} 
+                    whileHover={{ scale: 1.02, y: -2 }} 
+                    whileTap={{ scale: 0.98 }} 
+                    disabled={filteredRows.length === 0}
+                    className="flex items-center gap-3 px-8 py-4 rounded-2xl bg-white text-black text-xs font-black tracking-[0.2em] uppercase hover:bg-indigo-50 transition-all shadow-[0_20px_40px_rgba(255,255,255,0.1)] disabled:opacity-20"
+                >
+                    <Zap size={16} fill="currentColor" /> Generate Dataset
                 </motion.button>
             </div>
 
-            {/* ── Filter bar — matching Live Dashboard style ─────────────── */}
-            <div className="flex z-40 items-center justify-between panel-3d border border-white/10 p-2.5 relative flex-wrap gap-2">
-                <div className="flex items-center gap-2 flex-1 flex-wrap">
-                    {/* Multi-select client dropdown */}
-                    <div className="relative" ref={clientDropRef}>
-                        <button
-                            onClick={() => setClientDropOpen(o => !o)}
-                            disabled={loadingClients}
-                            className="flex items-center gap-1.5 px-3 py-2 bg-transparent hover:bg-white/[0.04] rounded-xl transition-colors text-[13px] font-bold text-slate-300"
-                        >
-                            <Filter size={14} className="text-slate-500" />
-                            {selectedClients.length === 0 ? 'All Clients' : `${selectedClients.length} Clients`}
-                            <ChevronDown size={14} className={`text-slate-500 transition-transform ${clientDropOpen ? 'rotate-180' : ''}`} />
-                        </button>
-                        <AnimatePresence>
-                            {clientDropOpen && (
-                                <motion.div
-                                    initial={{ opacity: 0, y: 4, scale: 0.98 }}
-                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                    exit={{ opacity: 0, y: 4, scale: 0.98 }}
-                                    className="absolute top-full left-0 mt-2 w-56 bg-[#0C0C14] border border-white/10 rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.8)] overflow-hidden z-[100] py-1"
-                                >
-                                    <div className="px-3 py-2 border-b border-white/[0.06] flex items-center justify-between">
-                                        <button onClick={() => setSelectedClients(clients.map(c => c.name))} className="text-[10px] font-bold tracking-widest text-indigo-400 hover:text-indigo-300 uppercase">Select All</button>
-                                        <button onClick={() => setSelectedClients([])} className="text-[10px] font-bold text-slate-600 hover:text-white uppercase tracking-widest">Clear</button>
-                                    </div>
-                                    <div className="max-h-64 overflow-y-auto">
-                                        {clients.map(c => {
-                                            const checked = selectedClients.includes(c.name);
-                                            return (
-                                                <button
-                                                    key={c.id}
-                                                    onClick={() => setSelectedClients(prev =>
-                                                        prev.includes(c.name) ? prev.filter(n => n !== c.name) : [...prev, c.name]
-                                                    )}
-                                                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left transition-all ${checked ? 'bg-indigo-500/15 text-white font-bold' : 'text-slate-300 hover:bg-white/5 font-medium'}`}
-                                                >
-                                                    <span className={`w-4 h-4 rounded-md border flex items-center justify-center flex-shrink-0 transition-all ${checked ? 'bg-emerald-500 border-emerald-500' : 'border-slate-600'}`}>
-                                                        {checked && <span className="text-black text-[10px] font-black">✓</span>}
-                                                    </span>
-                                                    {c.name}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </div>
+            {/* ── Filter bar — unified style ─────────────────────────────── */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
+                <div className="flex items-center gap-2 bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 focus-within:border-indigo-500/50 transition-all">
+                    <Search className="text-slate-500 flex-shrink-0" size={14} />
+                    <input
+                        type="text"
+                        placeholder="Search recruiter..."
+                        value={recruiterSearch}
+                        onChange={e => setRecruiterSearch(e.target.value)}
+                        className="bg-transparent text-[12px] font-semibold text-white placeholder:text-slate-600 outline-none w-full"
+                    />
+                </div>
 
-                    <div className="w-px h-6 bg-white/10" />
+                <CustomSelect
+                    multi
+                    options={clients.map(c => ({ value: c.name, label: c.name }))}
+                    value={selectedClients}
+                    onChange={setSelectedClients}
+                    placeholder="Select Clients"
+                    searchable
+                />
 
-                    {/* Name typeahead search */}
-                    <div className="relative" ref={recruiterRef}>
-                        <div className="flex items-center gap-2 bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 min-w-[200px] focus-within:border-white/20 transition-all">
-                            <Users size={14} className="text-slate-500 flex-shrink-0" />
-                            <input
-                                type="text"
-                                placeholder="Search recruiter…"
-                                value={recruiterSearch}
-                                onChange={e => setRecruiterSearch(e.target.value)}
-                                className="bg-transparent text-sm text-white placeholder:text-slate-500 focus:outline-none w-full font-semibold"
-                            />
-                            {recruiterSearch && <button onClick={() => setRecruiterSearch('')} className="text-slate-600 hover:text-white"><X size={10} /></button>}
-                        </div>
-                        {/* Suggestions dropdown */}
-                        <AnimatePresence>
-                            {filteredSuggestions.length > 0 && (
-                                <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-                                    className="absolute top-full left-0 mt-1 z-50 w-52 rounded-xl border border-white/10 bg-[#0C0C14] backdrop-blur-xl shadow-2xl py-1">
-                                    {filteredSuggestions.slice(0, 8).map(name => (
-                                        <button key={name} onClick={() => addRecruiter(name)}
-                                            className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-white/5 hover:text-white transition-all font-medium">
-                                            {name}
-                                        </button>
-                                    ))}
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </div>
+                <CustomSelect
+                    options={[
+                        { value: 'Active', label: 'Active Now' },
+                        { value: 'Not Active', label: 'Offline' }
+                    ]}
+                    value={statusDropFilter}
+                    onChange={setStatusDropFilter}
+                    placeholder="Engagement Status"
+                />
 
-                    <div className="w-px h-6 bg-white/10" />
+                <CustomSelect
+                    options={[
+                        { value: 'Late In', label: 'Late Login' },
+                        { value: 'Early Out', label: 'Early Logout' },
+                        { value: 'Break Exceed', label: 'Break Violation' },
+                        { value: 'BRB Exceed', label: 'BRB Violation' },
+                        { value: 'Auto Out', label: 'Auto Logout' }
+                    ]}
+                    value={violDropFilter}
+                    onChange={setViolDropFilter}
+                    placeholder="Violation Protocol"
+                />
 
-                    {/* Status Dropdown */}
-                    <div className="relative" ref={statusRef}>
-                        <button onClick={() => { setStatusDropOpen(o => !o); setClientDropOpen(false); setViolDropOpen(false); }}
-                            className="flex items-center gap-1.5 px-3 py-2 bg-transparent hover:bg-white/[0.04] rounded-xl transition-colors text-[13px] font-bold text-slate-300">
-                            {statusDropFilter || 'Status'}
-                            <ChevronDown size={13} className={`text-slate-500 transition-transform ${statusDropOpen ? 'rotate-180' : ''}`} />
-                        </button>
-                        <AnimatePresence>
-                            {statusDropOpen && (
-                                <motion.div initial={{ opacity: 0, y: 4, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 4, scale: 0.98 }}
-                                    className="absolute top-full left-0 mt-2 w-48 bg-[#0C0C14] border border-white/10 rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.8)] overflow-hidden z-[100] py-1">
-                                    <div className="px-3 py-2 border-b border-white/[0.06]">
-                                        <span className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Filter by Status</span>
-                                    </div>
-                                    <div className="max-h-64 overflow-y-auto">
-                                        <button onClick={() => { setStatusDropFilter(''); setStatusDropOpen(false); }}
-                                            className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left transition-all ${!statusDropFilter ? 'bg-indigo-500/15 text-white font-bold' : 'text-slate-300 hover:bg-white/5 font-medium'}`}>
-                                            <span className={`w-4 h-4 rounded-md border flex items-center justify-center flex-shrink-0 ${!statusDropFilter ? 'bg-emerald-500 border-emerald-500' : 'border-slate-600'}`}>
-                                                {!statusDropFilter && <span className="text-black text-[10px] font-black">✓</span>}
-                                            </span>
-                                            All Statuses
-                                        </button>
-                                        {['Active', 'Not Active'].map(st => (
-                                            <button key={st} onClick={() => { setStatusDropFilter(st); setStatusDropOpen(false); }}
-                                                className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left transition-all ${statusDropFilter === st ? 'bg-indigo-500/15 text-white font-bold' : 'text-slate-300 hover:bg-white/5 font-medium'}`}>
-                                                <span className={`w-4 h-4 rounded-md border flex items-center justify-center flex-shrink-0 ${statusDropFilter === st ? 'bg-emerald-500 border-emerald-500' : 'border-slate-600'}`}>
-                                                    {statusDropFilter === st && <span className="text-black text-[10px] font-black">✓</span>}
-                                                </span>
-                                                {st}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </div>
+                <DateRangePicker
+                    value={dateRange}
+                    onChange={setDateRange}
+                />
+            </div>
 
-                    {/* Violations Dropdown */}
-                    <div className="relative" ref={violRef}>
-                        <button onClick={() => { setViolDropOpen(o => !o); setClientDropOpen(false); setStatusDropOpen(false); }}
-                            className="flex items-center gap-1.5 px-3 py-2 bg-transparent hover:bg-white/[0.04] rounded-xl transition-colors text-[13px] font-bold text-slate-300">
-                            {violDropFilter || 'Violations'}
-                            <ChevronDown size={13} className={`text-slate-500 transition-transform ${violDropOpen ? 'rotate-180' : ''}`} />
-                        </button>
-                        <AnimatePresence>
-                            {violDropOpen && (
-                                <motion.div initial={{ opacity: 0, y: 4, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 4, scale: 0.98 }}
-                                    className="absolute top-full left-0 mt-2 w-52 bg-[#0C0C14] border border-white/10 rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.8)] overflow-hidden z-[100] py-1">
-                                    <div className="px-3 py-2 border-b border-white/[0.06]">
-                                        <span className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Filter Violations</span>
-                                    </div>
-                                    <div className="max-h-64 overflow-y-auto">
-                                        <button onClick={() => { setViolDropFilter(''); setViolDropOpen(false); }}
-                                            className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left transition-all ${!violDropFilter ? 'bg-indigo-500/15 text-white font-bold' : 'text-slate-300 hover:bg-white/5 font-medium'}`}>
-                                            <span className={`w-4 h-4 rounded-md border flex items-center justify-center flex-shrink-0 ${!violDropFilter ? 'bg-emerald-500 border-emerald-500' : 'border-slate-600'}`}>
-                                                {!violDropFilter && <span className="text-black text-[10px] font-black">✓</span>}
-                                            </span>
-                                            All Violations
-                                        </button>
-                                        {['BRB Exceed', 'Break Exceed', 'Late In', 'Early Out'].map(st => (
-                                            <button key={st} onClick={() => { setViolDropFilter(st); setViolDropOpen(false); }}
-                                                className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left transition-all ${violDropFilter === st ? 'bg-indigo-500/15 text-white font-bold' : 'text-slate-300 hover:bg-white/5 font-medium'}`}>
-                                                <span className={`w-4 h-4 rounded-md border flex items-center justify-center flex-shrink-0 ${violDropFilter === st ? 'bg-emerald-500 border-emerald-500' : 'border-slate-600'}`}>
-                                                    {violDropFilter === st && <span className="text-black text-[10px] font-black">✓</span>}
-                                                </span>
-                                                {st}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </div>
+            {/* ── Active Filters & Match Count ── */}
+            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 mb-6 px-1">
+                <div className="flex flex-wrap items-center gap-2">
+                    {/* Selected recruiter chips */}
+                    {selectedRecruiters.map(name => (
+                        <span key={name} className="flex items-center gap-1 text-[10px] font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 px-2.5 py-1 rounded-md">
+                            {name}
+                            <button onClick={() => removeRecruiter(name)} className="text-indigo-400 hover:text-white transition-colors"><X size={9} /></button>
+                        </span>
+                    ))}
 
                     {/* Violation filter chip (when active) */}
                     {violationFilter && (
-                        <span className="flex items-center gap-1 text-[11px] font-bold bg-rose-500/15 text-rose-300 border border-rose-500/30 px-2.5 py-1 rounded-full">
-                            {violationFilter === 'late_in' ? '🔴 Late Logins' : violationFilter === 'break' ? '☕ Break Exceeds' : violationFilter === 'brb' ? '🔄 BRB Exceeds' : '⚠️ All Violations'}
-                            <button onClick={() => setViolationFilter(null)} className="text-rose-400 hover:text-white transition-colors"><X size={10} /></button>
+                        <span className="flex items-center gap-1 text-[10px] font-bold bg-rose-500/15 text-rose-300 border border-rose-500/30 px-2.5 py-1 rounded-md">
+                            {violationFilter === 'late_in' ? '🔴 Late Logins' : violationFilter === 'break' ? '☕ Break Exceeds' : violationFilter === 'brb' ? '🔄 BRB Exceeds' : violationFilter === 'auto_out' ? '🚨 Auto Outs' : '⚠️ All Violations'}
+                            <button onClick={() => setViolationFilter(null)} className="text-rose-400 hover:text-white transition-colors"><X size={9} /></button>
                         </span>
                     )}
 
                     {(selectedClients.length > 0 || selectedRecruiters.length > 0 || statusDropFilter !== '' || violDropFilter !== '' || violationFilter !== null) && (
                         <button onClick={() => { setSelectedClients([]); setSelectedRecruiters([]); setRecruiterSearch(''); setStatusDropFilter(''); setViolDropFilter(''); setViolationFilter(null); }}
-                            className="flex items-center gap-1 text-[11px] font-bold text-slate-500 hover:text-white transition-colors px-2.5 py-1.5 rounded-lg hover:bg-white/5 mt-1 xl:mt-0">
-                            <X size={11} /> Clear all
+                            className="flex items-center gap-1 text-[10px] font-bold text-slate-500 hover:text-white transition-colors px-2 py-1 rounded-lg hover:bg-white/5">
+                            <X size={10} /> Clear all
                         </button>
                     )}
                 </div>
 
                 <div className="flex items-center gap-3 pr-2 pl-4 border-l border-white/10">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 font-mono">
                         {filteredRows.length} Match{filteredRows.length !== 1 ? 'es' : ''}
                     </span>
                 </div>
             </div>
-
-            {/* ── Date range tabs — matching Live Dashboard segmented control ── */}
-            <div className="panel-3d p-1.5 grid grid-cols-4 gap-1 rounded-[1.5rem]">
-                {(['today', 'yesterday', 'week', 'month'] as const).map((r) => (
-                    <button key={r} onClick={() => setRange(r)}
-                        className={`flex items-center justify-center gap-1.5 py-3 rounded-[1.2rem] text-sm font-bold tracking-wide transition-all duration-300 ${range === r ? 'bg-indigo-600 text-white shadow-[0_4px_20px_rgba(99,102,241,0.4)] border border-indigo-400/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
-                        <Calendar size={14} /> {r === 'today' ? 'Today' : r === 'yesterday' ? 'Yesterday' : r === 'week' ? 'Past Week' : 'Past Month'}
-                    </button>
-                ))}
-            </div>
-
-            {range === 'week' && (
-                <div className="flex items-center justify-between panel-3d px-5 py-4 shadow-xl">
-                    <button onClick={() => setWeekOffset(o => o - 1)} className="text-slate-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-white/5"><ChevronLeft size={20} /></button>
-                    <p className="text-base font-extrabold text-white tracking-wide">{weekLabel(weekOffset)}</p>
-                    <button onClick={() => setWeekOffset(o => Math.min(o + 1, 0))} disabled={weekOffset >= 0} className="text-slate-400 hover:text-white transition-colors disabled:opacity-30 p-2 rounded-lg hover:bg-white/5"><ChevronRight size={20} /></button>
-                </div>
-            )}
-            {range === 'month' && (
-                <div className="flex items-center justify-between panel-3d px-5 py-4 shadow-xl">
-                    <button onClick={() => setMonthOffset(o => o - 1)} className="text-slate-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-white/5"><ChevronLeft size={20} /></button>
-                    <p className="text-base font-extrabold text-white tracking-wide">{monthLabel(refDate)}</p>
-                    <button onClick={() => setMonthOffset(o => Math.min(o + 1, 0))} disabled={monthOffset >= 0} className="text-slate-400 hover:text-white transition-colors disabled:opacity-30 p-2 rounded-lg hover:bg-white/5"><ChevronRight size={20} /></button>
-                </div>
-            )}
 
             {loading && <p className="text-center text-slate-500 font-medium text-sm py-16 animate-pulse">Processing report data…</p>}
 

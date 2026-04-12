@@ -17,7 +17,8 @@ import {
   type UserStatusRecord,
 } from '@/lib/store';
 import { getTodayKey } from '@/lib/timeUtils';
-import ReimaginedAdminExperience from '@/components/ReimaginedAdminExperience';
+import CustomSelect from './ui/CustomSelect';
+import ReimaginedAdminExperience from '@/components/ReimaginedAdminExperience.legacy';
 import styles from './BrigadeAdminDashboard.module.css';
 
 type DashboardView = 'dashboard' | 'reports' | 'leave' | 'settings';
@@ -41,6 +42,10 @@ interface DashboardMember {
   latestTouch?: number;
   trackedPercent: number;
   avatarColor: string;
+  breakMs: number;      // active break duration in ms (0 if not on break)
+  brbMs: number;        // active BRB duration in ms (0 if not on BRB)
+  breakOverstay: boolean;  // break > 45m
+  brbOverstay: boolean;    // BRB > 10m
 }
 
 const NAV_LINKS: Array<{ id: DashboardView; label: string }> = [
@@ -75,12 +80,21 @@ const AVATAR_COLORS = [
 
 const CALENDAR_HEADERS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 const BREAK_LIMIT_PER_DAY = '1h 25m / day';
+const BREAK_OVERSTAY_MS = 45 * 60 * 1000;  // 45 min
+const BRB_OVERSTAY_MS = 10 * 60 * 1000;    // 10 min
+
+function fmtOverstayDuration(ms: number): string {
+  const totalMins = Math.floor(ms / 60000);
+  const h = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
 
 export default function BrigadeAdminDashboard({ user, onLogout }: Props) {
   const [activeView, setActiveView] = useState<DashboardView>('dashboard');
   const [activeFilter, setActiveFilter] = useState<StatFilter>('all');
   const [search, setSearch] = useState('');
-  const [clientFilter, setClientFilter] = useState('all');
+  const [clientFilter, setClientFilter] = useState<string[]>([]);
   const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(new Date()));
   const [statusRecords, setStatusRecords] = useState<UserStatusRecord[]>([]);
   const [leaveRecords, setLeaveRecords] = useState<LeaveRecord[]>([]);
@@ -151,7 +165,7 @@ export default function BrigadeAdminDashboard({ user, onLogout }: Props) {
   const statCounts = buildStatCounts(roster);
   const clientOptions = ['all', ...Array.from(new Set(roster.map((member) => member.clientName))).sort((left, right) => left.localeCompare(right))];
   const filteredRoster = roster
-    .filter((member) => (clientFilter === 'all' ? true : member.clientName === clientFilter))
+    .filter((member) => (clientFilter.length === 0 ? true : clientFilter.includes(member.clientName)))
     .filter((member) => (activeFilter === 'all' ? true : member.status === activeFilter))
     .filter((member) => {
       const query = deferredSearch.trim().toLowerCase();
@@ -271,20 +285,15 @@ export default function BrigadeAdminDashboard({ user, onLogout }: Props) {
                     />
                   </label>
 
-                  <div className={styles.selectWrap}>
-                    <div className={styles.selectPill}>
-                      <SlidersHorizontal size={13} strokeWidth={1.8} />
-                      <span>{clientFilter === 'all' ? 'All Clients' : clientFilter}</span>
-                      <ChevronDown size={13} strokeWidth={1.8} />
-                    </div>
-                    <select value={clientFilter} onChange={(event) => setClientFilter(event.target.value)} className={styles.selectInput} aria-label="Filter by client">
-                      {clientOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option === 'all' ? 'All Clients' : option}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <CustomSelect
+                    multi
+                    options={clientOptions.filter(o => o !== 'all').map(o => ({ value: o, label: o }))}
+                    value={clientFilter}
+                    onChange={setClientFilter}
+                    placeholder="All Clients"
+                    searchable
+                    className={styles.selectWrap}
+                  />
 
                   <div className={styles.matches}>{filteredRoster.length} matches</div>
                 </div>
@@ -296,19 +305,48 @@ export default function BrigadeAdminDashboard({ user, onLogout }: Props) {
                 ) : (
                   groupedRoster.map(([clientName, members]) => {
                     const offlineCount = members.filter((member) => member.status === 'offline').length;
+                    const activeCount = members.filter((member) => member.status === 'working').length;
+                    const breakOverstayNames = members.filter((m) => m.breakOverstay).map((m) => m.name);
+                    const brbOverstayNames = members.filter((m) => m.brbOverstay).map((m) => m.name);
+                    const overstayNames = [...new Set([...breakOverstayNames, ...brbOverstayNames])];
+
+                    // Compute group averages for break/BRB
+                    const onBreakMembers = members.filter(m => m.status === 'on_break');
+                    const onBrbMembers = members.filter(m => m.status === 'on_brb');
+                    const avgBreakMs = onBreakMembers.length > 0 ? onBreakMembers.reduce((sum, m) => sum + m.breakMs, 0) / onBreakMembers.length : 0;
+                    const avgBrbMs = onBrbMembers.length > 0 ? onBrbMembers.reduce((sum, m) => sum + m.brbMs, 0) / onBrbMembers.length : 0;
 
                     return (
                       <section key={clientName} className={styles.sectionGroup}>
                         <div className={styles.sectionHeader}>
                           <div className={styles.sectionTitle}>{clientName}</div>
                           <div className={styles.sectionPill}>{members.length} REPS</div>
-                          <div className={styles.sectionPill}>{offlineCount} OFFLINE</div>
+                          <div className={styles.sectionPill}>{activeCount} ACTIVE</div>
+                          {onBreakMembers.length > 0 && <div className={styles.sectionPill}>{onBreakMembers.length} BREAK</div>}
+                          {offlineCount > 0 && <div className={styles.sectionPill}>{offlineCount} OFFLINE</div>}
+                          {overstayNames.length > 0 && <div className={styles.sectionPill} style={{ color: 'var(--amber)', borderColor: 'hsl(38 90% 50% / 0.3)' }}>{overstayNames.length} OVERDUE</div>}
+                          {onBreakMembers.length > 0 && <div className={styles.sectionPill} style={{ color: 'var(--amber)', borderColor: 'hsl(38 90% 50% / 0.25)', fontSize: '9px' }}>Avg Break: {fmtOverstayDuration(avgBreakMs)}</div>}
+                          {onBrbMembers.length > 0 && <div className={styles.sectionPill} style={{ color: 'var(--orange)', borderColor: 'hsl(20 90% 50% / 0.25)', fontSize: '9px' }}>Avg BRB: {fmtOverstayDuration(avgBrbMs)}</div>}
                           <div className={styles.sectionRule} />
                         </div>
 
+                        {/* Overstay warning banner */}
+                        {overstayNames.length > 0 && (
+                          <div style={{
+                            display: 'flex', alignItems: 'center', gap: '8px',
+                            padding: '8px 14px', borderRadius: '12px', marginBottom: '8px',
+                            background: 'linear-gradient(90deg, rgba(245,158,11,0.12), rgba(245,158,11,0.04))',
+                            border: '1px solid rgba(245,158,11,0.2)',
+                            fontSize: '11px', fontWeight: 700, color: '#fbbf24',
+                          }}>
+                            <span style={{ fontSize: '14px' }}>⚠</span>
+                            <span>{overstayNames.join(', ')} {overstayNames.length === 1 ? 'has' : 'have'} been away beyond threshold</span>
+                          </div>
+                        )}
+
                         <div className={styles.rows}>
                           {members.map((member) => (
-                            <div key={member.id} className={styles.employeeRow}>
+                            <div key={member.id} className={styles.employeeRow} style={member.breakOverstay || member.brbOverstay ? { borderLeft: '2px solid rgba(245,158,11,0.5)', background: 'linear-gradient(90deg, rgba(245,158,11,0.06), transparent)' } : undefined}>
                               <div className={styles.avatar} style={{ backgroundColor: member.avatarColor }}>
                                 {member.name.charAt(0).toUpperCase()}
                               </div>
@@ -324,9 +362,26 @@ export default function BrigadeAdminDashboard({ user, onLogout }: Props) {
 
                               <div className={statusBadgeClassName(member.status, styles)}>{statusLabel(member.status)}</div>
 
+                              {/* Overstay / Timer info */}
                               <div className={styles.trackInfo}>
-                                <div className={styles.trackTime}>{formatStamp(member.latestTouch)}</div>
-                                <div className={styles.trackPercent}>{member.trackedPercent}% tracked</div>
+                                {member.breakOverstay ? (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                    <span style={{ fontSize: '10px', fontWeight: 800, color: '#fbbf24', letterSpacing: '0.04em' }}>BREAK:</span>
+                                    <span style={{ fontSize: '10px', fontWeight: 800, color: '#f97316' }}>⚠</span>
+                                    <span style={{ fontSize: '13px', fontWeight: 900, fontFamily: 'monospace', color: '#fbbf24', letterSpacing: '-0.02em' }}>{fmtOverstayDuration(member.breakMs)}</span>
+                                  </div>
+                                ) : member.brbOverstay ? (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                    <span style={{ fontSize: '10px', fontWeight: 800, color: '#60a5fa', letterSpacing: '0.04em' }}>BRB:</span>
+                                    <span style={{ fontSize: '10px', fontWeight: 800, color: '#ef4444' }}>⚠</span>
+                                    <span style={{ fontSize: '13px', fontWeight: 900, fontFamily: 'monospace', color: '#60a5fa', letterSpacing: '-0.02em' }}>{fmtOverstayDuration(member.brbMs)}</span>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <div className={styles.trackTime}>{formatStamp(member.latestTouch)}</div>
+                                    <div className={styles.trackPercent}>{member.trackedPercent}% tracked</div>
+                                  </>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -513,6 +568,9 @@ function toDashboardMember(record: UserStatusRecord, todayLeaveKeys: Set<string>
   const status = toMemberStatus(record, todayLeaveKeys.has(key));
   const latestTouch = record.punchOut ?? record.breakStart ?? record.brbStart ?? record.workStart ?? record.punchIn;
   const trackedPercent = getTrackedPercent(record);
+  const now = Date.now();
+  const breakMs = record.breakStart ? now - record.breakStart : 0;
+  const brbMs = record.brbStart ? now - record.brbStart : 0;
 
   return {
     id: record.user.id,
@@ -526,6 +584,10 @@ function toDashboardMember(record: UserStatusRecord, todayLeaveKeys: Set<string>
     latestTouch,
     trackedPercent,
     avatarColor: AVATAR_COLORS[Math.abs(hashString(record.user.name)) % AVATAR_COLORS.length],
+    breakMs,
+    brbMs,
+    breakOverstay: breakMs > BREAK_OVERSTAY_MS,
+    brbOverstay: brbMs > BRB_OVERSTAY_MS,
   };
 }
 

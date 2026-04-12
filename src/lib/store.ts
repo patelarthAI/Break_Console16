@@ -14,6 +14,18 @@ export interface PaginatedLeaveResult {
     pageSize: number;
 }
 
+export interface LeaveSummary {
+    totalEntries: number;
+    totalDays: number;
+    plannedEntries: number;
+    unplannedEntries: number;
+    sickDays: number;
+    casualDays: number;
+    lwpDays: number;
+    uniqueEmployees: number;
+    uniqueClients: number;
+}
+
 export interface LeavePageOptions {
     clientName?: string;
     employeeName?: string;
@@ -39,6 +51,8 @@ const CLIENT_SELECT = 'id,name';
 const CLIENTS_CACHE_TTL_MS = 5 * 60 * 1000;
 const LEAVES_CACHE_TTL_MS = 60 * 1000;
 const STATS_CACHE_TTL_MS = 60 * 1000;
+const BLOCKED_LEAVE_TYPES = new Set(['Dismissed', 'System: Declined']);
+const SYSTEM_AUTO_LEAVE_TYPES = new Set(['System: Absent', 'System: Half-Day']);
 
 interface CacheEntry<T> {
     data: T;
@@ -96,6 +110,75 @@ function clearStatsCache(): void {
 function getLogBucketKey(userId: string, date: string): string {
     return `${userId}|${date}`;
 }
+
+function isBlockedLeaveType(leaveType: string | null | undefined): boolean {
+    return BLOCKED_LEAVE_TYPES.has(leaveType ?? '');
+}
+
+function isSystemAutoLeaveType(leaveType: string | null | undefined): boolean {
+    return SYSTEM_AUTO_LEAVE_TYPES.has(leaveType ?? '');
+}
+
+function isSystemAutoLeaveRecord(leave: Pick<LeaveRecord, 'leave_type' | 'approver'>): boolean {
+    return isSystemAutoLeaveType(leave.leave_type)
+        || (leave.approver ?? '').trim().toLowerCase() === 'system generated';
+}
+
+function normalizeLeaveIdentity(employeeName: string, clientName: string, date: string): string {
+    return `${employeeName.toLowerCase().trim()}|${clientName.toLowerCase().trim()}|${date}`;
+}
+
+function getLeavePriority(leave: LeaveRecord): number {
+    if (isBlockedLeaveType(leave.leave_type)) return 2;
+    if (isSystemAutoLeaveRecord(leave)) return 1;
+    return 0;
+}
+
+function compareLeavePriority(left: LeaveRecord, right: LeaveRecord): number {
+    const priorityDiff = getLeavePriority(left) - getLeavePriority(right);
+    if (priorityDiff !== 0) return priorityDiff;
+
+    const leftCreated = left.created_at ? Date.parse(left.created_at) : 0;
+    const rightCreated = right.created_at ? Date.parse(right.created_at) : 0;
+    if (leftCreated !== rightCreated) return rightCreated - leftCreated;
+
+    return right.id.localeCompare(left.id);
+}
+
+// Server-sync replaces the old browser-only localStorage marker system.
+// The /api/cron/daily-sync endpoint handles auto-logout persistence + auto-leave generation.
+
+function summarizeLeaves(records: Pick<LeaveRecord, 'day_count' | 'leave_type' | 'is_planned' | 'employee_name' | 'client_name'>[]): LeaveSummary {
+    return records.reduce<LeaveSummary>((summary, record) => {
+        const dayCount = Number(record.day_count) || 0;
+
+        summary.totalEntries += 1;
+        summary.totalDays += dayCount;
+        if (record.is_planned) summary.plannedEntries += 1;
+        else summary.unplannedEntries += 1;
+        if (record.leave_type.startsWith('LWP')) summary.lwpDays += dayCount;
+        if (record.leave_type.includes('Sick')) summary.sickDays += dayCount;
+        if (record.leave_type.includes('Casual') || record.leave_type === 'Paid Leave' || record.leave_type.includes('Paternity')) {
+            summary.casualDays += dayCount;
+        }
+
+        return summary;
+    }, {
+        totalEntries: 0,
+        totalDays: 0,
+        plannedEntries: 0,
+        unplannedEntries: 0,
+        sickDays: 0,
+        casualDays: 0,
+        lwpDays: 0,
+        uniqueEmployees: new Set(records.map((record) => record.employee_name)).size,
+        uniqueClients: new Set(records.map((record) => record.client_name)).size,
+    });
+}
+
+// Removed frontend sync triggers. All sync operations are now handled entirely by the 
+// external cron hitting /api/cron/daily-sync once a day at 9 PM CST to avoid blowing up 
+// the Supabase free tier limits on every dashboard load.
 
 function buildLogsByUserDate(rows: LogRow[]): Map<string, TimeLog[]> {
     const logsByUserDate = new Map<string, TimeLog[]>();
@@ -188,10 +271,13 @@ export async function renameClient(id: string, oldName: string, newName: string)
 
 // ─── Leaves ───────────────────────────────────────────────────────────────────
 export async function getLeaves(clientName?: string, force = false): Promise<LeaveRecord[]> {
+
     return withCachedQuery(`leaves:${clientName ?? '*'}`, LEAVES_CACHE_TTL_MS, async () => {
         let query = supabase
             .from('leaves')
             .select('*')
+            .neq('leave_type', 'Dismissed')
+            .neq('leave_type', 'System: Declined')
             .order('date', { ascending: false })
             .order('created_at', { ascending: false });
         if (clientName) query = query.eq('client_name', clientName);
@@ -272,6 +358,8 @@ export async function getLeavesPage(options?: LeavePageOptions): Promise<Paginat
         let query = supabase
             .from('leaves')
             .select('*', { count: 'exact' })
+            .neq('leave_type', 'Dismissed')
+            .neq('leave_type', 'System: Declined')
             .range(from, to);
 
         if (clientName) query = query.eq('client_name', clientName);
@@ -295,22 +383,98 @@ export async function getLeavesPage(options?: LeavePageOptions): Promise<Paginat
     }, force);
 }
 
+export async function getLeaveSummary(options?: LeavePageOptions): Promise<LeaveSummary> {
+    const {
+        clientName,
+        employeeName,
+        leaveType,
+        search,
+        year,
+        month,
+        force = false,
+    } = options ?? {};
+
+    const normalizedSearch = search ? sanitizeSearchTerm(search) : '';
+    const cacheKey = `leaves:summary:${clientName ?? '*'}:${employeeName ?? '*'}:${leaveType ?? '*'}:${year ?? '*'}:${month ?? '*'}:${normalizedSearch || '*'}`;
+
+    return withCachedQuery(cacheKey, LEAVES_CACHE_TTL_MS, async () => {
+        let query = supabase
+            .from('leaves')
+            .select('employee_name,client_name,leave_type,day_count,is_planned')
+            .neq('leave_type', 'Dismissed')
+            .neq('leave_type', 'System: Declined');
+
+        if (clientName) query = query.eq('client_name', clientName);
+        if (employeeName) query = query.eq('employee_name', employeeName);
+        if (leaveType) query = query.ilike('leave_type', leaveType);
+        query = applyLeaveDateFilter(query, year, month);
+        if (normalizedSearch) {
+            query = query.or(`employee_name.ilike.%${normalizedSearch}%,client_name.ilike.%${normalizedSearch}%,leave_type.ilike.%${normalizedSearch}%`);
+        }
+
+        const { data, error } = await query;
+        assertSupabaseOk(error, 'Failed to load leave summary');
+        return summarizeLeaves((data ?? []) as Pick<LeaveRecord, 'day_count' | 'leave_type' | 'is_planned' | 'employee_name' | 'client_name'>[]);
+    }, force);
+}
+
 export async function addLeave(leave: Omit<LeaveRecord, 'id' | 'created_at'>): Promise<LeaveRecord> {
-    const { data, error } = await supabase.from('leaves').insert([leave]).select().single();
-    if (error) throw error;
+    const normalizedLeave = {
+        ...leave,
+        client_name: leave.client_name.trim(),
+        employee_name: leave.employee_name.trim(),
+    };
+
+    const { data: existingRows, error: lookupError } = await supabase
+        .from('leaves')
+        .select('*')
+        .eq('date', normalizedLeave.date)
+        .eq('client_name', normalizedLeave.client_name)
+        .eq('employee_name', normalizedLeave.employee_name)
+        .order('created_at', { ascending: false });
+    assertSupabaseOk(lookupError, 'Failed to check existing leave');
+
+    const existingLeaves = ((existingRows ?? []) as LeaveRecord[]).sort(compareLeavePriority);
+    const canonical = existingLeaves.find((record) => !isBlockedLeaveType(record.leave_type));
+
+    if (existingLeaves.length > 1) {
+        const extraIds = existingLeaves
+            .filter((record) => record.id !== canonical?.id)
+            .map((record) => record.id);
+
+        if (extraIds.length > 0) {
+            const { error } = await supabase.from('leaves').delete().in('id', extraIds);
+            assertSupabaseOk(error, 'Failed to remove duplicate leave entries');
+        }
+    }
+
+    if (canonical) {
+        const { data, error } = await supabase
+            .from('leaves')
+            .update(normalizedLeave)
+            .eq('id', canonical.id)
+            .select()
+            .single();
+        assertSupabaseOk(error, 'Failed to update leave');
+        clearLeaveCache();
+        return data as LeaveRecord;
+    }
+
+    const { data, error } = await supabase.from('leaves').insert([normalizedLeave]).select().single();
+    assertSupabaseOk(error, 'Failed to create leave');
     clearLeaveCache();
     return data as LeaveRecord;
 }
 
 export async function deleteLeave(id: string): Promise<void> {
     const { error } = await supabase.from('leaves').delete().eq('id', id);
-    if (error) throw error;
+    assertSupabaseOk(error, 'Failed to delete leave');
     clearLeaveCache();
 }
 
 export async function updateLeave(id: string, updates: Partial<LeaveRecord>): Promise<LeaveRecord> {
     const { data, error } = await supabase.from('leaves').update(updates).eq('id', id).select().single();
-    if (error) throw error;
+    assertSupabaseOk(error, 'Failed to update leave');
     clearLeaveCache();
     return data as LeaveRecord;
 }
@@ -321,24 +485,24 @@ export interface SmartLeaveRecord extends LeaveRecord {
 
 export async function getSmartLeaves(dates: string[], options?: { includeHistoricalLeaves?: boolean }): Promise<SmartLeaveRecord[]> {
     if (!dates.length) return [];
-    const includeHistoricalLeaves = options?.includeHistoricalLeaves ?? true;
+    // Auto-leave sync is now handled server-side by /api/cron/daily-sync
 
-    let realLeavesQuery = supabase
+    const { data, error } = await supabase
         .from('leaves')
         .select('*')
+        .in('date', dates)
+        .in('leave_type', Array.from(SYSTEM_AUTO_LEAVE_TYPES))
         .order('date', { ascending: false })
         .order('created_at', { ascending: false });
+    assertSupabaseOk(error, 'Failed to load system leave records');
 
-    if (!includeHistoricalLeaves) {
-        realLeavesQuery = realLeavesQuery.in('date', dates);
-    }
-
-    const { data: realLeavesData, error: realLeavesError } = await realLeavesQuery;
-    assertSupabaseOk(realLeavesError, 'Failed to load leave records');
-    const realLeaves = (realLeavesData ?? []) as SmartLeaveRecord[];
-
-    const users = await getAllUsers();
-    const smartLeaves: SmartLeaveRecord[] = [...realLeaves];
+    return ((data ?? []) as SmartLeaveRecord[])
+        .map((leave) => ({ ...leave, is_smart: true }))
+        .sort((left, right) => {
+            if (left.date !== right.date) return right.date.localeCompare(left.date);
+            return left.employee_name.localeCompare(right.employee_name);
+        });
+    /*
     const realLeaveSet = new Set(realLeaves.map(l => `${l.employee_name.toLowerCase().trim()}-${l.client_name.toLowerCase().trim()}-${l.date}`));
 
     // Optimization: Fetch ALL logs for all users and all requested dates in ONE batch query
@@ -424,6 +588,7 @@ export async function getSmartLeaves(dates: string[], options?: { includeHistori
     });
 
     return displayLeaves;
+    */
 }
 
 const CURRENT_USER_KEY = 'rp_current_user';
@@ -718,7 +883,7 @@ function deriveStatus(logs: TimeLog[]): Omit<UserStatusRecord, 'user'> {
 }
 
 export async function getAllUsersStatus(clientName?: string, force = false): Promise<UserStatusRecord[]> {
-    return withCachedQuery(`status:${clientName ?? '*'}`, 2000, async () => {
+    return withCachedQuery(`status:${clientName ?? '*'}`, 15000, async () => {
         const today = getTodayKey();
         let usersQuery = supabase
             .from('users')
@@ -1030,3 +1195,5 @@ export async function deleteNotification(id: string): Promise<void> {
     const { error } = await supabase.from('notifications').delete().eq('id', id);
     if (error) throw error;
 }
+
+
