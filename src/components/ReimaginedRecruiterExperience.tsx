@@ -41,6 +41,7 @@ interface Props {
   workedMs: number;
   breakMs: number;
   brbMs: number;
+  onLogout: () => void;
   onPunchIn: () => void;
   onPunchOut: () => void;
   onStartBreak: () => void;
@@ -58,6 +59,7 @@ export default function ReimaginedRecruiterExperience({
   workedMs,
   breakMs,
   brbMs,
+  onLogout,
   onPunchIn,
   onPunchOut,
   onStartBreak,
@@ -248,7 +250,15 @@ export default function ReimaginedRecruiterExperience({
                 <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#f4c27a]">Shift status</p>
                 <h2 className="mt-3 text-[clamp(1.9rem,2.4vw,2.8rem)] font-semibold tracking-[-0.05em] text-white">Built to keep your day readable.</h2>
               </div>
-              <StatusChip status={status} />
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={onLogout}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 text-xs font-bold uppercase tracking-widest hover:bg-rose-500/10 hover:border-rose-500/20 hover:text-rose-400 transition-all"
+                >
+                  <LogOut size={14} /> Exit
+                </button>
+                <StatusChip status={status} />
+              </div>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
