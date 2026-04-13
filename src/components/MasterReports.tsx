@@ -12,7 +12,7 @@ import {
     computeSession, computeWorkedTime, computeTotalTime,
     countBreaks, countBRBs, formatDuration, formatTime,
     exportExcel, dateStr, dayName, isWorkDay, yearMonthStr,
-    BREAK_LIMIT_MS, BRB_LIMIT_MS, checkViolations,
+    BREAK_LIMIT_MS, BRB_LIMIT_MS, checkViolations, toZonedTimestamp,
 } from '@/lib/timeUtils';
 
 type DateRange = 'today' | 'yesterday' | 'week' | 'month' | 'custom';
@@ -55,22 +55,34 @@ function processLogsIntoRow(
 ): DayRow {
     const session = computeSession(logs);
     const now = Date.now();
-    const breakMs = computeTotalTime(session.breaks, now);
-    const brbMs = computeTotalTime(session.brbs, now);
+    const todayStr = dateStr(new Date(now));
     
-    // We pass logs to checkViolations for autoLogout detection
-    const v = checkViolations(breakMs, brbMs, session.punchIn, session.punchOut, shiftStart, shiftEnd, timezone, logs);
+    let punchOut = session.punchOut;
+    let isVirtualAutoOut = false;
+
+    // Handle past dates with missing punchOut
+    if (!punchOut && session.punchIn && date < todayStr) {
+        punchOut = toZonedTimestamp(date, shiftEnd, timezone);
+        isVirtualAutoOut = true;
+    }
+
+    const effectiveEnd = punchOut || now;
+    const breakMs = computeTotalTime(session.breaks, effectiveEnd);
+    const brbMs = computeTotalTime(session.brbs, effectiveEnd);
+    
+    const v = checkViolations(breakMs, brbMs, session.punchIn, punchOut, shiftStart, shiftEnd, timezone, logs);
     
     return { 
         userId, name, clientName, date, 
-        punchIn: session.punchIn, punchOut: session.punchOut, 
-        workedMs: computeWorkedTime(session, now, date, shiftEnd), 
+        punchIn: session.punchIn, 
+        punchOut: punchOut, 
+        workedMs: computeWorkedTime({ ...session, punchOut }, now, date, shiftEnd), 
         breakMs, brbMs, breakCount: countBreaks(logs), brbCount: countBRBs(logs), 
         breakViol: v.breakViol, breakViolMs: v.breakViolMs, 
         brbViol: v.brbViol, brbViolMs: v.brbViolMs, 
         lateIn: v.lateIn, lateInMs: v.lateInMs, 
         earlyOut: v.earlyOut, earlyOutMs: v.earlyOutMs,
-        autoLogout: v.autoLogout
+        autoLogout: v.autoLogout || isVirtualAutoOut
     };
 }
 

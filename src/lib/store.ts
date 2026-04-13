@@ -27,8 +27,8 @@ export interface LeaveSummary {
 }
 
 export interface LeavePageOptions {
-    clientName?: string;
-    employeeName?: string;
+    clientName?: string | string[];
+    employeeName?: string | string[];
     leaveType?: string;
     search?: string;
     year?: string;
@@ -352,7 +352,9 @@ export async function getLeavesPage(options?: LeavePageOptions): Promise<Paginat
     const from = (safePage - 1) * safePageSize;
     const to = from + safePageSize - 1;
     const normalizedSearch = search ? sanitizeSearchTerm(search) : '';
-    const cacheKey = `leaves:page:${clientName ?? '*'}:${employeeName ?? '*'}:${leaveType ?? '*'}:${year ?? '*'}:${month ?? '*'}:${sortKey ?? 'Date'}:${sortDir}:${normalizedSearch || '*'}:${safePage}:${safePageSize}`;
+    const clientKey = Array.isArray(clientName) ? clientName.sort().join(',') : (clientName ?? '*');
+    const employeeKey = Array.isArray(employeeName) ? employeeName.sort().join(',') : (employeeName ?? '*');
+    const cacheKey = `leaves:page:${clientKey}:${employeeKey}:${leaveType ?? '*'}:${year ?? '*'}:${month ?? '*'}:${sortKey ?? 'Date'}:${sortDir}:${normalizedSearch || '*'}:${safePage}:${safePageSize}`;
 
     return withCachedQuery(cacheKey, LEAVES_CACHE_TTL_MS, async () => {
         let query = supabase
@@ -362,8 +364,14 @@ export async function getLeavesPage(options?: LeavePageOptions): Promise<Paginat
             .neq('leave_type', 'System: Declined')
             .range(from, to);
 
-        if (clientName) query = query.eq('client_name', clientName);
-        if (employeeName) query = query.eq('employee_name', employeeName);
+        if (clientName) {
+            if (Array.isArray(clientName)) { if (clientName.length > 0) query = query.in('client_name', clientName); }
+            else query = query.eq('client_name', clientName);
+        }
+        if (employeeName) {
+            if (Array.isArray(employeeName)) { if (employeeName.length > 0) query = query.in('employee_name', employeeName); }
+            else query = query.eq('employee_name', employeeName);
+        }
         if (leaveType) query = query.ilike('leave_type', leaveType);
         query = applyLeaveDateFilter(query, year, month);
         if (normalizedSearch) {
@@ -395,7 +403,9 @@ export async function getLeaveSummary(options?: LeavePageOptions): Promise<Leave
     } = options ?? {};
 
     const normalizedSearch = search ? sanitizeSearchTerm(search) : '';
-    const cacheKey = `leaves:summary:${clientName ?? '*'}:${employeeName ?? '*'}:${leaveType ?? '*'}:${year ?? '*'}:${month ?? '*'}:${normalizedSearch || '*'}`;
+    const clientKey = Array.isArray(clientName) ? clientName.sort().join(',') : (clientName ?? '*');
+    const employeeKey = Array.isArray(employeeName) ? employeeName.sort().join(',') : (employeeName ?? '*');
+    const cacheKey = `leaves:summary:${clientKey}:${employeeKey}:${leaveType ?? '*'}:${year ?? '*'}:${month ?? '*'}:${normalizedSearch || '*'}`;
 
     return withCachedQuery(cacheKey, LEAVES_CACHE_TTL_MS, async () => {
         let query = supabase
@@ -404,8 +414,14 @@ export async function getLeaveSummary(options?: LeavePageOptions): Promise<Leave
             .neq('leave_type', 'Dismissed')
             .neq('leave_type', 'System: Declined');
 
-        if (clientName) query = query.eq('client_name', clientName);
-        if (employeeName) query = query.eq('employee_name', employeeName);
+        if (clientName) {
+            if (Array.isArray(clientName)) { if (clientName.length > 0) query = query.in('client_name', clientName); }
+            else query = query.eq('client_name', clientName);
+        }
+        if (employeeName) {
+            if (Array.isArray(employeeName)) { if (employeeName.length > 0) query = query.in('employee_name', employeeName); }
+            else query = query.eq('employee_name', employeeName);
+        }
         if (leaveType) query = query.ilike('leave_type', leaveType);
         query = applyLeaveDateFilter(query, year, month);
         if (normalizedSearch) {

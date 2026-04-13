@@ -52,9 +52,9 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
     <motion.div 
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`relative flex items-center gap-6 px-6 py-5 mb-4 rounded-3xl transition-all duration-500 group ${
+      className={`relative grid grid-cols-[auto_1fr_120px_minmax(180px,1.5fr)_140px] items-center gap-5 px-6 py-4 mb-3 rounded-2xl transition-all duration-500 group ${
         isActive ? 'bg-[#0a001a]/80 border-white/10 shadow-2xl' : 'bg-white/[0.02] border-white/[0.04]'
-      } border backdrop-blur-2xl`}
+      } border backdrop-blur-xl`}
     >
       {/* 3D Left Acccent */}
       {isActive && (
@@ -83,15 +83,15 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
       </div>
 
       {/* Name and Metadata */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-3 mb-1">
-          <span className="text-lg font-outfit font-black text-white tracking-tighter truncate group-hover:text-glow transition-all duration-300">
+      <div className="flex flex-col min-w-0 justify-center">
+        <div className="flex items-center gap-2 mb-1 min-w-0">
+          <span className="text-[15px] font-outfit font-black text-white tracking-tight truncate max-w-full group-hover:text-glow transition-all duration-300" title={user.name}>
             {user.name}
           </span>
           {breakCount === 0 && brbCount === 0 && punchIn && (
-            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/20">
+            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded flex-shrink-0 bg-amber-500/10 border border-amber-500/20">
               <TrendingUp size={10} className="text-amber-400" />
-              <span className="text-[8px] font-black text-amber-400 uppercase tracking-widest">Elite</span>
+              <span className="text-[9px] font-black text-amber-400 uppercase tracking-widest hidden sm:inline-block">Elite</span>
             </div>
           )}
         </div>
@@ -99,13 +99,11 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1">
             <UserIcon size={10} /> {user.clientName}
           </span>
-          <span className="text-[10px] font-bold text-slate-600 tracking-widest">•</span>
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{user.workMode || 'WFO'}</span>
         </div>
       </div>
 
       {/* Status Badge Overhaul */}
-      <div className="w-32 flex-shrink-0">
+      <div className="flex justify-center min-w-0">
         <div className={`badge ${
           status === 'working' ? 'badge-working' : 
           status === 'on_break' ? 'badge-break' :
@@ -116,9 +114,9 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
       </div>
 
       {/* Live Performance Center */}
-      <div className="flex-[1.5] flex-shrink-0 flex items-center justify-end gap-8 pr-4">
+      <div className="flex flex-col items-end min-w-0 pr-4">
         {status === 'working' ? (
-          <div className="flex gap-8">
+          <div className="flex items-center gap-6">
             <div className="flex flex-col items-end">
               <span className="text-[9px] font-black text-emerald-500/60 uppercase tracking-[0.2em] mb-1">Live Shift</span>
               <span className="font-mono text-lg font-black text-emerald-400 tabular-nums tracking-tighter text-glow">
@@ -135,7 +133,7 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
         ) : isActive ? (
           <div className="flex flex-col items-end">
              <span className={`text-[9px] font-black uppercase tracking-[0.2em] mb-1 ${isOverdueBreak || isOverdueBrb ? 'text-red-500' : 'opacity-60'}`} style={{ color: !isOverdueBreak && !isOverdueBrb ? accentColor : undefined }}>
-               Current {displayStatus}
+               LAST CHANGE
              </span>
              <div className="flex items-center gap-2">
                {(isOverdueBreak || isOverdueBrb) && <AlertTriangle size={14} className="text-red-500 animate-bounce" />}
@@ -146,7 +144,7 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
           </div>
         ) : (
           <div className="flex flex-col items-end opacity-40">
-             <span className="text-[9px] font-black uppercase tracking-[0.2em] mb-1">Day Summary</span>
+             <span className="text-[9px] font-black uppercase tracking-[0.2em] mb-1">TOTAL SESSION</span>
              <span className="font-mono text-lg font-black text-slate-400 tabular-nums tracking-tighter">
                {punchIn ? formatDuration(workedMs) : '00:00:00'}
              </span>
@@ -155,12 +153,12 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
       </div>
 
       {/* Action Protocol */}
-      <div className="w-40 flex-shrink-0 flex justify-end items-center gap-3">
+      <div className="flex items-center justify-end gap-2 pr-2">
         {status === 'on_break' && onEndBreak && (
-          <button onClick={() => onEndBreak(user.id)} className="btn-3d-warning text-[9px] font-black py-2 px-4 rounded-xl">RESUME WORK</button>
+          <button onClick={() => onEndBreak(user.id)} className="btn-3d-warning text-[10px] font-black py-2 px-3 rounded-xl whitespace-nowrap">RESUME</button>
         )}
         {status === 'on_brb' && onEndBrb && (
-          <button onClick={() => onEndBrb(user.id)} className="btn-3d-info text-[9px] font-black py-2 px-4 rounded-xl">TERMINATE BRB</button>
+          <button onClick={() => onEndBrb(user.id)} className="btn-3d-info text-[10px] font-black py-2 px-3 rounded-xl whitespace-nowrap">END BRB</button>
         )}
         
         <div className={`flex items-center gap-1 transition-all duration-300 ${isActive ? 'opacity-0 scale-95 pointer-events-none group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto' : 'opacity-100'}`}>

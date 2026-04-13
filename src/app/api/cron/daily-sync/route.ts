@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60; // allow up to 60s for large teams
+export const maxDuration = 10; // allow up to 10s (Vercel Hobby Tier Limit)
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface UserRow {

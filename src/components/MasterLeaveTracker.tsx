@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     FileSpreadsheet, Plus, Trash2, Download, CheckCircle,
     Edit2, X, ChevronDown, ChevronUp, CalendarCheck2,
-    AlertCircle, Filter, Search, Users2, Briefcase, Calendar,
+    AlertCircle, Search,
     ChevronLeft, ChevronRight
 } from 'lucide-react';
 import {
@@ -15,6 +15,7 @@ import { User, LeaveRecord } from '@/types';
 import { dateStr, exportExcel } from '@/lib/timeUtils';
 import { useToast } from '@/components/Toast';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import CustomSelect from '@/components/ui/CustomSelect';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -139,9 +140,9 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
     const [dayCount, setDayCount] = useState<number>(1);
 
     // Filters
-    const [filterClient, setFilterClient] = useState('');
-    const [filterEmployee, setFilterEmployee] = useState('');
-    const [filterLeaveType, setFilterLeaveType] = useState('');
+    const [filterClient, setFilterClient] = useState<string[]>([]);
+    const [filterEmployee, setFilterEmployee] = useState<string[]>([]);
+    const [filterLeaveType, setFilterLeaveType] = useState<string[]>([]);
     const [search, setSearch] = useState('');
     // Separate Year + Month filters for flexible date range
     const [filterYear, setFilterYear] = useState('');
@@ -152,14 +153,18 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
         void loadMeta();
     }, []);
 
+    const filterClientKey = filterClient.join(',');
+    const filterEmployeeKey = filterEmployee.join(',');
+    const filterLeaveTypeKey = filterLeaveType.join(',');
+
     useEffect(() => {
         void loadLeavesPage();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentPage, filterClient, filterEmployee, filterLeaveType, search, filterYear, filterMonth, sortConfig.key, sortConfig.dir]);
+    }, [currentPage, filterClientKey, filterEmployeeKey, filterLeaveTypeKey, search, filterYear, filterMonth, sortConfig.key, sortConfig.dir]);
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [filterClient, filterEmployee, filterLeaveType, search, filterYear, filterMonth, sortConfig.key, sortConfig.dir]);
+    }, [filterClientKey, filterEmployeeKey, filterLeaveTypeKey, search, filterYear, filterMonth, sortConfig.key, sortConfig.dir]);
 
     async function loadMeta() {
         try {
@@ -179,9 +184,9 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
         setLoading(true);
         try {
             const filters = {
-                clientName: filterClient || undefined,
-                employeeName: filterEmployee || undefined,
-                leaveType: filterLeaveType || undefined,
+                clientName: filterClient.length > 0 ? filterClient : undefined,
+                employeeName: filterEmployee.length > 0 ? filterEmployee : undefined,
+                leaveType: filterLeaveType.length > 0 ? filterLeaveType : undefined,
                 search: search || undefined,
                 year: filterYear || undefined,
                 month: filterMonth || undefined,
@@ -266,8 +271,8 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
         const nextTotal = Math.max(0, totalLeaves - 1);
         const nextPage = Math.min(currentPage, Math.max(1, Math.ceil(nextTotal / LEAVE_PAGE_SIZE)));
         const filters = {
-            clientName: filterClient || undefined,
-            employeeName: filterEmployee || undefined,
+            clientName: filterClient.length > 0 ? filterClient : undefined,
+            employeeName: filterEmployee.length > 0 ? filterEmployee : undefined,
             leaveType: filterLeaveType || undefined,
             search: search || undefined,
             year: filterYear || undefined,
@@ -292,9 +297,9 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
             setLeaves((current) => current.filter((leave) => leave.id !== l.id));
             setTotalLeaves((current) => Math.max(0, current - 1));
             setSummary(await getLeaveSummary({
-                clientName: filterClient || undefined,
-                employeeName: filterEmployee || undefined,
-                leaveType: filterLeaveType || undefined,
+                clientName: filterClient.length > 0 ? filterClient : undefined,
+                employeeName: filterEmployee.length > 0 ? filterEmployee : undefined,
+                leaveType: filterLeaveType.length > 0 ? filterLeaveType : undefined,
                 search: search || undefined,
                 year: filterYear || undefined,
                 month: filterMonth || undefined,
@@ -312,11 +317,11 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
     const filteredSmartLeaves = useMemo(() => {
         const q = search.toLowerCase().trim();
         const result = smartLeaves.filter((l) => {
-            if (filterClient && l.client_name !== filterClient) return false;
-            if (filterEmployee && l.employee_name !== filterEmployee) return false;
+            if (filterClient.length > 0 && !filterClient.includes(l.client_name)) return false;
+            if (filterEmployee.length > 0 && !filterEmployee.includes(l.employee_name)) return false;
             if (filterYear && !l.date.startsWith(filterYear)) return false;
             if (filterMonth && l.date.slice(5, 7) !== filterMonth) return false;
-            if (filterLeaveType && l.leave_type.toLowerCase() !== filterLeaveType.toLowerCase()) return false;
+            if (filterLeaveType.length > 0 && !filterLeaveType.map(t => t.toLowerCase()).includes(l.leave_type.toLowerCase())) return false;
             if (q && !l.employee_name.toLowerCase().includes(q) && !l.client_name.toLowerCase().includes(q) && !l.leave_type.toLowerCase().includes(q)) return false;
             return true;
         });
@@ -354,7 +359,10 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
     const uniqueEmpls = summary.uniqueEmployees;
 
     const availableYears = useMemo(() => {
-        return [...new Set(leaves.map(l => l.date.slice(0, 4)))].sort().reverse();
+        const years = new Set(leaves.map(l => l.date.slice(0, 4)));
+        // Ensure common years are present if they exist in UI context
+        ['2025', '2026', '2027'].forEach(y => years.add(y));
+        return [...years].sort().reverse();
     }, [leaves]);
 
     function handleExport() {
@@ -372,12 +380,12 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
         exportExcel([header, ...data], 'leave-tracker');
     }
 
-    const hasFilter = !!(filterClient || filterEmployee || filterLeaveType || search || filterYear);
+    const hasFilter = !!(filterClient.length || filterEmployee.length || filterLeaveType.length || search || filterYear);
 
-    // Unique employee names scoped to selected client (for filter dropdown)
+    // Unique employee names scoped to selected clients (for filter dropdown)
     const filterableEmployees = useMemo(() => {
-        const pool = filterClient
-            ? allUsers.filter(u => u.clientName === filterClient).map(u => u.name)
+        const pool = filterClient.length > 0
+            ? allUsers.filter(u => filterClient.includes(u.clientName)).map(u => u.name)
             : allUsers.map(u => u.name);
         return [...new Set(pool)].sort();
     }, [allUsers, filterClient]);
@@ -433,63 +441,63 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
             </div>
 
             {/* ── Unified Filter Bar ─────────────────────────────────────── */}
-            <div className="panel-3d rounded-2xl shadow-lg overflow-hidden">
+            <div className="panel-3d rounded-2xl shadow-lg z-20 relative">
                 <div className="flex items-center gap-3 p-3 flex-wrap">
                     {/* Year Selector */}
-                    <div className="relative">
-                        <select value={filterYear} onChange={e => { setFilterYear(e.target.value); if (!e.target.value) setFilterMonth(''); }}
-                            className="appearance-none bg-white/[0.05] border border-white/10 rounded-xl py-2 pl-3 pr-8 text-xs font-bold text-white cursor-pointer focus:outline-none focus:border-indigo-500/50 transition-all hover:bg-white/[0.08]">
-                            <option value="" className="bg-[#0d0d1a]">All Years</option>
-                            {availableYears.map(yr => <option key={yr} value={yr} className="bg-[#0d0d1a]">{yr}</option>)}
-                        </select>
-                        <Calendar size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-                    </div>
+                    <CustomSelect
+                        options={availableYears.map(yr => ({ value: yr, label: yr }))}
+                        value={filterYear}
+                        onChange={(val) => { setFilterYear(val); if (!val) setFilterMonth(''); }}
+                        placeholder="All Years"
+                        className="min-w-[120px]"
+                    />
 
-                    {/* Month Selector — only active when a year is selected */}
-                    <div className="relative">
-                        <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} disabled={!filterYear}
-                            className={`appearance-none bg-white/[0.05] border border-white/10 rounded-xl py-2 pl-3 pr-8 text-xs font-bold cursor-pointer focus:outline-none focus:border-indigo-500/50 transition-all hover:bg-white/[0.08] ${!filterYear ? 'opacity-40 pointer-events-none text-slate-500' : 'text-white'}`}>
-                            <option value="" className="bg-[#0d0d1a]">All Months</option>
-                            {['01','02','03','04','05','06','07','08','09','10','11','12'].map(m => (
-                                <option key={m} value={m} className="bg-[#0d0d1a]">
-                                    {new Date(2000, Number(m) - 1, 1).toLocaleDateString('en-US', { month: 'long' })}
-                                </option>
-                            ))}
-                        </select>
-                        <Calendar size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-                    </div>
+                    {/* Month Selector */}
+                    <CustomSelect
+                        options={['01','02','03','04','05','06','07','08','09','10','11','12'].map(m => ({
+                            value: m,
+                            label: new Date(2000, Number(m) - 1, 1).toLocaleDateString('en-US', { month: 'long' })
+                        }))}
+                        value={filterMonth}
+                        onChange={setFilterMonth}
+                        placeholder="All Months"
+                        className={`min-w-[140px] ${!filterYear ? 'opacity-40 pointer-events-none' : ''}`}
+                    />
 
                     <div className="w-px h-6 bg-white/10 flex-shrink-0" />
 
-                    {/* Client Dropdown */}
-                    <div className="relative">
-                        <select value={filterClient} onChange={e => { setFilterClient(e.target.value); setFilterEmployee(''); }}
-                            className="appearance-none bg-white/[0.05] border border-white/10 rounded-xl py-2 pl-3 pr-8 text-xs font-bold text-white cursor-pointer focus:outline-none focus:border-indigo-500/50 transition-all hover:bg-white/[0.08] max-w-[180px]">
-                            <option value="" className="bg-[#0d0d1a]">All Clients</option>
-                            {clients.map(c => <option key={c.id} value={c.name} className="bg-[#0d0d1a]">{c.name}</option>)}
-                        </select>
-                        <Briefcase size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-                    </div>
+                    {/* Client Multi-Select */}
+                    <CustomSelect
+                        multi
+                        options={clients.map(c => ({ value: c.name, label: c.name }))}
+                        value={filterClient}
+                        onChange={(vals) => { setFilterClient(vals); setFilterEmployee([]); }}
+                        placeholder="All Clients"
+                        searchable={clients.length > 5}
+                        className="min-w-[170px] max-w-[240px]"
+                    />
 
-                    {/* Employee Dropdown */}
-                    <div className="relative">
-                        <select value={filterEmployee} onChange={e => setFilterEmployee(e.target.value)}
-                            className="appearance-none bg-white/[0.05] border border-white/10 rounded-xl py-2 pl-3 pr-8 text-xs font-bold text-white cursor-pointer focus:outline-none focus:border-indigo-500/50 transition-all hover:bg-white/[0.08] max-w-[180px]">
-                            <option value="" className="bg-[#0d0d1a]">All Employees</option>
-                            {filterableEmployees.map(n => <option key={n} value={n} className="bg-[#0d0d1a]">{n}</option>)}
-                        </select>
-                        <Users2 size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-                    </div>
+                    {/* Employee Multi-Select */}
+                    <CustomSelect
+                        multi
+                        options={filterableEmployees.map(n => ({ value: n, label: n }))}
+                        value={filterEmployee}
+                        onChange={setFilterEmployee}
+                        placeholder="All Employees"
+                        searchable={filterableEmployees.length > 5}
+                        className="min-w-[170px] max-w-[240px]"
+                    />
 
-                    {/* Leave Type Dropdown — uses clean constant list */}
-                    <div className="relative">
-                        <select value={filterLeaveType} onChange={e => setFilterLeaveType(e.target.value)}
-                            className="appearance-none bg-white/[0.05] border border-white/10 rounded-xl py-2 pl-3 pr-8 text-xs font-bold text-white cursor-pointer focus:outline-none focus:border-indigo-500/50 transition-all hover:bg-white/[0.08] max-w-[200px]">
-                            <option value="" className="bg-[#0d0d1a]">All Leave Types</option>
-                            {ALL_LEAVE_TYPES.map(lt => <option key={lt} value={lt} className="bg-[#0d0d1a]">{lt}</option>)}
-                        </select>
-                        <Filter size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-                    </div>
+                    {/* Leave Type Selector */}
+                    <CustomSelect
+                        multi
+                        options={ALL_LEAVE_TYPES.map(lt => ({ value: lt, label: lt }))}
+                        value={filterLeaveType}
+                        onChange={setFilterLeaveType}
+                        placeholder="All Leave Types"
+                        searchable
+                        className="min-w-[170px] max-w-[240px]"
+                    />
 
                     <div className="w-px h-6 bg-white/10 flex-shrink-0" />
 
@@ -497,7 +505,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                     <div className="relative flex-1 min-w-[180px]">
                         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
                         <input type="text" placeholder="Search…" value={search} onChange={e => setSearch(e.target.value)}
-                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-2 pl-9 pr-3 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-white/20 transition-all font-semibold" />
+                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-3 pl-9 pr-3 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-white/20 transition-all font-semibold" />
                         {search && <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"><X size={12} /></button>}
                     </div>
                 </div>
@@ -512,26 +520,26 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                 <button onClick={() => { setFilterYear(''); setFilterMonth(''); }} className="hover:text-white transition-colors"><X size={10} /></button>
                             </span>
                         )}
-                        {filterClient && (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-500/10 border border-violet-500/20 text-[10px] font-black text-violet-400 uppercase tracking-wider">
-                                {filterClient}
-                                <button onClick={() => { setFilterClient(''); setFilterEmployee(''); }} className="hover:text-white transition-colors"><X size={10} /></button>
+                        {filterClient.map(c => (
+                            <span key={c} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-500/10 border border-violet-500/20 text-[10px] font-black text-violet-400 uppercase tracking-wider">
+                                {c}
+                                <button onClick={() => { setFilterClient(filterClient.filter(x => x !== c)); setFilterEmployee([]); }} className="hover:text-white transition-colors"><X size={10} /></button>
                             </span>
-                        )}
-                        {filterEmployee && (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-black text-emerald-400 uppercase tracking-wider">
-                                {filterEmployee}
-                                <button onClick={() => setFilterEmployee('')} className="hover:text-white transition-colors"><X size={10} /></button>
+                        ))}
+                        {filterEmployee.map(emp => (
+                            <span key={emp} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-black text-emerald-400 uppercase tracking-wider">
+                                {emp}
+                                <button onClick={() => setFilterEmployee(filterEmployee.filter(x => x !== emp))} className="hover:text-white transition-colors"><X size={10} /></button>
                             </span>
-                        )}
+                        ))}
                         {filterLeaveType && (
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[10px] font-black text-amber-400 uppercase tracking-wider">
                                 {filterLeaveType}
                                 <button onClick={() => setFilterLeaveType('')} className="hover:text-white transition-colors"><X size={10} /></button>
                             </span>
                         )}
-                        {(filterClient || filterEmployee || filterLeaveType || search) && (
-                            <button onClick={() => { setFilterClient(''); setFilterEmployee(''); setFilterLeaveType(''); setSearch(''); setFilterYear(''); setFilterMonth(''); }}
+                        {(filterClient.length > 0 || filterEmployee.length > 0 || filterLeaveType || search) && (
+                            <button onClick={() => { setFilterClient([]); setFilterEmployee([]); setFilterLeaveType(''); setSearch(''); setFilterYear(''); setFilterMonth(''); }}
                                 className="flex items-center gap-1 text-[10px] font-bold text-rose-400 hover:text-rose-300 transition-colors px-2 py-1 rounded-lg hover:bg-rose-500/10">
                                 <X size={10} /> Reset All
                             </button>
@@ -627,7 +635,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                     <p className="text-xs font-medium text-slate-600 mt-1">{search || hasFilter ? 'Try adjusting your filters' : 'Click "New Record" to add the first leave entry'}</p>
                                 </div>
                                 {(search || hasFilter) && (
-                                    <button onClick={() => { setSearch(''); setFilterClient(''); setFilterEmployee(''); }}
+                                    <button onClick={() => { setSearch(''); setFilterClient([]); setFilterEmployee([]); setFilterLeaveType(''); setFilterYear(''); setFilterMonth(''); }}
                                         className="text-xs uppercase tracking-widest text-indigo-400 hover:text-indigo-300 font-black transition-colors px-4 py-2 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20">
                                         Clear all filters
                                     </button>

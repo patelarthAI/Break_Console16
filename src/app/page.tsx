@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { LogOut } from 'lucide-react';
 import AuthModal from '@/components/AuthModal';
 import AppShell from '@/components/shell/AppShell';
-import ReimaginedWorkspace from '@/components/ReimaginedWorkspace.legacy';
+import ReimaginedRecruiterExperience from '@/components/ReimaginedRecruiterExperience';
 import { User, TimeLog, AppStatus } from '@/types';
 import {
   getCurrentUser, setCurrentUser, getLogs, insertLog
@@ -168,8 +168,9 @@ export default function Home() {
             {user.isMaster ? (
               <AppShell user={user} onLogout={handleLogout} />
             ) : (
-              <ReimaginedWorkspace
+              <ReimaginedRecruiterExperience
                 user={user}
+                view="shift"
                 logs={logs}
                 logsLoading={logsLoading}
                 status={status as Exclude<AppStatus, 'on_leave'>}

@@ -51,7 +51,7 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [clientFilter, setClientFilter] = useState('all');
+  const [clientFilter, setClientFilter] = useState<string[]>([]);
   const [editDrawer, setEditDrawer] = useState<{ userId: string; userName: string; clientName: string } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const deferredSearch = useDeferredValue(search);
@@ -118,7 +118,7 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
   // Client options
   const clientOptions = useMemo(() => {
     const set = new Set(statusRecords.map((r) => r.user.clientName));
-    return ['all', ...Array.from(set).sort()];
+    return Array.from(set).sort();
   }, [statusRecords]);
 
   // Filtered + sorted
@@ -128,13 +128,13 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
 
     return enrichedRecords
       .filter(({ record, memberStatus }) => {
-        if (clientFilter !== 'all' && record.user.clientName !== clientFilter) return false;
+        if (clientFilter.length > 0 && !clientFilter.includes(record.user.clientName)) return false;
         if (statusFilter !== 'all' && memberStatus !== statusFilter) return false;
         if (query && !record.user.name.toLowerCase().includes(query) && !record.user.clientName.toLowerCase().includes(query)) return false;
         return true;
       })
       .sort((a, b) => {
-        const order: Record<MemberStatus, number> = { working: 0, on_break: 1, on_brb: 2, on_leave: 3, logged_out: 4, offline: 5 };
+        const order: Record<MemberStatus, number> = { on_break: 0, on_brb: 1, working: 2, on_leave: 3, logged_out: 4, offline: 5 };
         const diff = order[a.memberStatus] - order[b.memberStatus];
         return diff !== 0 ? diff : a.record.user.name.localeCompare(b.record.user.name);
       });
@@ -211,6 +211,16 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
               <RefreshCcw size={14} />
             </button>
           </div>
+
+          {!loading && filteredRecords.length > 0 && (
+            <div className="grid grid-cols-[auto_1fr_120px_minmax(180px,1.5fr)_140px] gap-5 px-6 py-2 mb-1 border-b border-white/5 opacity-40">
+               <div className="w-12 h-1 text-[9px] font-black uppercase tracking-widest text-slate-500 flex justify-center">Reps</div>
+               <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Identity / Client</div>
+               <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 text-center">Protocol</div>
+               <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 text-right">Activity Timeline</div>
+               <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 text-right">Actions</div>
+            </div>
+          )}
 
           {loading ? (
             <div className="space-y-2">

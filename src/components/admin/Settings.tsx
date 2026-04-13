@@ -187,10 +187,10 @@ export default function AdminSettings({ user }: SettingsProps) {
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
           onClick={(e) => { if (e.target === e.currentTarget) setEditingUser(null); }}
         >
-          <form onSubmit={handleSaveUser} className="card-elevated w-full max-w-lg p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-white">Edit Recruiter</h3>
-              <button type="button" onClick={() => setEditingUser(null)} className="btn btn-ghost text-xs">Close</button>
+          <form onSubmit={handleSaveUser} className="bg-[#0a001a]/95 border border-indigo-500/20 shadow-[0_24px_64px_rgba(0,0,0,0.9)] backdrop-blur-3xl w-full max-w-lg p-6 space-y-4 rounded-2xl">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <h3 className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-fuchsia-400">Edit Recruiter</h3>
+              <button type="button" onClick={() => setEditingUser(null)} className="p-1.5 hover:bg-white/10 rounded-xl transition-colors text-slate-400 hover:text-white"><X size={16}/></button>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block">
@@ -237,26 +237,29 @@ export default function AdminSettings({ user }: SettingsProps) {
         <h2 className="text-lg font-bold text-white">Settings</h2>
 
         {/* Clients */}
-        <div className="card p-5 space-y-4">
+        <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 space-y-4 shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)] panel-3d">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-white">Client Management</h3>
-            <span className="badge badge-idle text-[9px]">{clients.length} clients</span>
+            <h3 className="text-sm font-black text-slate-300 uppercase tracking-widest flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.6)]"></span>
+              Client Management
+            </h3>
+            <span className="px-2 py-0.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-bold">{clients.length} clients</span>
           </div>
           <form onSubmit={handleAddClient} className="flex gap-2">
             <input className="input-field flex-1" placeholder="New client name..." value={newClient} onChange={(e) => setNewClient(e.target.value)} />
             <button type="submit" className="btn btn-primary"><Plus size={14} /> Add</button>
           </form>
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             {clients.map((c) => (
-              <div key={c.id} className="table-row">
+              <div key={c.id} className="flex items-center justify-between px-4 py-3 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-all group">
                 {renamingId === c.id ? (
-                  <input className="input-field flex-1 text-sm" value={renameValue} autoFocus onChange={(e) => setRenameValue(e.target.value)} onBlur={() => handleRename(c.id, c.name)} onKeyDown={(e) => { if (e.key === 'Enter') handleRename(c.id, c.name); if (e.key === 'Escape') setRenamingId(null); }} />
+                  <input className="input-field flex-1 text-sm bg-black/40 border-indigo-500/30" value={renameValue} autoFocus onChange={(e) => setRenameValue(e.target.value)} onBlur={() => handleRename(c.id, c.name)} onKeyDown={(e) => { if (e.key === 'Enter') handleRename(c.id, c.name); if (e.key === 'Escape') setRenamingId(null); }} />
                 ) : (
-                  <span className="flex-1 text-sm text-white font-medium">{c.name}</span>
+                  <span className="flex-1 text-sm text-slate-200 font-bold tracking-wide">{c.name}</span>
                 )}
-                <div className="flex gap-1">
-                  <button type="button" onClick={() => { setRenamingId(c.id); setRenameValue(c.name); }} className="p-1.5 text-slate-500 hover:text-blue-400 hover:bg-blue-400/10 rounded-md transition-all"><Pencil size={13} /></button>
-                  <button type="button" onClick={() => setConfirmState({ kind: 'client', id: c.id, name: c.name })} className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-md transition-all"><Trash2 size={13} /></button>
+                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button type="button" onClick={() => { setRenamingId(c.id); setRenameValue(c.name); }} className="p-1.5 text-slate-500 hover:text-blue-400 hover:bg-blue-400/20 rounded-lg transition-all"><Pencil size={14} /></button>
+                  <button type="button" onClick={() => setConfirmState({ kind: 'client', id: c.id, name: c.name })} className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-400/20 rounded-lg transition-all"><Trash2 size={14} /></button>
                 </div>
               </div>
             ))}
@@ -264,27 +267,36 @@ export default function AdminSettings({ user }: SettingsProps) {
         </div>
 
         {/* Users */}
-        <div className="card p-5 space-y-4">
+        <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 space-y-4 shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)] panel-3d">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-white">User Management</h3>
+            <h3 className="text-sm font-black text-slate-300 uppercase tracking-widest flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.6)]"></span>
+              User Management
+            </h3>
             <div className="flex items-center gap-2">
-              <span className="badge badge-idle text-[9px]">{allUsers.length} recruiters</span>
-              <button type="button" onClick={() => void loadData()} className="p-1 text-slate-500 hover:text-white rounded transition-colors"><RefreshCcw size={13} /></button>
+              <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold">{allUsers.length} recruiters</span>
+              <button type="button" onClick={() => void loadData()} className="p-1.5 text-slate-500 hover:text-white rounded-lg hover:bg-white/5 transition-all"><RefreshCcw size={14} /></button>
             </div>
           </div>
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             {allUsers.map((u) => (
-              <div key={u.id} className="table-row group">
+              <div key={u.id} className="flex items-center justify-between px-4 py-3 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-all group">
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-white">{u.name}</div>
-                  <div className="text-xs text-slate-500">{u.clientName} · {u.shiftStart}–{u.shiftEnd} · <span className="text-slate-400 font-bold">{u.workMode}</span></div>
+                  <div className="text-sm font-bold text-slate-200 tracking-wide">{u.name}</div>
+                  <div className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
+                    <span className="text-indigo-400 font-semibold">{u.clientName}</span>
+                    <span>·</span>
+                    <span className="font-mono text-[10px]">{u.shiftStart}–{u.shiftEnd}</span>
+                    <span>·</span>
+                    <span className="uppercase text-[9px] font-black tracking-widest px-1.5 py-0.5 rounded bg-white/5">{u.workMode}</span>
+                  </div>
                 </div>
-                <span className={`badge text-[9px] ${u.isApproved ? 'badge-working' : 'badge-leave'}`}>
+                <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${u.isApproved ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`}>
                   {u.isApproved ? 'Approved' : 'Pending'}
                 </span>
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button type="button" onClick={() => setEditingUser(u)} className="p-1.5 text-slate-500 hover:text-blue-400 hover:bg-blue-400/10 rounded-md transition-all"><Pencil size={13} /></button>
-                  <button type="button" onClick={() => setConfirmState({ kind: 'user', id: u.id, name: u.name })} className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-md transition-all"><Trash2 size={13} /></button>
+                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity ml-4">
+                  <button type="button" onClick={() => setEditingUser(u)} className="p-1.5 text-slate-500 hover:text-emerald-400 hover:bg-emerald-400/20 rounded-lg transition-all"><Pencil size={14} /></button>
+                  <button type="button" onClick={() => setConfirmState({ kind: 'user', id: u.id, name: u.name })} className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-400/20 rounded-lg transition-all"><Trash2 size={14} /></button>
                 </div>
               </div>
             ))}
@@ -292,22 +304,25 @@ export default function AdminSettings({ user }: SettingsProps) {
         </div>
 
         {/* Broadcasts */}
-        <div className="card p-5 space-y-4">
-          <h3 className="text-sm font-bold text-white">Broadcasts</h3>
+        <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 space-y-4 shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)] panel-3d">
+          <h3 className="text-sm font-black text-slate-300 uppercase tracking-widest flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.6)]"></span>
+            Broadcasts
+          </h3>
           <form onSubmit={handleAddBroadcast} className="flex gap-2">
             <input className="input-field flex-1" placeholder="Type a broadcast message..." value={newBroadcast} onChange={(e) => setNewBroadcast(e.target.value)} />
             <button type="submit" className="btn btn-primary"><Plus size={14} /> Send</button>
           </form>
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             {notifications.map((n) => (
-              <div key={n.id} className="table-row">
-                <span className="flex-1 text-sm text-slate-300">{n.message}</span>
-                <span className="text-[10px] text-slate-600">{new Date(n.createdAt).toLocaleDateString()}</span>
-                <button type="button" onClick={() => setConfirmState({ kind: 'notification', id: n.id, name: 'broadcast' })} className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-md transition-all"><Trash2 size={13} /></button>
+              <div key={n.id} className="flex items-center justify-between px-4 py-3 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-all group">
+                <span className="flex-1 text-sm font-medium text-slate-200">{n.message}</span>
+                <span className="text-[10px] text-slate-500 font-mono font-bold mr-4">{new Date(n.createdAt).toLocaleDateString()}</span>
+                <button type="button" onClick={() => setConfirmState({ kind: 'notification', id: n.id, name: 'broadcast' })} className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-400/20 rounded-lg transition-all opacity-0 group-hover:opacity-100"><Trash2 size={14} /></button>
               </div>
             ))}
             {notifications.length === 0 && (
-              <div className="text-xs text-slate-500 text-center py-4">No active broadcasts</div>
+              <div className="text-xs text-slate-500 font-bold uppercase tracking-widest text-center py-6">No active broadcasts</div>
             )}
           </div>
         </div>

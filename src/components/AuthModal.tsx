@@ -147,7 +147,6 @@ export default function AuthModal({ onLogin }: Props) {
                     className="absolute -bottom-[10%] -right-[5%] w-[70%] h-[70%] rounded-full bg-gradient-radial from-blue-600/20 via-transparent to-transparent blur-[100px]"
                 />
                 <div className="absolute inset-0 opacity-[0.03] pointer-events-none mix-blend-overlay" />
-
             </div>
 
             <motion.div
@@ -185,7 +184,7 @@ export default function AuthModal({ onLogin }: Props) {
                             transition={{ delay: 0.3 }}
                             className="text-3xl font-black text-white tracking-[-0.03em] mb-2 bg-clip-text text-transparent bg-gradient-to-b from-white to-white/60"
                         >
-                            Brigade Pulse
+                            Breakthrough Console
                         </motion.h1>
                         <motion.p
                             initial={{ opacity: 0 }}
@@ -341,4 +340,3 @@ export default function AuthModal({ onLogin }: Props) {
         </div>
     );
 }
-

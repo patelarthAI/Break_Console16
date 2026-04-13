@@ -28,16 +28,16 @@ export default function Navbar({ user, activeView, onViewChange, onLogout }: Nav
       <div className="flex items-center justify-between px-4 lg:px-8 h-20">
         {/* Left: Brand & Custom Logo */}
         <div className="flex items-center gap-4 group cursor-pointer">
-          <div className="relative flex items-center justify-center w-11 h-11 rounded-2xl bg-gradient-to-br from-[#8a2be2] to-[#00d2ff] p-[1.5px] shadow-[0_0_30px_rgba(0,210,255,0.2)] group-hover:scale-110 transition-transform duration-500">
+          <div className="relative flex items-center justify-center w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-500 to-fuchsia-500 p-[1.5px] shadow-[0_0_30px_rgba(99,102,241,0.2)] group-hover:scale-110 transition-transform duration-500">
             <div className="flex items-center justify-center w-full h-full bg-[#0a001a] rounded-[14px]">
-              <span className="font-outfit font-black text-transparent bg-clip-text bg-gradient-to-tr from-[#00d2ff] to-[#8a2be2] text-sm tracking-tighter text-glow">BP</span>
+              <span className="font-outfit font-black text-transparent bg-clip-text bg-gradient-to-tr from-indigo-400 to-fuchsia-400 text-sm tracking-tighter text-glow">BT</span>
             </div>
-            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-[#8a2be2] to-[#00d2ff] blur-lg -z-10 opacity-40 group-hover:opacity-80 transition-opacity"></div>
+            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-indigo-500/40 to-fuchsia-500/40 blur-lg -z-10 opacity-40 group-hover:opacity-80 transition-opacity"></div>
           </div>
 
           <div className="flex flex-col">
             <span className="font-outfit text-xl font-black text-white tracking-tighter hidden sm:inline drop-shadow-[0_0_12px_rgba(255,255,255,0.3)]">
-              Brigade Pulse
+              Breakthrough Console
             </span>
             {user.isMaster && (
                <span className="px-2 py-0.5 rounded-md border border-emerald-500/20 bg-emerald-500/5 text-[8px] font-black text-emerald-400 tracking-[0.2em] w-fit">ADMIN PROTOCOL</span>
