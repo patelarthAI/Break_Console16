@@ -930,6 +930,9 @@ export interface UserStatusRecord {
     breakCount: number;
     brbCount: number;
     isAutoLogout?: boolean;
+    accumulatedWorkedMs?: number;
+    accumulatedBreakMs?: number;
+    accumulatedBrbMs?: number;
 }
 
 function deriveStatus(logs: TimeLog[]): Omit<UserStatusRecord, 'user'> {
@@ -972,6 +975,10 @@ function deriveStatus(logs: TimeLog[]): Omit<UserStatusRecord, 'user'> {
                 if (brbStart) { brbMs += log.timestamp - brbStart; brbStart = undefined; } break;
         }
     }
+    const accumulatedWorkedMs = workedMs;
+    const accumulatedBreakMs = breakMs;
+    const accumulatedBrbMs = brbMs;
+
     // If still working, count current open segment up to now
     if (currentWorkSegStart && status === 'working') {
         workedMs += now - currentWorkSegStart;
@@ -982,7 +989,11 @@ function deriveStatus(logs: TimeLog[]): Omit<UserStatusRecord, 'user'> {
     if (brbStart && status === 'on_brb') {
         brbMs += now - brbStart;
     }
-    return { status, punchIn, punchOut, breakStart, brbStart, workStart, workedMs, breakMs, brbMs, breakCount, brbCount, isAutoLogout };
+    return { 
+        status, punchIn, punchOut, breakStart, brbStart, workStart, 
+        workedMs, breakMs, brbMs, breakCount, brbCount, isAutoLogout,
+        accumulatedWorkedMs, accumulatedBreakMs, accumulatedBrbMs 
+    };
 }
 
 export async function getAllUsersStatus(clientName?: string, force = false): Promise<UserStatusRecord[]> {

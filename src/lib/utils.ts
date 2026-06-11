@@ -46,3 +46,74 @@ export function getAvatarGradient(name: string): string {
   
   return `linear-gradient(135deg, ${c1}, ${c2})`;
 }
+
+export interface ClientTheme {
+  color: string;
+  glow: string;
+  pillBorder: string;
+  pillBg: string;
+  fadeLineBg: string;
+}
+
+// 12 widely dispersed, highly vibrant neon hues on the color wheel
+const DISTINCT_HUES = [
+  190, // Cyber Cyan
+  320, // Neon Pink
+  30,  // Amber Gold / Orange
+  260, // Cobalt Blue / Purple-Indigo
+  95,  // Lime Green
+  160, // Emerald Mint
+  215, // Cyber Sky Blue
+  340, // Hot Rose Red
+  75,  // Bright Neon Yellow
+  120, // Pure Vibrant Green
+  290, // Deep Orchid / Violet
+  15   // Fire Orange-Red
+];
+
+export function getClientTheme(clientName: string): ClientTheme {
+  const norm = clientName.trim().toLowerCase();
+  
+  if (norm.includes('bench')) {
+    return {
+      color: '#a855f7',
+      glow: 'rgba(168, 85, 247, 0.35)',
+      pillBorder: 'rgba(168, 85, 247, 0.15)',
+      pillBg: 'rgba(168, 85, 247, 0.03)',
+      fadeLineBg: 'linear-gradient(to right, rgba(168, 85, 247, 0.12), transparent)'
+    };
+  }
+  if (norm.includes('brooksource')) {
+    return {
+      color: '#00f5a0',
+      glow: 'rgba(0, 245, 160, 0.35)',
+      pillBorder: 'rgba(0, 245, 160, 0.15)',
+      pillBg: 'rgba(0, 245, 160, 0.03)',
+      fadeLineBg: 'linear-gradient(to right, rgba(0, 245, 160, 0.12), transparent)'
+    };
+  }
+
+  // Generate a distinct HSL color based on the client name hash
+  let hash = 0;
+  for (let i = 0; i < norm.length; i++) {
+    hash = norm.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  
+  // Map hash to one of the 12 highly distinct hues
+  const hue = DISTINCT_HUES[Math.abs(hash) % DISTINCT_HUES.length];
+  
+  const color = `hsl(${hue}, 95%, 55%)`;
+  const glow = `hsla(${hue}, 95%, 55%, 0.35)`;
+  const pillBorder = `hsla(${hue}, 95%, 55%, 0.15)`;
+  const pillBg = `hsla(${hue}, 95%, 55%, 0.03)`;
+  const fadeLineBg = `linear-gradient(to right, hsla(${hue}, 95%, 55%, 0.12), transparent)`;
+
+  return {
+    color,
+    glow,
+    pillBorder,
+    pillBg,
+    fadeLineBg
+  };
+}
+

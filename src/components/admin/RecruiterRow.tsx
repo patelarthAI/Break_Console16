@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { formatDuration } from '@/lib/timeUtils';
 import type { UserStatusRecord } from '@/lib/store';
 import { Pencil, LogOut, TrendingUp, User as UserIcon } from 'lucide-react';
+import { getClientTheme } from '@/lib/utils';
+
 
 interface RecruiterRowProps {
   record: UserStatusRecord;
@@ -33,17 +35,42 @@ function fmtShort(ms: number) {
 
 export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, onPunchOut, onEditLogs }: RecruiterRowProps) {
   const [isHovered, setIsHovered] = useState(false);
-  const { user, status: rawStatus, workedMs, breakMs, brbMs, punchIn, workStart, breakCount, brbCount } = record;
+  const { user, status: rawStatus, workedMs, breakMs, brbMs, punchIn, workStart, breakStart, brbStart, breakCount, brbCount } = record;
   const status = isOnLeave ? ('on_leave' as const) : rawStatus;
   const isActive = status === 'working' || status === 'on_break' || status === 'on_brb';
   const isWorking = status === 'working';
-  const now = Date.now();
+  
+  const [now, setNow] = useState(Date.now());
 
-  const workingElapsed = workStart ? now - workStart : 0;
-  const totalBreak = (breakMs || 0) + (brbMs || 0);
+  useEffect(() => {
+    setNow(Date.now());
+  }, [record]);
+
+  useEffect(() => {
+    if (!isActive) return;
+    const interval = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isActive]);
+
+  const clientTheme = getClientTheme(user.clientName);
+
+  const currentWorked = (status === 'working' && workStart)
+    ? ((record.accumulatedWorkedMs !== undefined ? record.accumulatedWorkedMs : workedMs) + (now - workStart))
+    : workedMs;
+
+  const currentBreak = (status === 'on_break' && breakStart)
+    ? ((record.accumulatedBreakMs !== undefined ? record.accumulatedBreakMs : breakMs) + (now - breakStart))
+    : (breakMs || 0);
+
+  const currentBrb = (status === 'on_brb' && brbStart)
+    ? ((record.accumulatedBrbMs !== undefined ? record.accumulatedBrbMs : brbMs) + (now - brbStart))
+    : (brbMs || 0);
+
+  const currentTotalBreak = currentBreak + currentBrb;
 
   const shiftLimitMs = 9 * 60 * 60 * 1000;
-  const currentWorked = isWorking ? (workedMs + workingElapsed) : workedMs;
   const shiftPct = Math.min(100, Math.max(0, (currentWorked / shiftLimitMs) * 100));
 
   const displayStatus = status.replace('on_', '').replace('_', ' ').toUpperCase();
@@ -62,9 +89,9 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
 
   // Compliance limit minutes calculations
   const shiftMin = currentWorked / 60000;
-  const breakMin = (breakMs || 0) / 60000;
-  const brbMin = (brbMs || 0) / 60000;
-  const totalMin = totalBreak / 60000;
+  const breakMin = currentBreak / 60000;
+  const brbMin = currentBrb / 60000;
+  const totalMin = currentTotalBreak / 60000;
 
   // Shift column color & glow
   let shiftColor = '#475569';
@@ -130,7 +157,7 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
   // Total Break column color & glow
   let totalColor = 'rgba(255, 255, 255, 0.22)';
   let totalGlow = 'none';
-  if (totalBreak > 0) {
+  if (currentTotalBreak > 0) {
     if (totalMin > 85) { // Over 85m total cap
       totalColor = '#ef4444';
       totalGlow = '0 0 12px #ef4444, 0 0 4px #ef4444';
@@ -143,7 +170,7 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
   }
 
   // Primary "shift" value: live timer while working, else accumulated worked
-  const shiftValue = isWorking ? formatDuration(workingElapsed) : formatDuration(workedMs);
+  const shiftValue = formatDuration(currentWorked);
 
   const breakBgColor = breakColor.startsWith('#') ? `${breakColor}1A` : 'rgba(255, 255, 255, 0.012)';
   const brbBgColor = brbColor.startsWith('#') ? `${brbColor}1A` : 'rgba(255, 255, 255, 0.012)';
@@ -152,9 +179,10 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
 
   // LCD Clock background values (replacing all digits with '8' to match layout & size exactly)
   const shiftLcdBg = shiftValue.replace(/[0-9]/g, '8');
-  const breakLcdBg = formatDuration(breakMs || 0).replace(/[0-9]/g, '8');
-  const brbLcdBg = formatDuration(brbMs || 0).replace(/[0-9]/g, '8');
-  const totalLcdBg = formatDuration(totalBreak).replace(/[0-9]/g, '8');
+  const breakLcdBg = formatDuration(currentBreak).replace(/[0-9]/g, '8');
+  const brbLcdBg = formatDuration(currentBrb).replace(/[0-9]/g, '8');
+  const totalLcdBg = formatDuration(currentTotalBreak).replace(/[0-9]/g, '8');
+
 
 
 
@@ -282,7 +310,13 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
             </div>
           )}
         </div>
-        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1">
+        <span 
+          className="text-[9px] font-black uppercase tracking-widest flex items-center gap-1 transition-all duration-300"
+          style={{
+            color: clientTheme.color,
+            textShadow: `0 0 8px ${clientTheme.color}33`,
+          }}
+        >
           <UserIcon size={9} /> {user.clientName}
         </span>
       </div>
@@ -337,7 +371,7 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
             textShadow: breakGlow,
           }}
         >
-          {formatDuration(breakMs || 0)}
+          {formatDuration(currentBreak)}
         </span>
       </div>
 
@@ -356,7 +390,7 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
             textShadow: brbGlow,
           }}
         >
-          {formatDuration(brbMs || 0)}
+          {formatDuration(currentBrb)}
         </span>
       </div>
 
@@ -375,9 +409,9 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
             textShadow: totalGlow,
           }}
         >
-          {formatDuration(totalBreak)}
+          {formatDuration(currentTotalBreak)}
         </span>
-        {totalBreak > 0 && (
+        {currentTotalBreak > 0 && (
           <div className="mt-1.5 h-[2px] w-12 rounded-full overflow-hidden bg-white/[0.04] z-10">
             <div 
               className="h-full rounded-full transition-all duration-500" 
