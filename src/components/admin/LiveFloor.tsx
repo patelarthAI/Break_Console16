@@ -333,19 +333,19 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
                   </div>
 
                   {/* Local Table Headers aligned perfectly inside the container */}
-                  <div className="grid grid-cols-[44px_1fr_100px_85px_85px_85px_95px_100px] gap-4 px-6 py-2.5 bg-[#080512]/40 border-b border-white/[0.02] select-none items-center">
-                     <div className="w-11 text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 flex justify-center">Reps</div>
-                     <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">Identity / Client</div>
+                  <div className="grid grid-cols-[44px_1fr_90px_78px_78px_62px_85px_106px] gap-3 px-4 py-2.5 bg-[#080512]/40 border-b border-white/[0.02] select-none items-center">
+                     <div className="w-11 text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 flex justify-center">Rep</div>
+                     <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">Identity</div>
                      <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">Protocol</div>
                      <div className="relative text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">
-                       <div className="absolute left-[-8px] top-1/4 bottom-1/4 w-[1px] bg-gradient-to-b from-transparent via-white/[0.05] to-transparent pointer-events-none" />
+                       <div className="absolute left-[-6px] top-1/4 bottom-1/4 w-[1px] bg-gradient-to-b from-transparent via-white/[0.05] to-transparent pointer-events-none" />
                        Shift
                      </div>
                      <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">Break</div>
                      <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">BRB</div>
-                     <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">Total Break</div>
+                     <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">Total</div>
                      <div className="relative text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">
-                       <div className="absolute left-[-8px] top-1/4 bottom-1/4 w-[1px] bg-gradient-to-b from-transparent via-white/[0.05] to-transparent pointer-events-none" />
+                       <div className="absolute left-[-6px] top-1/4 bottom-1/4 w-[1px] bg-gradient-to-b from-transparent via-white/[0.05] to-transparent pointer-events-none" />
                        Actions
                      </div>
                   </div>
