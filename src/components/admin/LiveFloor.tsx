@@ -246,11 +246,17 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
                <div className="w-11 text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 flex justify-center">Reps</div>
                <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Identity / Client</div>
                <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">Protocol</div>
-               <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-right pr-1">Shift</div>
+               <div className="relative text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-right pr-1">
+                 <div className="absolute left-[-8px] top-1/4 bottom-1/4 w-[1px] bg-gradient-to-b from-transparent via-white/[0.08] to-transparent pointer-events-none" />
+                 Shift
+               </div>
                <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-right pr-1">Break</div>
                <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-right pr-1">BRB</div>
                <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-right pr-1">Total Break</div>
-               <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-right pr-2">Actions</div>
+               <div className="relative text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-right pr-2">
+                 <div className="absolute left-[-8px] top-1/4 bottom-1/4 w-[1px] bg-gradient-to-b from-transparent via-white/[0.08] to-transparent pointer-events-none" />
+                 Actions
+               </div>
             </div>
           )}
 

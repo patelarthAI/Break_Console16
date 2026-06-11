@@ -145,11 +145,17 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
   // Primary "shift" value: live timer while working, else accumulated worked
   const shiftValue = isWorking ? formatElapsed(workingElapsed) : fmtShort(workedMs);
 
+  const breakBgColor = breakColor.startsWith('#') ? `${breakColor}1A` : 'rgba(255, 255, 255, 0.012)';
+  const brbBgColor = brbColor.startsWith('#') ? `${brbColor}1A` : 'rgba(255, 255, 255, 0.012)';
+  const totalBgColor = totalColor.startsWith('#') ? `${totalColor}1A` : 'rgba(255, 255, 255, 0.012)';
+  const shiftBgColor = shiftColor.startsWith('#') ? `${shiftColor}1A` : 'rgba(255, 255, 255, 0.012)';
+
   // LCD Clock background values (replacing all digits with '8' to match layout & size exactly)
   const shiftLcdBg = shiftValue.replace(/[0-9]/g, '8');
   const breakLcdBg = fmtShort(breakMs || 0).replace(/[0-9]/g, '8');
   const brbLcdBg = fmtShort(brbMs || 0).replace(/[0-9]/g, '8');
   const totalLcdBg = fmtShort(totalBreak).replace(/[0-9]/g, '8');
+
 
   return (
     <motion.div
@@ -303,7 +309,12 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
 
       {/* 4. Shift Column */}
       <div className="relative flex flex-col items-end justify-center min-w-0 pr-1">
-        <span className="absolute right-1 text-[15px] sm:text-[16px] font-black font-mono tabular-nums tracking-tight leading-none text-white/[0.015] pointer-events-none select-none">
+        {/* Whisper-thin divider line grouping the telemetry zone */}
+        <div className="absolute left-[-8px] top-1/4 bottom-1/4 w-[1px] bg-gradient-to-b from-transparent via-white/[0.04] to-transparent pointer-events-none" />
+        <span 
+          className="absolute right-1 text-[15px] sm:text-[16px] font-black font-mono tabular-nums tracking-tight leading-none pointer-events-none select-none transition-all duration-300"
+          style={{ color: shiftBgColor }}
+        >
           {shiftLcdBg}
         </span>
         <span
@@ -319,7 +330,10 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
 
       {/* 5. Break Column */}
       <div className="relative flex flex-col items-end justify-center min-w-0 pr-1">
-        <span className="absolute right-1 text-[15px] sm:text-[16px] font-black font-mono tabular-nums tracking-tight leading-none text-white/[0.015] pointer-events-none select-none">
+        <span 
+          className="absolute right-1 text-[15px] sm:text-[16px] font-black font-mono tabular-nums tracking-tight leading-none pointer-events-none select-none transition-all duration-300"
+          style={{ color: breakBgColor }}
+        >
           {breakLcdBg}
         </span>
         <span
@@ -335,7 +349,10 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
 
       {/* 6. BRB Column */}
       <div className="relative flex flex-col items-end justify-center min-w-0 pr-1">
-        <span className="absolute right-1 text-[15px] sm:text-[16px] font-black font-mono tabular-nums tracking-tight leading-none text-white/[0.015] pointer-events-none select-none">
+        <span 
+          className="absolute right-1 text-[15px] sm:text-[16px] font-black font-mono tabular-nums tracking-tight leading-none pointer-events-none select-none transition-all duration-300"
+          style={{ color: brbBgColor }}
+        >
           {brbLcdBg}
         </span>
         <span
@@ -351,7 +368,10 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
 
       {/* 7. Total Break Column (Dynamic color by violation thresholds) */}
       <div className="relative flex flex-col items-end justify-center min-w-0 pr-1">
-        <span className="absolute right-1 text-[15px] sm:text-[16px] font-black font-mono tabular-nums tracking-tight leading-none text-white/[0.015] pointer-events-none select-none">
+        <span 
+          className="absolute right-1 text-[15px] sm:text-[16px] font-black font-mono tabular-nums tracking-tight leading-none pointer-events-none select-none transition-all duration-300"
+          style={{ color: totalBgColor }}
+        >
           {totalLcdBg}
         </span>
         <span
@@ -378,7 +398,10 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
       </div>
 
       {/* Actions */}
-      <div className="flex items-center justify-end gap-2 pr-2">
+      <div className="relative flex items-center justify-end gap-2 pr-2">
+        {/* Divider separating metrics from action buttons */}
+        <div className="absolute left-[-8px] top-1/4 bottom-1/4 w-[1px] bg-gradient-to-b from-transparent via-white/[0.04] to-transparent pointer-events-none" />
+        
         {status === 'on_break' && onEndBreak && (
           <button onClick={() => onEndBreak(user.id)} className="btn-3d-warning text-[10px] font-black py-2 px-3 rounded-xl whitespace-nowrap">RESUME</button>
         )}
@@ -388,8 +411,10 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
         
         {/* Placeholder if offline & not punched in to balance layout */}
         {!isActive && !punchIn && (
-          <div className="text-[9px] font-black tracking-[0.15em] text-slate-800 uppercase select-none pr-1">
-            Locked
+          <div className="text-[8px] font-black tracking-[0.15em] text-slate-500 uppercase select-none px-2.5 py-1 rounded bg-[#090b11]/80 border border-white/[0.02] shadow-[inset_0_1px_3px_rgba(0,0,0,0.8)] relative overflow-hidden flex items-center justify-center min-w-[72px]">
+            {/* Micro-diagonal stripes background */}
+            <div className="absolute inset-0 opacity-[0.06] pointer-events-none bg-[linear-gradient(45deg,rgba(255,255,255,0.15)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.15)_50%,rgba(255,255,255,0.15)_75%,transparent_75%,transparent)] bg-[length:8px_8px]" />
+            <span className="relative z-10 font-mono tracking-widest text-[8px]">LOCKED</span>
           </div>
         )}
 
@@ -402,6 +427,7 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
           )}
         </div>
       </div>
+
     </motion.div>
   );
 }
