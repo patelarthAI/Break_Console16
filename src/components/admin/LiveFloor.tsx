@@ -55,9 +55,10 @@ interface ClientTheme {
 
 function getClientTheme(clientName: string): ClientTheme {
   const norm = clientName.trim().toLowerCase();
+  
   if (norm.includes('bench')) {
     return {
-      color: '#a855f7',
+      color: '#a855f7', // Bench Purple
       glow: 'rgba(168, 85, 247, 0.35)',
       gradient: 'from-purple-500/10 via-purple-500/5 to-transparent',
       borderGlow: 'rgba(168, 85, 247, 0.12)'
@@ -65,26 +66,38 @@ function getClientTheme(clientName: string): ClientTheme {
   }
   if (norm.includes('brooksource')) {
     return {
-      color: '#00f5a0',
+      color: '#00f5a0', // Brooksource Neon Mint Green
       glow: 'rgba(0, 245, 160, 0.35)',
       gradient: 'from-emerald-500/10 via-emerald-500/5 to-transparent',
       borderGlow: 'rgba(0, 245, 160, 0.12)'
     };
   }
-  if (norm.includes('salesforce') || norm.includes('service')) {
-    return {
-      color: '#0ea5e9',
-      glow: 'rgba(14, 165, 233, 0.35)',
-      gradient: 'from-sky-500/10 via-sky-500/5 to-transparent',
-      borderGlow: 'rgba(14, 165, 233, 0.12)'
-    };
+
+  // Curated 2026 telemetry color themes for other clients
+  const themes = [
+    { color: '#0ea5e9', glow: 'rgba(14, 165, 233, 0.35)' }, // Cyber Sky Blue
+    { color: '#ec4899', glow: 'rgba(236, 72, 153, 0.35)' }, // Neon Pink
+    { color: '#f59e0b', glow: 'rgba(245, 158, 11, 0.35)' }, // Amber Gold
+    { color: '#3b82f6', glow: 'rgba(59, 130, 246, 0.35)' },  // Cobalt Blue
+    { color: '#10b981', glow: 'rgba(16, 185, 129, 0.35)' }, // Emerald Green
+    { color: '#8b5cf6', glow: 'rgba(139, 92, 246, 0.35)' }, // Electric Violet
+    { color: '#f43f5e', glow: 'rgba(244, 63, 94, 0.35)' },  // Rose Red
+    { color: '#06b6d4', glow: 'rgba(6, 182, 212, 0.35)' }   // Cyber Cyan
+  ];
+
+  // Symmetrical string hash
+  let hash = 0;
+  for (let i = 0; i < norm.length; i++) {
+    hash = norm.charCodeAt(i) + ((hash << 5) - hash);
   }
-  // Fallback default theme for other clients
+  const index = Math.abs(hash) % themes.length;
+  const selected = themes[index];
+
   return {
-    color: '#6366f1',
-    glow: 'rgba(99, 102, 241, 0.35)',
-    gradient: 'from-indigo-500/10 via-indigo-500/5 to-transparent',
-    borderGlow: 'rgba(99, 102, 241, 0.12)'
+    color: selected.color,
+    glow: selected.glow,
+    gradient: `from-[${selected.color}]/10 via-[${selected.color}]/5 to-transparent`,
+    borderGlow: `${selected.color}1F`
   };
 }
 
@@ -320,7 +333,7 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
               const breakCount = members.filter((m) => m.memberStatus === 'on_break' || m.memberStatus === 'on_brb').length;
               const theme = getClientTheme(clientName);
               return (
-                <section key={clientName} className="mt-4 mb-6 first:mt-2">
+                <section key={clientName} className="mt-6 mb-8 first:mt-5">
                   <div className="flex items-center gap-4 py-2.5 mb-3 bg-transparent border-none shadow-none select-none">
                     {/* Themed vertical accent bar */}
                     <div 

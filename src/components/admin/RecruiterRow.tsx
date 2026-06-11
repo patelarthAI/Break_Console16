@@ -143,7 +143,7 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
   }
 
   // Primary "shift" value: live timer while working, else accumulated worked
-  const shiftValue = isWorking ? formatElapsed(workingElapsed) : fmtShort(workedMs);
+  const shiftValue = isWorking ? formatDuration(workingElapsed) : formatDuration(workedMs);
 
   const breakBgColor = breakColor.startsWith('#') ? `${breakColor}1A` : 'rgba(255, 255, 255, 0.012)';
   const brbBgColor = brbColor.startsWith('#') ? `${brbColor}1A` : 'rgba(255, 255, 255, 0.012)';
@@ -152,9 +152,10 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
 
   // LCD Clock background values (replacing all digits with '8' to match layout & size exactly)
   const shiftLcdBg = shiftValue.replace(/[0-9]/g, '8');
-  const breakLcdBg = fmtShort(breakMs || 0).replace(/[0-9]/g, '8');
-  const brbLcdBg = fmtShort(brbMs || 0).replace(/[0-9]/g, '8');
-  const totalLcdBg = fmtShort(totalBreak).replace(/[0-9]/g, '8');
+  const breakLcdBg = formatDuration(breakMs || 0).replace(/[0-9]/g, '8');
+  const brbLcdBg = formatDuration(brbMs || 0).replace(/[0-9]/g, '8');
+  const totalLcdBg = formatDuration(totalBreak).replace(/[0-9]/g, '8');
+
 
 
   return (
@@ -336,7 +337,7 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
             textShadow: breakGlow,
           }}
         >
-          {fmtShort(breakMs || 0)}
+          {formatDuration(breakMs || 0)}
         </span>
       </div>
 
@@ -355,7 +356,7 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
             textShadow: brbGlow,
           }}
         >
-          {fmtShort(brbMs || 0)}
+          {formatDuration(brbMs || 0)}
         </span>
       </div>
 
@@ -374,7 +375,7 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
             textShadow: totalGlow,
           }}
         >
-          {fmtShort(totalBreak)}
+          {formatDuration(totalBreak)}
         </span>
         {totalBreak > 0 && (
           <div className="mt-1.5 h-[2px] w-12 rounded-full overflow-hidden bg-white/[0.04] z-10">
