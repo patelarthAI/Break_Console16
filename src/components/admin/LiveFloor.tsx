@@ -46,6 +46,48 @@ function toPersonKey(name: string, clientName: string) {
   return `${name.trim().toLowerCase()}::${clientName.trim().toLowerCase()}`;
 }
 
+interface ClientTheme {
+  color: string;
+  glow: string;
+  gradient: string;
+  borderGlow: string;
+}
+
+function getClientTheme(clientName: string): ClientTheme {
+  const norm = clientName.trim().toLowerCase();
+  if (norm.includes('bench')) {
+    return {
+      color: '#a855f7',
+      glow: 'rgba(168, 85, 247, 0.35)',
+      gradient: 'from-purple-500/10 via-purple-500/5 to-transparent',
+      borderGlow: 'rgba(168, 85, 247, 0.12)'
+    };
+  }
+  if (norm.includes('brooksource')) {
+    return {
+      color: '#00f5a0',
+      glow: 'rgba(0, 245, 160, 0.35)',
+      gradient: 'from-emerald-500/10 via-emerald-500/5 to-transparent',
+      borderGlow: 'rgba(0, 245, 160, 0.12)'
+    };
+  }
+  if (norm.includes('salesforce') || norm.includes('service')) {
+    return {
+      color: '#0ea5e9',
+      glow: 'rgba(14, 165, 233, 0.35)',
+      gradient: 'from-sky-500/10 via-sky-500/5 to-transparent',
+      borderGlow: 'rgba(14, 165, 233, 0.12)'
+    };
+  }
+  // Fallback default theme for other clients
+  return {
+    color: '#6366f1',
+    glow: 'rgba(99, 102, 241, 0.35)',
+    gradient: 'from-indigo-500/10 via-indigo-500/5 to-transparent',
+    borderGlow: 'rgba(99, 102, 241, 0.12)'
+  };
+}
+
 export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: LiveFloorProps) {
   const [statusRecords, setStatusRecords] = useState<UserStatusRecord[]>([]);
   const [leaves, setLeaves] = useState<LeaveRecord[]>([]);
@@ -246,14 +288,14 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
                <div className="w-11 text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 flex justify-center">Reps</div>
                <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Identity / Client</div>
                <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">Protocol</div>
-               <div className="relative text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-right pr-1">
+               <div className="relative text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">
                  <div className="absolute left-[-8px] top-1/4 bottom-1/4 w-[1px] bg-gradient-to-b from-transparent via-white/[0.08] to-transparent pointer-events-none" />
                  Shift
                </div>
-               <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-right pr-1">Break</div>
-               <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-right pr-1">BRB</div>
-               <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-right pr-1">Total Break</div>
-               <div className="relative text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-right pr-2">
+               <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">Break</div>
+               <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">BRB</div>
+               <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">Total Break</div>
+               <div className="relative text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">
                  <div className="absolute left-[-8px] top-1/4 bottom-1/4 w-[1px] bg-gradient-to-b from-transparent via-white/[0.08] to-transparent pointer-events-none" />
                  Actions
                </div>
@@ -276,39 +318,61 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
             grouped.map(([clientName, members]) => {
               const activeCount = members.filter((m) => m.memberStatus === 'working').length;
               const breakCount = members.filter((m) => m.memberStatus === 'on_break' || m.memberStatus === 'on_brb').length;
+              const theme = getClientTheme(clientName);
               return (
                 <section key={clientName} className="mt-4 mb-6 first:mt-2">
-                  <div className="flex items-center gap-4 py-2 mb-2.5 bg-transparent border-none shadow-none select-none">
-                    {/* Glowing status indicator dot */}
-                    <div className="relative w-2 h-2 rounded-full bg-purple-500 flex-shrink-0">
-                      <div className="absolute inset-0 rounded-full bg-purple-500 animate-ping opacity-60" />
-                      <div className="absolute -inset-1 rounded-full border border-purple-500/30 opacity-50" />
-                    </div>
+                  <div className="flex items-center gap-4 py-2.5 mb-3 bg-transparent border-none shadow-none select-none">
+                    {/* Themed vertical accent bar */}
+                    <div 
+                      className="h-5 w-1 rounded-r-full transition-all duration-300"
+                      style={{ 
+                        backgroundColor: theme.color, 
+                        boxShadow: `0 0 12px ${theme.color}` 
+                      }} 
+                    />
                     
-                    {/* Section label */}
-                    <span className="text-[13px] font-black text-white uppercase tracking-[0.28em] drop-shadow-[0_0_8px_rgba(168,85,247,0.3)] flex-shrink-0">
+                    {/* Section label with unique color and glow */}
+                    <span 
+                      className="text-[13px] font-black uppercase tracking-[0.28em] transition-all duration-300 flex-shrink-0"
+                      style={{
+                        color: theme.color,
+                        textShadow: `0 0 10px ${theme.glow}`,
+                      }}
+                    >
                       {clientName}
                     </span>
-
-                    {/* Muted count pills */}
+ 
+                    {/* Dynamic styled count pills */}
                     <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <span className="px-1.5 py-0.5 rounded border border-white/[0.04] bg-white/[0.01] text-[9px] font-bold text-slate-500 uppercase tracking-widest">
+                      <span 
+                        className="px-2 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-widest transition-all duration-300"
+                        style={{
+                          borderColor: `${theme.color}25`,
+                          backgroundColor: `${theme.color}05`,
+                          color: theme.color,
+                        }}
+                      >
                         {members.length} REPS
                       </span>
                       {activeCount > 0 && (
-                        <span className="px-1.5 py-0.5 rounded border border-emerald-500/10 bg-emerald-500/[0.02] text-[9px] font-bold text-emerald-500/70 uppercase tracking-widest">
+                        <span className="px-2 py-0.5 rounded-full border border-emerald-500/10 bg-emerald-500/[0.02] text-[9px] font-bold text-emerald-500/70 uppercase tracking-widest">
                           {activeCount} ACTIVE
                         </span>
                       )}
                       {breakCount > 0 && (
-                        <span className="px-1.5 py-0.5 rounded border border-amber-500/10 bg-amber-500/[0.02] text-[9px] font-bold text-amber-500/70 uppercase tracking-widest">
+                        <span className="px-2 py-0.5 rounded-full border border-amber-500/10 bg-amber-500/[0.02] text-[9px] font-bold text-amber-500/70 uppercase tracking-widest">
                           {breakCount} BREAK
                         </span>
                       )}
                     </div>
-
-                    {/* Whisper-thin divider line extending to the right */}
-                    <div className="flex-1 h-[1px] bg-gradient-to-r from-white/[0.06] to-transparent" />
+ 
+                    {/* Themed fading line */}
+                    <div 
+                      className="flex-1 h-[1px] opacity-40 transition-all duration-300" 
+                      style={{
+                        background: `linear-gradient(to right, ${theme.color}20, transparent)`,
+                      }}
+                    />
                   </div>
                   <div className="space-y-2">
                     {members.map(({ record, isOnLeave }) => (

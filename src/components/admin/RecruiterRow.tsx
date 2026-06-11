@@ -201,7 +201,7 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
 
         {/* Pulsing state glow breathing halo */}
         <div 
-          className="absolute inset-[6px] rounded-xl opacity-30 hud-breath"
+          className="absolute inset-[6px] rounded-full opacity-30 hud-breath"
           style={{ 
             backgroundColor: `${accentColor}12`,
             border: `1px solid ${accentColor}`,
@@ -236,7 +236,7 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
 
         {/* Center node with initials */}
         <div
-          className="relative w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300 overflow-hidden"
+          className="relative w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 overflow-hidden"
           style={{
             background: isActive
               ? `linear-gradient(135deg, ${accentColor}25 0%, ${accentColor}05 100%)`
@@ -266,13 +266,6 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
             {getInitials(user.name)}
           </span>
         </div>
-
-        {/* Tiny live pulsator node at the top-right of the HUD pod */}
-        {isActive && (
-          <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#06070a] p-0.5 z-20">
-            <div className="w-full h-full rounded-full animate-pulse" style={{ backgroundColor: accentColor }} />
-          </div>
-        )}
       </div>
 
       {/* Name + client */}
@@ -308,11 +301,11 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
       </div>
 
       {/* 4. Shift Column */}
-      <div className="relative flex flex-col items-end justify-center min-w-0 pr-1">
+      <div className="relative flex flex-col items-center justify-center min-w-0">
         {/* Whisper-thin divider line grouping the telemetry zone */}
         <div className="absolute left-[-8px] top-1/4 bottom-1/4 w-[1px] bg-gradient-to-b from-transparent via-white/[0.04] to-transparent pointer-events-none" />
         <span 
-          className="absolute right-1 text-[15px] sm:text-[16px] font-black font-mono tabular-nums tracking-tight leading-none pointer-events-none select-none transition-all duration-300"
+          className="absolute text-[15px] sm:text-[16px] font-black font-mono tabular-nums tracking-tight leading-none pointer-events-none select-none transition-all duration-300"
           style={{ color: shiftBgColor }}
         >
           {shiftLcdBg}
@@ -329,9 +322,9 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
       </div>
 
       {/* 5. Break Column */}
-      <div className="relative flex flex-col items-end justify-center min-w-0 pr-1">
+      <div className="relative flex flex-col items-center justify-center min-w-0">
         <span 
-          className="absolute right-1 text-[15px] sm:text-[16px] font-black font-mono tabular-nums tracking-tight leading-none pointer-events-none select-none transition-all duration-300"
+          className="absolute text-[15px] sm:text-[16px] font-black font-mono tabular-nums tracking-tight leading-none pointer-events-none select-none transition-all duration-300"
           style={{ color: breakBgColor }}
         >
           {breakLcdBg}
@@ -348,9 +341,9 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
       </div>
 
       {/* 6. BRB Column */}
-      <div className="relative flex flex-col items-end justify-center min-w-0 pr-1">
+      <div className="relative flex flex-col items-center justify-center min-w-0">
         <span 
-          className="absolute right-1 text-[15px] sm:text-[16px] font-black font-mono tabular-nums tracking-tight leading-none pointer-events-none select-none transition-all duration-300"
+          className="absolute text-[15px] sm:text-[16px] font-black font-mono tabular-nums tracking-tight leading-none pointer-events-none select-none transition-all duration-300"
           style={{ color: brbBgColor }}
         >
           {brbLcdBg}
@@ -367,9 +360,9 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
       </div>
 
       {/* 7. Total Break Column (Dynamic color by violation thresholds) */}
-      <div className="relative flex flex-col items-end justify-center min-w-0 pr-1">
+      <div className="relative flex flex-col items-center justify-center min-w-0">
         <span 
-          className="absolute right-1 text-[15px] sm:text-[16px] font-black font-mono tabular-nums tracking-tight leading-none pointer-events-none select-none transition-all duration-300"
+          className="absolute text-[15px] sm:text-[16px] font-black font-mono tabular-nums tracking-tight leading-none pointer-events-none select-none transition-all duration-300"
           style={{ color: totalBgColor }}
         >
           {totalLcdBg}
@@ -398,7 +391,7 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
       </div>
 
       {/* Actions */}
-      <div className="relative flex items-center justify-end gap-2 pr-2">
+      <div className="relative flex items-center justify-center gap-2">
         {/* Divider separating metrics from action buttons */}
         <div className="absolute left-[-8px] top-1/4 bottom-1/4 w-[1px] bg-gradient-to-b from-transparent via-white/[0.04] to-transparent pointer-events-none" />
         
