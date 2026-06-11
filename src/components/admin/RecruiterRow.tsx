@@ -104,48 +104,52 @@ export default function RecruiterRow({
 
   const shiftIsLive = isActive;
 
-  // Shift display color driven by context
+  // ── Unified Palette ───────────────────────────────────────────────────────
+  const COLOR_WORKING = '#10b981';
+  const COLOR_BREAK   = '#f59e0b';
+  const COLOR_BRB     = '#3b82f6';
+  const COLOR_LEAVE   = '#8b5cf6';
+  const COLOR_MUTED   = '#94a3b8';
+  const COLOR_EMPTY   = 'rgba(255, 255, 255, 0.18)';
+  const COLOR_TOTAL   = '#e2e8f0';
+
+  // ── Accent color for avatar spinner and borders ───────────────────────────
+  let accentColor = '#334155';
+  if (status === 'working')  accentColor = COLOR_WORKING;
+  if (status === 'on_break') accentColor = COLOR_BREAK;
+  if (status === 'on_brb')   accentColor = COLOR_BRB;
+  if (status === 'on_leave') accentColor = COLOR_LEAVE;
+
+  // ── SHIFT timer display color ─────────────────────────────────────────────
   let shiftColor = '#475569';
   let shiftGlow  = 'none';
 
   if (status === 'on_break' && breakStart) {
-    const sinceMin = (now - breakStart) / 60000;
-    if (sinceMin > 60)      { shiftColor = '#ef4444'; shiftGlow = '0 0 12px #ef4444, 0 0 4px #ef4444'; }
-    else if (sinceMin > 45) { shiftColor = '#f97316'; shiftGlow = '0 0 8px #f97316'; }
-    else                    { shiftColor = '#f59e0b'; shiftGlow = '0 0 8px rgba(245,158,11,0.5)'; }
+    shiftColor = COLOR_BREAK;
+    shiftGlow  = `0 0 8px ${COLOR_BREAK}50`;
   } else if (status === 'on_brb' && brbStart) {
-    const sinceMin = (now - brbStart) / 60000;
-    if (sinceMin > 8) { shiftColor = '#ef4444'; shiftGlow = '0 0 12px #ef4444, 0 0 4px #ef4444'; }
-    else              { shiftColor = '#60a5fa'; shiftGlow = '0 0 8px rgba(96,165,250,0.5)'; }
+    shiftColor = COLOR_BRB;
+    shiftGlow  = `0 0 8px ${COLOR_BRB}50`;
   } else if (punchIn) {
-    const workedMin = currentWorked / 60000;
-    if (workedMin > 540)      { shiftColor = '#ef4444'; shiftGlow = '0 0 12px #ef4444, 0 0 4px #ef4444'; }
-    else if (workedMin > 510) { shiftColor = '#f59e0b'; shiftGlow = '0 0 8px #f59e0b'; }
-    else if (isWorking)       { shiftColor = '#00F5A0'; shiftGlow = '0 0 10px rgba(0,245,160,0.4)'; }
-    else                      { shiftColor = '#94a3b8'; }
+    if (isWorking) {
+      shiftColor = COLOR_WORKING;
+      shiftGlow  = `0 0 10px ${COLOR_WORKING}40`;
+    } else {
+      shiftColor = COLOR_MUTED;
+    }
   }
 
-  // ── Break / BRB / Total column colors ─────────────────────────────────────
-  const breakMin = currentBreak / 60000;
-  const brbMin   = currentBrb   / 60000;
-  const totalMin = currentTotalBreak / 60000;
+  // ── Individual Column colors (unified for break and brb) ───────────────────
+  const breakColor = currentBreak > 0 ? COLOR_BREAK : COLOR_EMPTY;
+  const breakGlow  = status === 'on_break' && currentBreak > 0 ? `0 0 8px ${COLOR_BREAK}50` : 'none';
 
-  const breakColor = breakMin > 75 ? '#ef4444' : breakMin > 60 ? '#f97316' : breakMin > 0 ? '#f59e0b' : 'rgba(255,255,255,0.18)';
-  const breakGlow  = status === 'on_break' && breakMin > 0 ? `0 0 8px ${breakColor}80` : 'none';
+  const brbColor   = currentBrb > 0 ? COLOR_BRB : COLOR_EMPTY;
+  const brbGlow    = status === 'on_brb' && currentBrb > 0 ? `0 0 8px ${COLOR_BRB}50` : 'none';
 
-  const brbColor   = brbMin > 10 ? '#ef4444' : brbMin > 8 ? '#f97316' : brbMin > 0 ? '#3b82f6' : 'rgba(255,255,255,0.18)';
-  const brbGlow    = status === 'on_brb' && brbMin > 0 ? `0 0 8px ${brbColor}80` : 'none';
-
-  const totalColor = totalMin > 85 ? '#ef4444' : totalMin > 70 ? '#f97316' : currentTotalBreak > 0 ? '#94a3b8' : 'rgba(255,255,255,0.14)';
+  const totalColor = currentTotalBreak > 0 ? COLOR_TOTAL : 'rgba(255, 255, 255, 0.14)';
   const totalGlow  = 'none';
 
-  // ── Accent colour for avatar / border ─────────────────────────────────────
-  let accentColor = '#334155';
-  if (status === 'working')  accentColor = '#00F5A0';
-  if (status === 'on_break') accentColor = '#FBBF24';
-  if (status === 'on_brb')   accentColor = '#3b82f6';
-  if (status === 'on_leave') accentColor = '#8b5cf6';
-
+  const totalMin = currentTotalBreak / 60000;
   const shiftLimitMs = 9 * 60 * 60 * 1000;
   const shiftPct = Math.min(100, Math.max(0, (currentWorked / shiftLimitMs) * 100));
 
@@ -166,27 +170,25 @@ export default function RecruiterRow({
     live,
     color,
     glow,
-    size = 'md',
   }: {
     ms: number;
     live: boolean;
     color: string;
     glow: string;
-    size?: 'sm' | 'md';
   }) {
     const { h, m } = toHM(ms);
-    const fontSize  = size === 'sm' ? 'text-[12px]' : 'text-[14px]';
+    const fontSize = 'text-[13px]';
     return (
       <div className="relative flex items-center justify-center w-full">
         {/* Ghost digits for stability */}
         <span
-          className={`absolute ${fontSize} font-black font-mono tracking-tight leading-none pointer-events-none select-none opacity-[0.035]`}
+          className={`absolute ${fontSize} font-bold font-mono tracking-tight leading-none pointer-events-none select-none opacity-[0.035]`}
           style={{ color }}
         >
           88:88
         </span>
         <span
-          className={`relative ${fontSize} font-black font-mono tracking-tight leading-none flex items-center`}
+          className={`relative ${fontSize} font-bold font-mono tracking-tight leading-none flex items-center`}
           style={{ color, textShadow: glow }}
         >
           {h}
@@ -233,8 +235,8 @@ export default function RecruiterRow({
         }`}
       style={{
         borderColor: isActive
-          ? isHovered ? `${accentColor}55` : `${accentColor}22`
-          : isHovered ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.03)',
+          ? isHovered ? `${accentColor}70` : `${accentColor}35`
+          : isHovered ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.05)',
       }}
     >
       {/* Left accent bar */}
@@ -356,17 +358,17 @@ export default function RecruiterRow({
 
       {/* ── 5. Break total ─────────────────────────────────────────────────── */}
       <div className="flex items-center justify-center">
-        <Clock ms={currentBreak} live={status === 'on_break'} color={breakColor} glow={breakGlow} size="sm" />
+        <Clock ms={currentBreak} live={status === 'on_break'} color={breakColor} glow={breakGlow} />
       </div>
 
       {/* ── 6. BRB total ───────────────────────────────────────────────────── */}
       <div className="flex items-center justify-center">
-        <Clock ms={currentBrb} live={status === 'on_brb'} color={brbColor} glow={brbGlow} size="sm" />
+        <Clock ms={currentBrb} live={status === 'on_brb'} color={brbColor} glow={brbGlow} />
       </div>
 
       {/* ── 7. Total break ─────────────────────────────────────────────────── */}
       <div className="flex flex-col items-center justify-center gap-[3px]">
-        <Clock ms={currentTotalBreak} live={status === 'on_break' || status === 'on_brb'} color={totalColor} glow={totalGlow} size="sm" />
+        <Clock ms={currentTotalBreak} live={status === 'on_break' || status === 'on_brb'} color={totalColor} glow={totalGlow} />
         {currentTotalBreak > 0 && (
           <div className="h-[2px] w-8 rounded-full overflow-hidden bg-white/[0.06]">
             <div
@@ -392,11 +394,11 @@ export default function RecruiterRow({
             onClick={() => onEndBreak(user.id)}
             className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.08em] py-[7px] px-3 rounded-xl cursor-pointer whitespace-nowrap"
             style={{
-              background: 'rgba(251,191,36,0.1)',
-              border: '1px solid rgba(251,191,36,0.35)',
-              color: '#fbbf24',
-              boxShadow: '0 2px 12px rgba(251,191,36,0.15)',
-              textShadow: '0 0 6px rgba(251,191,36,0.6)',
+              background: 'rgba(245, 158, 11, 0.1)',
+              border: `1px solid rgba(245, 158, 11, 0.35)`,
+              color: COLOR_BREAK,
+              boxShadow: '0 2px 12px rgba(245, 158, 11, 0.15)',
+              textShadow: '0 0 6px rgba(245, 158, 11, 0.6)',
             }}
           >
             <Play size={8} className="fill-current flex-shrink-0" />
@@ -412,11 +414,11 @@ export default function RecruiterRow({
             onClick={() => onEndBrb(user.id)}
             className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.08em] py-[7px] px-3 rounded-xl cursor-pointer whitespace-nowrap"
             style={{
-              background: 'rgba(59,130,246,0.1)',
-              border: '1px solid rgba(59,130,246,0.35)',
-              color: '#60a5fa',
-              boxShadow: '0 2px 12px rgba(59,130,246,0.15)',
-              textShadow: '0 0 6px rgba(59,130,246,0.6)',
+              background: 'rgba(59, 130, 246, 0.1)',
+              border: `1px solid rgba(59, 130, 246, 0.35)`,
+              color: COLOR_BRB,
+              boxShadow: '0 2px 12px rgba(59, 130, 246, 0.15)',
+              textShadow: '0 0 6px rgba(59, 130, 246, 0.6)',
             }}
           >
             <Square size={8} className="fill-current flex-shrink-0" />

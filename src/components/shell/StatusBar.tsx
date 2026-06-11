@@ -30,7 +30,7 @@ interface StatusBarProps {
 
 export default function StatusBar({ counts, activeFilter, onFilterChange }: StatusBarProps) {
   return (
-    <div className="flex lg:grid lg:grid-cols-7 overflow-x-auto lg:overflow-x-visible gap-3 px-4 lg:px-6 py-3 scroll-smooth" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+    <div className="max-w-[1400px] mx-auto w-full flex lg:grid lg:grid-cols-7 overflow-x-auto lg:overflow-x-visible gap-3 px-4 lg:px-6 py-3 scroll-smooth" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
       {/* CSS to hide webkit scrollbars inline since tailwind no-scrollbar might not be compiled */}
       <style jsx global>{`
         div::-webkit-scrollbar {

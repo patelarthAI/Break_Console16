@@ -220,7 +220,7 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
 
   return (
     <>
-      <div className="relative flex gap-6 px-4 lg:px-6 pt-4 pb-6 min-h-[85vh] overflow-hidden z-10">
+      <div className="relative max-w-[1400px] mx-auto flex gap-6 px-4 lg:px-6 pt-4 pb-6 min-h-[85vh] overflow-hidden z-10 w-full">
         {/* Futuristic Ambient Orbs background */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden -z-10">
           <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-purple-900/10 blur-[120px] mix-blend-screen animate-pulse" />
