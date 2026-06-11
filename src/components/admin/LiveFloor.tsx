@@ -351,7 +351,7 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
                   </div>
 
                   {/* Roster Rows wrapper list inside the card panel */}
-                  <div className="p-3 space-y-2 bg-[#06040a]/40">
+                  <div className="p-3 space-y-3 bg-[#06040a]/40">
                     {members.map(({ record, isOnLeave }) => (
                       <RecruiterRow
                         key={record.user.id}

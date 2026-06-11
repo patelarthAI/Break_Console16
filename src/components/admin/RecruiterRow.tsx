@@ -226,7 +226,7 @@ export default function RecruiterRow({
       onMouseLeave={() => setIsHovered(false)}
       // ─ EXACT same grid / gap / px as the header in LiveFloor ─
       className={`relative grid ${ROW_GRID} ${ROW_GAP} ${ROW_PX} items-center
-        py-3 rounded-2xl group border transition-all duration-300
+        py-3.5 rounded-2xl group border transition-all duration-300
         ${isActive
           ? 'bg-gradient-to-r from-white/[0.025] to-white/[0.006] shadow-[0_6px_28px_rgba(0,0,0,0.45)] backdrop-blur-sm'
           : 'bg-white/[0.008] hover:bg-white/[0.018]'
