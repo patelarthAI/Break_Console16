@@ -20,12 +20,7 @@ function getInitials(name: string) {
 }
 
 function formatElapsed(ms: number) {
-  const totalSec = Math.floor(ms / 1000);
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  if (h > 0) return `${h}h ${m}m ${s}s`;
-  return `${m}m ${s}s`;
+  return fmtShort(ms);
 }
 
 /* HH:MM:SS but drop a leading "00:" for compactness */
