@@ -2,7 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Crown, Trophy, Medal, Flame, AlertTriangle, Hourglass, AlertCircle } from 'lucide-react';
-import { getAllUsersStatus } from '@/lib/store';
+import { getAllUsersStatus, getSingleUserStatus } from '@/lib/store';
+import { subscribe } from '@/lib/realtime';
+import { getTodayKey } from '@/lib/timeUtils';
 import { User } from '@/types';
 
 /* ─── helpers ─────────────────────────────────────────── */
@@ -112,7 +114,7 @@ const DEF_CAMPERS: Camper[] = [];
 
 /* ═══════════════════════════════════════════════════════ */
 export default function RightPanel({ user, leaders, campers }: RightPanelProps) {
-  const [team,   setTeam]   = useState<{ name: string; status: string }[]>([]);
+  const [team,   setTeam]   = useState<{ id?: string; name: string; status: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [qIdx,   setQIdx]   = useState(todayQ());
   const [fade,   setFade]   = useState(false);
@@ -127,6 +129,7 @@ export default function RightPanel({ user, leaders, campers }: RightPanelProps) 
         const d = await getAllUsersStatus(clientName || undefined);
         if (!dead && d?.length) {
           setTeam(d.map((u: any) => ({
+            id:     u.user?.id,
             name:   u.user?.name   || 'Team Member',
             status: u.status       || 'working',
           })));
@@ -134,8 +137,41 @@ export default function RightPanel({ user, leaders, campers }: RightPanelProps) 
       } catch (e) { console.error('RightPanel: failed to load team status', e); } finally { if (!dead) setLoading(false); }
     };
     load();
-    const iv = setInterval(load, 60_000); // 60s (was 30s) — reduce Supabase egress
-    return () => { dead = true; clearInterval(iv); };
+
+    const todayKey = getTodayKey();
+    const unsub = subscribe('time_logs', '*', async (payload?: { new?: { user_id?: string }; old?: { user_id?: string } }) => {
+      const userId = payload?.new?.user_id || payload?.old?.user_id;
+      if (!userId) {
+        load();
+        return;
+      }
+      try {
+        const updated = await getSingleUserStatus(userId);
+        if (dead || !updated) return;
+        
+        // If clientName filter is set, check if this user belongs to it
+        if (clientName && updated.user?.clientName !== clientName) return;
+
+        setTeam((prev) => {
+          const idx = prev.findIndex((m) => m.id === userId);
+          const mappedUser = {
+            id:     updated.user?.id,
+            name:   updated.user?.name   || 'Team Member',
+            status: updated.status       || 'working',
+          };
+          if (idx === -1) {
+            return [...prev, mappedUser];
+          }
+          const next = prev.slice();
+          next[idx] = mappedUser;
+          return next;
+        });
+      } catch (e) {
+        console.error('RightPanel: realtime status update failed', e);
+      }
+    }, `date=eq.${todayKey}`);
+
+    return () => { dead = true; unsub(); };
   }, [clientName]);
 
   /* Only show people who are actually away (break / BRB) */

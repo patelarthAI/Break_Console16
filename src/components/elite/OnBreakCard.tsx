@@ -1,6 +1,8 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { getAllUsersStatus } from '@/lib/store';
+import { getAllUsersStatus, getSingleUserStatus } from '@/lib/store';
+import { subscribe } from '@/lib/realtime';
+import { getTodayKey } from '@/lib/timeUtils';
 
 const STATUS_COLOR: Record<string, string> = {
   working: '#00F5A0', on_break: '#FFD700', on_brb: '#D8B4FE',
@@ -23,21 +25,55 @@ export default function OnBreakCard({ noCard = false }: OnBreakCardProps) {
 
   useEffect(() => {
     let cancelled = false;
-    const fetch = async () => {
+    const fetchAll = async () => {
       try {
         const data = await getAllUsersStatus();
         if (!cancelled && data?.length) {
-          // Map to stable { name, status } shape
           setTeam(data.map((u: any) => ({
+            id: u.user?.id,
             name: u.user?.name || 'Team Member',
             status: u.status || 'working',
           })));
         }
-      } catch (e) { console.error('OnBreakCard: failed to load team status', e); } finally { if (!cancelled) setLoading(false); }
+      } catch (e) {
+        console.error('OnBreakCard: failed to load team status', e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     };
-    fetch();
-    const iv = setInterval(fetch, 60_000); // 60s (was 30s) — reduce Supabase egress
-    return () => { cancelled = true; clearInterval(iv); };
+    fetchAll();
+
+    const todayKey = getTodayKey();
+    const unsub = subscribe('time_logs', '*', async (payload?: { new?: { user_id?: string }; old?: { user_id?: string } }) => {
+      const userId = payload?.new?.user_id || payload?.old?.user_id;
+      if (!userId) {
+        fetchAll();
+        return;
+      }
+      try {
+        const updated = await getSingleUserStatus(userId);
+        if (cancelled || !updated) return;
+        setTeam((prev) => {
+          const idx = prev.findIndex((m) => m.id === userId);
+          const mappedUser = {
+            id: updated.user?.id,
+            name: updated.user?.name || 'Team Member',
+            status: updated.status || 'working',
+          };
+          if (idx === -1) return [...prev, mappedUser];
+          const next = prev.slice();
+          next[idx] = mappedUser;
+          return next;
+        });
+      } catch (e) {
+        console.error('OnBreakCard: realtime status update failed', e);
+      }
+    }, `date=eq.${todayKey}`);
+
+    return () => {
+      cancelled = true;
+      unsub();
+    };
   }, []);
 
   const away    = team.filter(m => m.status === 'on_break' || m.status === 'on_brb');

@@ -26,13 +26,11 @@ function PendingApproval({ user, onLogout }: { user: User; onLogout: () => void 
   const [status, setStatus] = useState<'pending' | 'approved' | 'rejected'>('pending');
   
   useEffect(() => {
-    let delay = 5000;
-    let timeoutId: ReturnType<typeof setTimeout>;
     let cancelled = false;
 
     const check = async () => {
       try {
-        const { data, error } = await supabase.from('users').select('is_approved').eq('id', user.id).single();
+        const { data, error } = await supabase.from('users').select('is_approved').eq('id', user.id).maybeSingle();
         if (cancelled) return;
         
         if (error || !data) {
@@ -43,18 +41,40 @@ function PendingApproval({ user, onLogout }: { user: User; onLogout: () => void 
         if (data.is_approved) { 
           setCurrentUser({ ...user, isApproved: true }); 
           setStatus('approved');
-          return;
         }
-        delay = 5000;
-      } catch {
-        delay = Math.min(delay * 2, 30000);
-        if (cancelled) return;
+      } catch (err) {
+        console.error('PendingApproval initial check failed:', err);
       }
-      timeoutId = setTimeout(check, delay);
     };
 
     check();
-    return () => { cancelled = true; clearTimeout(timeoutId); };
+
+    // Subscribe to updates for this user
+    const unsubUpdate = subscribe('users', 'UPDATE', (payload) => {
+      if (cancelled) return;
+      const updated = payload?.new;
+      if (updated && updated.id === user.id) {
+        if (updated.is_approved) {
+          setCurrentUser({ ...user, isApproved: true });
+          setStatus('approved');
+        }
+      }
+    }, `id=eq.${user.id}`);
+
+    // Subscribe to deletion in case user is rejected/deleted
+    const unsubDelete = subscribe('users', 'DELETE', (payload) => {
+      if (cancelled) return;
+      const deleted = payload?.old;
+      if (deleted && deleted.id === user.id) {
+        setStatus('rejected');
+      }
+    }, `id=eq.${user.id}`);
+
+    return () => {
+      cancelled = true;
+      unsubUpdate();
+      unsubDelete();
+    };
   }, [user]);
 
   if (status === 'approved') { 

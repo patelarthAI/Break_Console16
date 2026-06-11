@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShieldAlert, Check, X, RefreshCw, UserCheck, Clock, Building2, ChevronRight } from 'lucide-react';
 import { getPendingUsers, approveUser, deleteUser } from '@/lib/store';
+import { subscribe } from '@/lib/realtime';
 import type { User } from '@/types';
 
 // ─── Full-page Approval Modal ─────────────────────────────────────────────────
@@ -146,8 +147,10 @@ export default function ApprovalBanner() {
 
   useEffect(() => {
     void loadPending();
-    const interval = setInterval(() => void loadPending(), 30000);
-    return () => clearInterval(interval);
+    const unsub = subscribe('users', '*', () => {
+      void loadPending();
+    });
+    return () => unsub();
   }, [loadPending]);
 
   const handleApprove = async (userId: string) => {

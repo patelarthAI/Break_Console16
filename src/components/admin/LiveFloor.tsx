@@ -93,7 +93,7 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
     // On any time_logs change, fetch ONLY the affected user's status and patch it
     // in. Instant, seamless updates with minimal egress (one user's logs per event)
     // instead of re-fetching the whole floor on a timer.
-    const unsub = subscribe('time_logs', '*', async (payload?: { new?: { user_id?: string }; old?: { user_id?: string } }) => {
+    const unsubTimeLogs = subscribe('time_logs', '*', async (payload?: { new?: { user_id?: string }; old?: { user_id?: string } }) => {
       const userId = payload?.new?.user_id || payload?.old?.user_id;
       if (!userId) { void loadDashboard(); return; }
       try {
@@ -111,11 +111,39 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
       }
     }, `date=eq.${todayKey}`);
 
-    // Slow safety-net poll — refreshes leaves / stats / pending approvals (not
-    // covered by time_logs events) and catches any missed realtime updates.
-    const interval = window.setInterval(() => void loadDashboard(), 180000);
+    // Subscribe to leaves table changes to automatically refresh leaves
+    const unsubLeaves = subscribe('leaves', '*', async () => {
+      try {
+        const nextLeaves = await getLeaves();
+        setLeaves(nextLeaves);
+      } catch (e) {
+        console.error('LiveFloor: failed to refresh leaves on realtime event', e);
+      }
+    });
 
-    return () => { unsub(); window.clearInterval(interval); };
+    // Subscribe to users table changes to automatically refresh pending users and 7-day stats
+    const unsubUsers = subscribe('users', '*', async () => {
+      try {
+        const [nextPending, nextBreakStats] = await Promise.all([
+          getPendingUsers(),
+          get7DayBreakStats(),
+        ]);
+        setPendingUsers(nextPending);
+        setBreakStats(nextBreakStats);
+      } catch (e) {
+        console.error('LiveFloor: failed to refresh users/stats on realtime event', e);
+      }
+    });
+
+    // Extremely slow safety-net poll (10 minutes)
+    const interval = window.setInterval(() => void loadDashboard(), 600000);
+
+    return () => {
+      unsubTimeLogs();
+      unsubLeaves();
+      unsubUsers();
+      window.clearInterval(interval);
+    };
   }, [loadDashboard, todayKey]);
 
   // Computed: leave keys for today
