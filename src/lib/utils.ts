@@ -55,58 +55,43 @@ export interface ClientTheme {
   fadeLineBg: string;
 }
 
-// 12 widely dispersed, highly vibrant neon hues on the color wheel
-const DISTINCT_HUES = [
-  190, // Cyber Cyan
-  320, // Neon Pink
-  30,  // Amber Gold / Orange
-  260, // Cobalt Blue / Purple-Indigo
-  95,  // Lime Green
-  160, // Emerald Mint
-  215, // Cyber Sky Blue
-  340, // Hot Rose Red
-  75,  // Bright Neon Yellow
-  120, // Pure Vibrant Green
-  290, // Deep Orchid / Violet
-  15   // Fire Orange-Red
+// 10 refined, low-saturation metallic/mineral HSL hue configurations
+const PREMIUM_HUES = [
+  { h: 215, s: 35, l: 62 }, // Sapphire Blue
+  { h: 145, s: 28, l: 58 }, // Sage Green
+  { h: 38,  s: 35, l: 58 }, // Amber Gold
+  { h: 265, s: 30, l: 62 }, // Amethyst Purple
+  { h: 15,  s: 30, l: 62 }, // Rose Copper
+  { h: 175, s: 28, l: 58 }, // Teal Mint
+  { h: 200, s: 35, l: 60 }, // Ocean Ice Blue
+  { h: 5,   s: 30, l: 60 }, // Coral Red
+  { h: 240, s: 25, l: 62 }, // Royal Indigo
+  { h: 45,  s: 25, l: 55 }, // Antique Bronze
 ];
 
 export function getClientTheme(clientName: string): ClientTheme {
   const norm = clientName.trim().toLowerCase();
   
+  let colorProfile = PREMIUM_HUES[0]; // Default
   if (norm.includes('bench')) {
-    return {
-      color: '#a855f7',
-      glow: 'rgba(168, 85, 247, 0.35)',
-      pillBorder: 'rgba(168, 85, 247, 0.15)',
-      pillBg: 'rgba(168, 85, 247, 0.03)',
-      fadeLineBg: 'linear-gradient(to right, rgba(168, 85, 247, 0.12), transparent)'
-    };
-  }
-  if (norm.includes('brooksource')) {
-    return {
-      color: '#00f5a0',
-      glow: 'rgba(0, 245, 160, 0.35)',
-      pillBorder: 'rgba(0, 245, 160, 0.15)',
-      pillBg: 'rgba(0, 245, 160, 0.03)',
-      fadeLineBg: 'linear-gradient(to right, rgba(0, 245, 160, 0.12), transparent)'
-    };
+    colorProfile = { h: 265, s: 30, l: 62 }; // Amethyst Purple
+  } else if (norm.includes('brooksource')) {
+    colorProfile = { h: 145, s: 28, l: 58 }; // Sage Green
+  } else {
+    // Generate a distinct HSL color based on the client name hash
+    let hash = 0;
+    for (let i = 0; i < norm.length; i++) {
+      hash = norm.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    colorProfile = PREMIUM_HUES[Math.abs(hash) % PREMIUM_HUES.length];
   }
 
-  // Generate a distinct HSL color based on the client name hash
-  let hash = 0;
-  for (let i = 0; i < norm.length; i++) {
-    hash = norm.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  
-  // Map hash to one of the 12 highly distinct hues
-  const hue = DISTINCT_HUES[Math.abs(hash) % DISTINCT_HUES.length];
-  
-  const color = `hsl(${hue}, 95%, 55%)`;
-  const glow = `hsla(${hue}, 95%, 55%, 0.35)`;
-  const pillBorder = `hsla(${hue}, 95%, 55%, 0.15)`;
-  const pillBg = `hsla(${hue}, 95%, 55%, 0.03)`;
-  const fadeLineBg = `linear-gradient(to right, hsla(${hue}, 95%, 55%, 0.12), transparent)`;
+  const { h, s, l } = colorProfile;
+  const color = `hsl(${h}, ${s}%, ${l}%)`;
+  const glow = `hsla(${h}, ${s}%, ${l}%, 0.22)`;
+  const pillBorder = `hsla(${h}, ${s}%, ${l}%, 0.12)`;
+  const pillBg = `hsla(${h}, ${s}%, ${l}%, 0.02)`;
+  const fadeLineBg = `linear-gradient(to right, hsla(${h}, ${s}%, ${l}%, 0.08), transparent)`;
 
   return {
     color,
@@ -116,4 +101,5 @@ export function getClientTheme(clientName: string): ClientTheme {
     fadeLineBg
   };
 }
+
 

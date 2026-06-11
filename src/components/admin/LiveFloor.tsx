@@ -245,25 +245,6 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
             </div>
           </div>
 
-          {!loading && filteredRecords.length > 0 && (
-            <div className="grid grid-cols-[44px_1fr_100px_85px_85px_85px_95px_100px] gap-4 px-6 py-2 rounded-xl bg-white/[0.01] border border-white/[0.04] mb-5 select-none items-center shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
-               <div className="w-11 text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 flex justify-center">Reps</div>
-               <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Identity / Client</div>
-               <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">Protocol</div>
-               <div className="relative text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">
-                 <div className="absolute left-[-8px] top-1/4 bottom-1/4 w-[1px] bg-gradient-to-b from-transparent via-white/[0.08] to-transparent pointer-events-none" />
-                 Shift
-               </div>
-               <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">Break</div>
-               <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">BRB</div>
-               <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">Total Break</div>
-               <div className="relative text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">
-                 <div className="absolute left-[-8px] top-1/4 bottom-1/4 w-[1px] bg-gradient-to-b from-transparent via-white/[0.08] to-transparent pointer-events-none" />
-                 Actions
-               </div>
-            </div>
-          )}
-
           {loading ? (
             <div className="space-y-2">
               {Array.from({ length: 6 }).map((_, i) => (
@@ -282,32 +263,54 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
               const breakCount = members.filter((m) => m.memberStatus === 'on_break' || m.memberStatus === 'on_brb').length;
               const theme = getClientTheme(clientName);
               return (
-                <section key={clientName} className="mt-6 mb-8 first:mt-5">
-                  <div className="flex items-center gap-4 py-2.5 mb-3 bg-transparent border-none shadow-none select-none">
-                    {/* Themed vertical accent bar */}
-                    <div 
-                      className="h-5 w-1 rounded-r-full transition-all duration-300"
-                      style={{ 
-                        backgroundColor: theme.color, 
-                        boxShadow: `0 0 12px ${theme.color}` 
-                      }} 
-                    />
-                    
-                    {/* Section label with unique color and glow */}
-                    <span 
-                      className="text-[13px] font-black uppercase tracking-[0.28em] transition-all duration-300 flex-shrink-0"
-                      style={{
-                        color: theme.color,
-                        textShadow: `0 0 10px ${theme.glow}`,
-                      }}
-                    >
-                      {clientName}
-                    </span>
+                <section 
+                  key={clientName} 
+                  className="relative mt-8 mb-10 first:mt-4 rounded-2xl overflow-hidden border transition-all duration-300"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.015)',
+                    backdropFilter: 'blur(30px) saturate(160%)',
+                    WebkitBackdropFilter: 'blur(30px) saturate(160%)',
+                    borderColor: 'rgba(255, 255, 255, 0.04)',
+                    boxShadow: `0 24px 60px -15px rgba(0, 0, 0, 0.8), 0 0 30px ${theme.color}08, inset 0 1px 0 rgba(255, 255, 255, 0.06)`,
+                  }}
+                >
+                  {/* Glowing dynamic top border (Hotstar style) */}
+                  <div 
+                    className="absolute top-0 left-0 right-0 h-[2.5px] z-20 pointer-events-none transition-all duration-300"
+                    style={{
+                      background: `linear-gradient(90deg, transparent 10%, ${theme.color} 50%, transparent 90%)`,
+                      boxShadow: `0 1.5px 12px ${theme.color}`,
+                    }}
+                  />
+
+                  {/* Section header panel */}
+                  <div className="flex items-center justify-between px-6 py-4 bg-white/[0.005] border-b border-white/[0.03] select-none">
+                    <div className="flex items-center gap-3">
+                      {/* Themed vertical accent bar */}
+                      <div 
+                        className="h-4.5 w-1 rounded-full transition-all duration-300 animate-pulse"
+                        style={{ 
+                          backgroundColor: theme.color, 
+                          boxShadow: `0 0 10px ${theme.color}` 
+                        }} 
+                      />
+                      
+                      {/* Section label with unique color and glow */}
+                      <span 
+                        className="text-[13px] font-black uppercase tracking-[0.25em] transition-all duration-300"
+                        style={{
+                          color: theme.color,
+                          textShadow: `0 0 10px ${theme.glow}`,
+                        }}
+                      >
+                        {clientName}
+                      </span>
+                    </div>
  
                     {/* Dynamic styled count pills */}
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <div className="flex items-center gap-2">
                       <span 
-                        className="px-2 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-widest transition-all duration-300"
+                        className="px-2.5 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-widest transition-all duration-300"
                         style={{
                           borderColor: theme.pillBorder,
                           backgroundColor: theme.pillBg,
@@ -317,26 +320,38 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
                         {members.length} REPS
                       </span>
                       {activeCount > 0 && (
-                        <span className="px-2 py-0.5 rounded-full border border-emerald-500/10 bg-emerald-500/[0.02] text-[9px] font-bold text-emerald-500/70 uppercase tracking-widest">
+                        <span className="px-2.5 py-0.5 rounded-full border border-emerald-500/10 bg-emerald-500/[0.03] text-[9px] font-bold text-emerald-400 uppercase tracking-widest">
                           {activeCount} ACTIVE
                         </span>
                       )}
                       {breakCount > 0 && (
-                        <span className="px-2 py-0.5 rounded-full border border-amber-500/10 bg-amber-500/[0.02] text-[9px] font-bold text-amber-500/70 uppercase tracking-widest">
+                        <span className="px-2.5 py-0.5 rounded-full border border-amber-500/10 bg-amber-500/[0.03] text-[9px] font-bold text-amber-400 uppercase tracking-widest">
                           {breakCount} BREAK
                         </span>
                       )}
                     </div>
- 
-                    {/* Themed fading line */}
-                    <div 
-                      className="flex-1 h-[1px] opacity-40 transition-all duration-300" 
-                      style={{
-                        background: theme.fadeLineBg,
-                      }}
-                    />
                   </div>
-                  <div className="space-y-2">
+
+                  {/* Local Table Headers aligned perfectly inside the container */}
+                  <div className="grid grid-cols-[44px_1fr_100px_85px_85px_85px_95px_100px] gap-4 px-6 py-2.5 bg-[#080512]/40 border-b border-white/[0.02] select-none items-center">
+                     <div className="w-11 text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 flex justify-center">Reps</div>
+                     <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">Identity / Client</div>
+                     <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">Protocol</div>
+                     <div className="relative text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">
+                       <div className="absolute left-[-8px] top-1/4 bottom-1/4 w-[1px] bg-gradient-to-b from-transparent via-white/[0.05] to-transparent pointer-events-none" />
+                       Shift
+                     </div>
+                     <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">Break</div>
+                     <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">BRB</div>
+                     <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">Total Break</div>
+                     <div className="relative text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">
+                       <div className="absolute left-[-8px] top-1/4 bottom-1/4 w-[1px] bg-gradient-to-b from-transparent via-white/[0.05] to-transparent pointer-events-none" />
+                       Actions
+                     </div>
+                  </div>
+
+                  {/* Roster Rows wrapper list inside the card panel */}
+                  <div className="p-3 space-y-2 bg-[#06040a]/40">
                     {members.map(({ record, isOnLeave }) => (
                       <RecruiterRow
                         key={record.user.id}

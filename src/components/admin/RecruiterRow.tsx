@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { formatDuration } from '@/lib/timeUtils';
+import { formatDuration, getRealNow } from '@/lib/timeUtils';
 import type { UserStatusRecord } from '@/lib/store';
 import { Pencil, LogOut, TrendingUp, User as UserIcon } from 'lucide-react';
 import { getClientTheme } from '@/lib/utils';
@@ -40,19 +40,28 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
   const isActive = status === 'working' || status === 'on_break' || status === 'on_brb';
   const isWorking = status === 'working';
   
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(getRealNow());
 
   useEffect(() => {
-    setNow(Date.now());
+    setNow(getRealNow());
   }, [record]);
 
   useEffect(() => {
     if (!isActive) return;
     const interval = setInterval(() => {
-      setNow(Date.now());
+      setNow(getRealNow());
     }, 1000);
     return () => clearInterval(interval);
   }, [isActive]);
+
+  useEffect(() => {
+    if (status === 'on_break') {
+      console.log(`[Timer Debug] ${user.name} is on break. breakStart: ${breakStart}, breakMs: ${breakMs}, accumulatedBreakMs: ${record.accumulatedBreakMs}, now: ${now}`);
+    }
+    if (status === 'on_brb') {
+      console.log(`[Timer Debug] ${user.name} is on BRB. brbStart: ${brbStart}, brbMs: ${brbMs}, accumulatedBrbMs: ${record.accumulatedBrbMs}, now: ${now}`);
+    }
+  }, [now, status, breakStart, breakMs, brbStart, brbMs, record.accumulatedBreakMs, record.accumulatedBrbMs, user.name]);
 
   const clientTheme = getClientTheme(user.clientName);
 
@@ -169,19 +178,48 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
     }
   }
 
-  // Primary "shift" value: live timer while working, else accumulated worked
-  const shiftValue = formatDuration(currentWorked);
+  // Helper to split milliseconds into hours and minutes
+  function formatHrMinParts(ms: number) {
+    const totalMins = Math.max(0, Math.floor(ms / 60000));
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
+    return {
+      h: String(h).padStart(2, '0'),
+      m: String(m).padStart(2, '0'),
+    };
+  }
 
-  const breakBgColor = breakColor.startsWith('#') ? `${breakColor}1A` : 'rgba(255, 255, 255, 0.012)';
-  const brbBgColor = brbColor.startsWith('#') ? `${brbColor}1A` : 'rgba(255, 255, 255, 0.012)';
-  const totalBgColor = totalColor.startsWith('#') ? `${totalColor}1A` : 'rgba(255, 255, 255, 0.012)';
-  const shiftBgColor = shiftColor.startsWith('#') ? `${shiftColor}1A` : 'rgba(255, 255, 255, 0.012)';
-
-  // LCD Clock background values (replacing all digits with '8' to match layout & size exactly)
-  const shiftLcdBg = shiftValue.replace(/[0-9]/g, '8');
-  const breakLcdBg = formatDuration(currentBreak).replace(/[0-9]/g, '8');
-  const brbLcdBg = formatDuration(currentBrb).replace(/[0-9]/g, '8');
-  const totalLcdBg = formatDuration(currentTotalBreak).replace(/[0-9]/g, '8');
+  // Helper to render digital ticking telemetry timer in HH:MM format
+  const renderTime = (ms: number, isTimerActive: boolean, defaultColor: string, glow: string) => {
+    const { h, m } = formatHrMinParts(ms);
+    const flash = (Math.floor(now / 1000) % 2 === 0);
+    return (
+      <div className="relative flex items-center justify-center min-w-0">
+        <span 
+          className="absolute text-[15px] sm:text-[16px] font-black font-mono tracking-tight leading-none pointer-events-none select-none opacity-[0.04] transition-all duration-300"
+          style={{ color: defaultColor }}
+        >
+          88:88
+        </span>
+        <span
+          className="relative text-[15px] sm:text-[16px] font-black font-mono tracking-tight leading-none transition-all duration-300 z-10 flex items-center"
+          style={{
+            color: defaultColor,
+            textShadow: glow,
+          }}
+        >
+          <span>{h}</span>
+          <span 
+            className="transition-opacity duration-300 mx-[0.5px] font-sans" 
+            style={{ opacity: (isTimerActive && !flash) ? 0.35 : 1 }}
+          >
+            :
+          </span>
+          <span>{m}</span>
+        </span>
+      </div>
+    );
+  };
 
 
 
@@ -218,19 +256,19 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
       <div className="relative flex-shrink-0 w-11 h-11 flex items-center justify-center select-none">
         {/* Rotating outer compass ring (CW) */}
         <div 
-          className="absolute inset-0 rounded-full border border-dashed opacity-20 pointer-events-none hud-spinner-cw"
+          className="absolute inset-0 rounded-[30%] border border-dashed opacity-20 pointer-events-none hud-spinner-cw"
           style={{ borderColor: accentColor }}
         />
         
         {/* Counter-rotating outer ticks ring (CCW) */}
         <div 
-          className="absolute inset-[3px] rounded-full border border-dotted opacity-30 pointer-events-none hud-spinner-ccw"
+          className="absolute inset-[3px] rounded-[30%] border border-dotted opacity-30 pointer-events-none hud-spinner-ccw"
           style={{ borderColor: accentColor }}
         />
 
         {/* Pulsing state glow breathing halo */}
         <div 
-          className="absolute inset-[6px] rounded-full opacity-30 hud-breath"
+          className="absolute inset-[6px] rounded-[30%] opacity-30 hud-breath"
           style={{ 
             backgroundColor: `${accentColor}12`,
             border: `1px solid ${accentColor}`,
@@ -265,7 +303,7 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
 
         {/* Center node with initials */}
         <div
-          className="relative w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 overflow-hidden"
+          className="relative w-8 h-8 rounded-[30%] flex items-center justify-center transition-all duration-300 overflow-hidden"
           style={{
             background: isActive
               ? `linear-gradient(135deg, ${accentColor}25 0%, ${accentColor}05 100%)`
@@ -339,78 +377,25 @@ export default function RecruiterRow({ record, isOnLeave, onEndBreak, onEndBrb, 
       <div className="relative flex flex-col items-center justify-center min-w-0">
         {/* Whisper-thin divider line grouping the telemetry zone */}
         <div className="absolute left-[-8px] top-1/4 bottom-1/4 w-[1px] bg-gradient-to-b from-transparent via-white/[0.04] to-transparent pointer-events-none" />
-        <span 
-          className="absolute text-[15px] sm:text-[16px] font-black font-mono tabular-nums tracking-tight leading-none pointer-events-none select-none transition-all duration-300"
-          style={{ color: shiftBgColor }}
-        >
-          {shiftLcdBg}
-        </span>
-        <span
-          className="relative text-[15px] sm:text-[16px] font-black font-mono tabular-nums tracking-tight leading-none transition-all duration-300 z-10"
-          style={{
-            color: shiftColor,
-            textShadow: shiftGlow,
-          }}
-        >
-          {shiftValue}
-        </span>
+        {renderTime(currentWorked, status === 'working', shiftColor, shiftGlow)}
       </div>
 
       {/* 5. Break Column */}
       <div className="relative flex flex-col items-center justify-center min-w-0">
-        <span 
-          className="absolute text-[15px] sm:text-[16px] font-black font-mono tabular-nums tracking-tight leading-none pointer-events-none select-none transition-all duration-300"
-          style={{ color: breakBgColor }}
-        >
-          {breakLcdBg}
-        </span>
-        <span
-          className="relative text-[15px] sm:text-[16px] font-black font-mono tabular-nums tracking-tight leading-none transition-all duration-300 z-10"
-          style={{
-            color: breakColor,
-            textShadow: breakGlow,
-          }}
-        >
-          {formatDuration(currentBreak)}
-        </span>
+        <div className="absolute left-[-8px] top-1/4 bottom-1/4 w-[1px] bg-gradient-to-b from-transparent via-white/[0.03] to-transparent pointer-events-none" />
+        {renderTime(currentBreak, status === 'on_break', breakColor, breakGlow)}
       </div>
 
       {/* 6. BRB Column */}
       <div className="relative flex flex-col items-center justify-center min-w-0">
-        <span 
-          className="absolute text-[15px] sm:text-[16px] font-black font-mono tabular-nums tracking-tight leading-none pointer-events-none select-none transition-all duration-300"
-          style={{ color: brbBgColor }}
-        >
-          {brbLcdBg}
-        </span>
-        <span
-          className="relative text-[15px] sm:text-[16px] font-black font-mono tabular-nums tracking-tight leading-none transition-all duration-300 z-10"
-          style={{
-            color: brbColor,
-            textShadow: brbGlow,
-          }}
-        >
-          {formatDuration(currentBrb)}
-        </span>
+        <div className="absolute left-[-8px] top-1/4 bottom-1/4 w-[1px] bg-gradient-to-b from-transparent via-white/[0.03] to-transparent pointer-events-none" />
+        {renderTime(currentBrb, status === 'on_brb', brbColor, brbGlow)}
       </div>
 
       {/* 7. Total Break Column (Dynamic color by violation thresholds) */}
       <div className="relative flex flex-col items-center justify-center min-w-0">
-        <span 
-          className="absolute text-[15px] sm:text-[16px] font-black font-mono tabular-nums tracking-tight leading-none pointer-events-none select-none transition-all duration-300"
-          style={{ color: totalBgColor }}
-        >
-          {totalLcdBg}
-        </span>
-        <span
-          className="relative text-[15px] sm:text-[16px] font-black font-mono tabular-nums tracking-tight leading-none transition-all duration-300 z-10"
-          style={{
-            color: totalColor,
-            textShadow: totalGlow,
-          }}
-        >
-          {formatDuration(currentTotalBreak)}
-        </span>
+        <div className="absolute left-[-8px] top-1/4 bottom-1/4 w-[1px] bg-gradient-to-b from-transparent via-white/[0.03] to-transparent pointer-events-none" />
+        {renderTime(currentTotalBreak, status === 'on_break' || status === 'on_brb', totalColor, totalGlow)}
         {currentTotalBreak > 0 && (
           <div className="mt-1.5 h-[2px] w-12 rounded-full overflow-hidden bg-white/[0.04] z-10">
             <div 

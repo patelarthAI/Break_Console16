@@ -23,27 +23,23 @@ const PREMIUM_COLORS = [
 ];
 
 const SHAPES = [
-  // Circle
-  (fill: string, stroke: string, sw: number) => <circle cx="50" cy="50" r={50 - sw/2} fill={fill} stroke={stroke} strokeWidth={sw} />,
-  // Hexagon
+  // Apple Premium Squircle
   (fill: string, stroke: string, sw: number) => {
-    const p = sw/2;
-    return <polygon points={`50,${p} ${100-p},25 ${100-p},75 50,${100-p} ${p},75 ${p},25`} fill={fill} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
-  },
-  // Shield
-  (fill: string, stroke: string, sw: number) => {
-    const p = sw/2;
-    return <polygon points={`50,${p} ${95-p},${15+p} ${95-p},${60-p} 50,${100-p} ${5+p},${60-p} ${5+p},${15+p}`} fill={fill} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
-  },
-  // Octagon
-  (fill: string, stroke: string, sw: number) => {
-    const p = sw/2;
-    return <polygon points={`30,${p} 70,${p} ${100-p},30 ${100-p},70 70,${100-p} 30,${100-p} ${p},70 ${p},30`} fill={fill} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
-  },
-  // Diamond
-  (fill: string, stroke: string, sw: number) => {
-    const p = sw;
-    return <polygon points={`50,${p} ${100-p},50 50,${100-p} ${p},50`} fill={fill} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
+    const p = sw / 2;
+    return (
+      <rect
+        x={p + 1}
+        y={p + 1}
+        width={98 - sw}
+        height={98 - sw}
+        rx="28"
+        ry="28"
+        fill={fill}
+        stroke={stroke}
+        strokeWidth={sw}
+        strokeLinejoin="round"
+      />
+    );
   }
 ];
 
@@ -119,7 +115,7 @@ export default function DynamicAvatar({
             inset: -8,
             background: activeStroke,
             filter: 'blur(12px)',
-            borderRadius: '50%',
+            borderRadius: '28%',
             zIndex: 0
           }}
         />
