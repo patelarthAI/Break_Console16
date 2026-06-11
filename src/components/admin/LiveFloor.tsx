@@ -18,7 +18,7 @@ import { getTodayKey } from '@/lib/timeUtils';
 import { getClientTheme } from '@/lib/utils';
 
 import FilterBar from '@/components/ui/FilterBar';
-import RecruiterRow from '@/components/admin/RecruiterRow';
+import RecruiterRow, { ROW_GRID, ROW_GAP, ROW_PX } from '@/components/admin/RecruiterRow';
 import LeaveCalendar from '@/components/sidebar/LeaveCalendar';
 import HallOfFame from '@/components/sidebar/HallOfFame';
 import BreakViolators from '@/components/sidebar/BreakViolators';
@@ -333,7 +333,7 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
                   </div>
 
                   {/* Local Table Headers aligned perfectly inside the container */}
-                  <div className="grid grid-cols-[44px_1fr_90px_78px_78px_62px_85px_106px] gap-3 px-4 py-2.5 bg-[#080512]/40 border-b border-white/[0.02] select-none items-center">
+                  <div className={`grid ${ROW_GRID} ${ROW_GAP} ${ROW_PX} py-2.5 bg-[#080512]/40 border-b border-white/[0.02] select-none items-center`}>
                      <div className="w-11 text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 flex justify-center">Rep</div>
                      <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">Identity</div>
                      <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">Protocol</div>
