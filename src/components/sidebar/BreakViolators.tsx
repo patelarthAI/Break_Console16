@@ -2,7 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { AlertTriangle, Flame, Hourglass, AlertCircle } from 'lucide-react';
-import type { UserBreakStats } from '@/lib/store';
+import type { WeeklyBreakStats } from '@/lib/store';
 
 function formatMinutes(ms: number) {
   const mins = Math.round(ms / 60000);
@@ -16,14 +16,14 @@ function initials(name: string) {
 }
 
 interface BreakViolatorsProps {
-  stats: UserBreakStats[];
+  stats: WeeklyBreakStats[];
 }
 
 export default function BreakViolators({ stats }: BreakViolatorsProps) {
   const violators = stats
     .filter((r) => r.daysChecked >= 1 && r.avgBreakMs + r.avgBrbMs > 85 * 60 * 1000)
     .sort((a, b) => (b.avgBreakMs + b.avgBrbMs) - (a.avgBreakMs + a.avgBrbMs))
-    .slice(0, 4);
+    .slice(0, 3);
 
   return (
     <div className="card p-5 border-[#ef4444]/20 bg-gradient-to-b from-[#ef4444]/[0.05] to-transparent shadow-[0_12px_40px_rgba(239,68,68,0.05)] backdrop-blur-md relative overflow-hidden group">

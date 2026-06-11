@@ -283,29 +283,24 @@ export default function EliteDashboard({
   const dynamicAuraLeaders = useMemo(() => {
     if (!weeklyStats || weeklyStats.length === 0) return [];
     return [...weeklyStats]
-      .filter(s =>
-        s.user.workMode !== 'WFH' &&
-        s.lateInDays === 0 &&
-        s.daysChecked > 0 &&
-        (s.totalBreakMs + s.totalBrbMs) / s.daysChecked <= BREAK_THRESHOLD_MS
-      )
-      .sort((a, b) => {
-        const avgA = (a.totalBreakMs + a.totalBrbMs) / a.daysChecked;
-        const avgB = (b.totalBreakMs + b.totalBrbMs) / b.daysChecked;
-        return avgA - avgB;
+      .filter(s => {
+        const isWfo = s.user.workMode === 'WFO';
+        const fullAttendance = s.daysChecked === s.expectedDays;
+        const onTime = s.lateInDays === 0;
+        const breakCompliant = s.breakViolDays === 0;
+        const brbCompliant = s.brbViolDays === 0;
+        const combinedCompliant = s.combinedViolDays === 0;
+        return isWfo && fullAttendance && onTime && breakCompliant && brbCompliant && combinedCompliant;
       })
+      .sort((a, b) => (a.avgBreakMs + a.avgBrbMs) - (b.avgBreakMs + b.avgBrbMs))
       .slice(0, 3);
   }, [weeklyStats]);
 
   const dynamicLobbyCampers = useMemo(() => {
     if (!weeklyStats || weeklyStats.length === 0) return [];
     return [...weeklyStats]
-      .filter(s => s.daysChecked > 0 && (s.totalBreakMs + s.totalBrbMs) / s.daysChecked > BREAK_THRESHOLD_MS)
-      .sort((a, b) => {
-        const avgA = (a.totalBreakMs + a.totalBrbMs) / a.daysChecked;
-        const avgB = (b.totalBreakMs + b.totalBrbMs) / b.daysChecked;
-        return avgB - avgA;
-      })
+      .filter(s => s.daysChecked >= 1 && s.avgBreakMs + s.avgBrbMs > 85 * 60 * 1000)
+      .sort((a, b) => (b.avgBreakMs + b.avgBrbMs) - (a.avgBreakMs + a.avgBrbMs))
       .slice(0, 3);
   }, [weeklyStats]);
 

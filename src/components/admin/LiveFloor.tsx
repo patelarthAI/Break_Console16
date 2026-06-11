@@ -6,13 +6,13 @@ import {
   getAllUsersStatus,
   getSingleUserStatus,
   getLeaves,
-  get7DayBreakStats,
+  getWeeklyBreakStats,
   masterOverride,
   getPendingUsers,
   approveUser,
   deleteUser,
   type UserStatusRecord,
-  type UserBreakStats,
+  type WeeklyBreakStats,
 } from '@/lib/store';
 import { subscribe } from '@/lib/realtime';
 import { getTodayKey } from '@/lib/timeUtils';
@@ -54,7 +54,7 @@ function toPersonKey(name: string, clientName: string) {
 export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: LiveFloorProps) {
   const [statusRecords, setStatusRecords] = useState<UserStatusRecord[]>([]);
   const [leaves, setLeaves] = useState<LeaveRecord[]>([]);
-  const [breakStats, setBreakStats] = useState<UserBreakStats[]>([]);
+  const [breakStats, setBreakStats] = useState<WeeklyBreakStats[]>([]);
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -71,7 +71,7 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
       const [nextStatuses, nextLeaves, nextBreakStats, nextPending] = await Promise.all([
         getAllUsersStatus(undefined, showRefreshing),
         getLeaves(undefined, showRefreshing),
-        get7DayBreakStats(undefined, showRefreshing),
+        getWeeklyBreakStats(undefined, showRefreshing),
         getPendingUsers(),
       ]);
       setStatusRecords(nextStatuses);
@@ -121,12 +121,12 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
       }
     });
 
-    // Subscribe to users table changes to automatically refresh pending users and 7-day stats
+    // Subscribe to users table changes to automatically refresh pending users and weekly stats
     const unsubUsers = subscribe('users', '*', async () => {
       try {
         const [nextPending, nextBreakStats] = await Promise.all([
           getPendingUsers(),
-          get7DayBreakStats(),
+          getWeeklyBreakStats(),
         ]);
         setPendingUsers(nextPending);
         setBreakStats(nextBreakStats);

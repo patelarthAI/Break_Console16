@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Crown, Trophy, Medal } from 'lucide-react';
-import type { UserBreakStats } from '@/lib/store';
+import type { WeeklyBreakStats } from '@/lib/store';
 
 function formatMinutes(ms: number) {
   const mins = Math.round(ms / 60000);
@@ -17,12 +17,20 @@ function initials(name: string) {
 }
 
 interface HallOfFameProps {
-  stats: UserBreakStats[];
+  stats: WeeklyBreakStats[];
 }
 
 export default function HallOfFame({ stats }: HallOfFameProps) {
   const ranked = stats
-    .filter((r) => r.daysChecked > 0 && r.user.workMode === 'WFO')
+    .filter((r) => {
+      const isWfo = r.user.workMode === 'WFO';
+      const fullAttendance = r.daysChecked === r.expectedDays;
+      const onTime = r.lateInDays === 0;
+      const breakCompliant = r.breakViolDays === 0;
+      const brbCompliant = r.brbViolDays === 0;
+      const combinedCompliant = r.combinedViolDays === 0;
+      return isWfo && fullAttendance && onTime && breakCompliant && brbCompliant && combinedCompliant;
+    })
     .sort((a, b) => (a.avgBreakMs + a.avgBrbMs) - (b.avgBreakMs + b.avgBrbMs))
     .slice(0, 3);
 
