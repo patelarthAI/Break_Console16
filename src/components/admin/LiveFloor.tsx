@@ -10,6 +10,7 @@ import {
   masterOverride,
   getPendingUsers,
   approveUser,
+  deleteUser,
   type UserStatusRecord,
   type UserBreakStats,
 } from '@/lib/store';
@@ -24,7 +25,7 @@ import HallOfFame from '@/components/sidebar/HallOfFame';
 import BreakViolators from '@/components/sidebar/BreakViolators';
 import HybridEditDrawer from '@/components/HybridEditDrawer';
 import type { StatusCounts } from '@/components/shell/StatusBar';
-import { Check, RefreshCcw } from 'lucide-react';
+import { Check, RefreshCcw, X } from 'lucide-react';
 
 type MemberStatus = 'working' | 'on_break' | 'on_brb' | 'on_leave' | 'logged_out' | 'offline';
 type StatFilter = 'all' | MemberStatus;
@@ -206,6 +207,12 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
     void loadDashboard(true);
   };
 
+  const handleReject = async (u: User) => {
+    await deleteUser(u.id);
+    setPendingUsers((prev) => prev.filter((p) => p.id !== u.id));
+    void loadDashboard(true);
+  };
+
   const handleEditLogs = (userId: string, userName: string, clientName: string) => {
     const targetUser = statusRecords.find((r) => r.user.id === userId)?.user;
     if (targetUser) {
@@ -332,26 +339,25 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
                     </div>
                   </div>
 
-                  {/* Local Table Headers aligned perfectly inside the container */}
-                  <div className={`grid ${ROW_GRID} ${ROW_GAP} ${ROW_PX} py-2.5 bg-[#080512]/40 border-b border-white/[0.02] select-none items-center`}>
-                     <div className="w-11 text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 flex justify-center">Rep</div>
-                     <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">Identity</div>
-                     <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">Protocol</div>
-                     <div className="relative text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">
-                       <div className="absolute left-[-6px] top-1/4 bottom-1/4 w-[1px] bg-gradient-to-b from-transparent via-white/[0.05] to-transparent pointer-events-none" />
-                       Shift
-                     </div>
-                     <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">Break</div>
-                     <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">BRB</div>
-                     <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">Total</div>
-                     <div className="relative text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">
-                       <div className="absolute left-[-6px] top-1/4 bottom-1/4 w-[1px] bg-gradient-to-b from-transparent via-white/[0.05] to-transparent pointer-events-none" />
-                       Actions
-                     </div>
-                  </div>
-
                   {/* Roster Rows wrapper list inside the card panel */}
-                  <div className="p-3 space-y-3 bg-[#06040a]/40">
+                  <div className="p-3 pt-2.5 space-y-3.5 bg-[#06040a]/40">
+                    {/* Local Table Headers aligned perfectly inside the container */}
+                    <div className={`grid ${ROW_GRID} ${ROW_GAP} ${ROW_PX} pb-2 border-b border-white/[0.02] select-none items-center`}>
+                       <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">Rep</div>
+                       <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">Identity</div>
+                       <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">Protocol</div>
+                       <div className="relative text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">
+                         <div className="absolute left-[-6px] top-1/4 bottom-1/4 w-[1px] bg-gradient-to-b from-transparent via-white/[0.05] to-transparent pointer-events-none" />
+                         Shift
+                       </div>
+                       <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">Break</div>
+                       <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">BRB</div>
+                       <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">Total</div>
+                       <div className="relative text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">
+                         <div className="absolute left-[-6px] top-1/4 bottom-1/4 w-[1px] bg-gradient-to-b from-transparent via-white/[0.05] to-transparent pointer-events-none" />
+                         Actions
+                       </div>
+                    </div>
                     {members.map(({ record, isOnLeave }) => (
                       <RecruiterRow
                         key={record.user.id}
@@ -385,20 +391,34 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
                   {pendingUsers.length}
                 </span>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-3.5">
                 {pendingUsers.map((u) => (
-                  <div key={u.id} className="flex items-center justify-between gap-2 py-1.5">
+                  <div key={u.id} className="flex flex-col gap-2 py-2.5 border-b border-white/[0.03] last:border-0 last:pb-0 first:pt-0">
                     <div className="min-w-0">
                       <div className="text-xs font-semibold text-white truncate">{u.name}</div>
                       <div className="text-[10px] text-slate-500 truncate">{u.clientName}</div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => void handleApprove(u)}
-                      className="btn btn-success text-[10px] py-1 px-2 flex-shrink-0"
-                    >
-                      <Check size={11} /> Approve
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleApprove(u)}
+                        className="flex-1 btn btn-success text-[10px] py-1.5 px-2 flex items-center justify-center gap-1 cursor-pointer"
+                      >
+                        <Check size={10} /> Approve
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleReject(u)}
+                        className="flex-1 btn text-[10px] py-1.5 px-2 flex items-center justify-center gap-1 cursor-pointer"
+                        style={{
+                          background: 'rgba(239, 68, 68, 0.08)',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          color: '#ef4444',
+                        }}
+                      >
+                        <X size={10} /> Decline
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
