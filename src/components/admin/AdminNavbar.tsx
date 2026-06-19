@@ -212,7 +212,7 @@ export default function AdminNavbar({ user, activeView, onViewChange, onLogout }
               marginBottom: '2px',
               textShadow: '0 0 8px rgba(99,102,241,0.25)',
             }}>
-              Chronos
+              Local Time
             </span>
             <span style={{
               fontSize: '13px',
@@ -263,7 +263,7 @@ export default function AdminNavbar({ user, activeView, onViewChange, onLogout }
               e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
             }}
           >
-            Terminal Out
+            Log Out
             <LogOut size={13} />
           </button>
         </div>

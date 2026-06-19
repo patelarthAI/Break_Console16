@@ -47,24 +47,18 @@ export default function HallOfFame({ stats }: HallOfFameProps) {
       {/* Glowing Top line */}
       <div className="absolute top-0 left-6 right-6 h-[1.5px] bg-gradient-to-r from-transparent via-[#f59e0b]/60 to-transparent pointer-events-none" />
 
-      <div className="flex items-center justify-between mb-5 relative z-10">
+      <div className="flex items-center justify-between mb-4 relative z-10">
         <div className="flex items-center gap-2">
           <div className="p-1.5 rounded-lg bg-[#f59e0b]/10 border border-[#f59e0b]/25 text-[#f59e0b]">
             <Trophy size={14} />
           </div>
-          <div>
-            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-[#f59e0b] block">Aura Maxers</span>
-            <span className="text-[8px] font-bold text-slate-500 uppercase tracking-wider mt-0.5 block">WFO Roster Rankings</span>
-          </div>
+          <span className="text-[11px] font-black uppercase tracking-[0.2em] text-[#f59e0b] block">Aura Maxers</span>
         </div>
-        <span className="px-2 py-0.5 rounded-lg border border-[#f59e0b]/30 bg-[#f59e0b]/10 text-[9px] font-bold text-[#f59e0b] tracking-wider shadow-[0_0_8px_rgba(245,158,11,0.2)]">WEEKLY</span>
       </div>
 
       {ranked.length === 0 ? (
         <div className="text-center py-6 relative z-10">
-          <div className="text-2xl mb-2 opacity-50">🏆</div>
-          <div className="text-xs text-slate-500 font-bold uppercase tracking-widest">Rankings resetting</div>
-          <div className="text-[10px] text-slate-600 mt-1">First activity claims top spot</div>
+          <div className="text-xs text-slate-500 font-bold uppercase tracking-widest">No Active Rankings</div>
         </div>
       ) : (
         <div className="space-y-2.5 relative z-10">
@@ -109,7 +103,6 @@ export default function HallOfFame({ stats }: HallOfFameProps) {
                   <span className="font-mono text-[13px] font-semibold tracking-tight text-[#f59e0b] drop-shadow-[0_0_8px_rgba(245,158,11,0.25)]">
                     {formatMinutes(row.avgBreakMs + row.avgBrbMs)}
                   </span>
-                  <div className="text-[8px] text-[#f59e0b]/50 uppercase tracking-widest font-bold mt-0.5">AVG</div>
                 </div>
               </motion.div>
             );

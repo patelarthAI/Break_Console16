@@ -23,9 +23,10 @@ import RecruiterRow, { ROW_GRID, ROW_GAP, ROW_PX } from '@/components/admin/Recr
 import LeaveCalendar from '@/components/sidebar/LeaveCalendar';
 import HallOfFame from '@/components/sidebar/HallOfFame';
 import BreakViolators from '@/components/sidebar/BreakViolators';
+import QuotesCard from '@/components/elite/QuotesCard';
 import HybridEditDrawer from '@/components/HybridEditDrawer';
 import type { StatusCounts } from '@/components/shell/StatusBar';
-import { Check, RefreshCcw, X } from 'lucide-react';
+import { Check, RefreshCcw, X, ChevronDown } from 'lucide-react';
 
 type MemberStatus = 'working' | 'on_break' | 'on_brb' | 'on_leave' | 'logged_out' | 'offline';
 type StatFilter = 'all' | MemberStatus;
@@ -61,6 +62,7 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
   const [clientFilter, setClientFilter] = useState<string[]>([]);
   const [editDrawer, setEditDrawer] = useState<{ userId: string; userName: string; clientName: string } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [expandedClients, setExpandedClients] = useState<Record<string, boolean>>({});
   const deferredSearch = useDeferredValue(search);
 
   const todayKey = getTodayKey();
@@ -265,6 +267,34 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
 
         {/* Left: Roster */}
         <div className="flex-1 min-w-0 space-y-3 relative z-10">
+
+          {/* ── Adaptive floor summary — answers "what's happening?" before the data ── */}
+          {!loading && counts.all > 0 && (() => {
+            const activeNow = counts.working + counts.on_break + counts.on_brb;
+            const quiet = activeNow === 0;
+            const parts: string[] = [];
+            if (counts.working > 0) parts.push(`${counts.working} working`);
+            if (counts.on_break > 0) parts.push(`${counts.on_break} on break`);
+            if (counts.on_brb > 0) parts.push(`${counts.on_brb} BRB`);
+            if (counts.on_leave > 0) parts.push(`${counts.on_leave} on leave`);
+            return (
+              <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-white/[0.05] bg-white/[0.015] backdrop-blur-md select-none">
+                <span className="relative flex h-2 w-2 flex-shrink-0">
+                  {!quiet && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-50" />}
+                  <span className={`relative inline-flex rounded-full h-2 w-2 ${quiet ? 'bg-slate-600' : 'bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.8)]'}`} />
+                </span>
+                <span className="text-[12px] font-semibold text-slate-300 tracking-tight">
+                  {quiet
+                    ? 'No one has clocked in yet today'
+                    : parts.join(' · ')}
+                </span>
+                <span className="text-[11px] text-slate-600 font-medium">
+                  {quiet ? '— punches will appear here live' : `· ${counts.logged_out + counts.offline} off the floor`}
+                </span>
+              </div>
+            );
+          })()}
+
           <div className="flex items-center gap-2">
             <div className="flex-1">
               <FilterBar
@@ -372,8 +402,8 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
                     {/* Local Table Headers aligned perfectly inside the container */}
                     <div className={`grid ${ROW_GRID} ${ROW_GAP} ${ROW_PX} pb-2 border-b border-white/[0.02] select-none items-center`}>
                        <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">Rep</div>
-                       <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">Identity</div>
-                       <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">Protocol</div>
+                       <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">Recruiter</div>
+                       <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">Status</div>
                        <div className="relative text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 text-center">
                          <div className="absolute left-[-6px] top-1/4 bottom-1/4 w-[1px] bg-gradient-to-b from-transparent via-white/[0.05] to-transparent pointer-events-none" />
                          Shift
@@ -386,17 +416,63 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
                          Actions
                        </div>
                     </div>
-                    {members.map(({ record, isOnLeave }) => (
-                      <RecruiterRow
-                        key={record.user.id}
-                        record={record}
-                        isOnLeave={isOnLeave}
-                        onEndBreak={handleEndBreak}
-                        onEndBrb={handleEndBrb}
-                        onPunchOut={handlePunchOut}
-                        onEditLogs={handleEditLogs}
-                      />
-                    ))}
+                    {(() => {
+                      // Exception-first: people who need attention render as full rows;
+                      // the offline/logged-out majority collapses into one quiet line.
+                      const isInactive = (s: MemberStatus) => s === 'offline' || s === 'logged_out';
+                      const searching = deferredSearch.trim().length > 0;
+                      const filteringInactive = activeFilter === 'offline' || activeFilter === 'logged_out';
+                      const activeMembers = members.filter((m) => !isInactive(m.memberStatus));
+                      const inactiveMembers = members.filter((m) => isInactive(m.memberStatus));
+                      const collapse = !searching && !filteringInactive && inactiveMembers.length >= 3;
+                      const expanded = !!expandedClients[clientName];
+                      const visible = collapse && !expanded ? activeMembers : members;
+
+                      return (
+                        <>
+                          {visible.map(({ record, isOnLeave }) => (
+                            <RecruiterRow
+                              key={record.user.id}
+                              record={record}
+                              isOnLeave={isOnLeave}
+                              onEndBreak={handleEndBreak}
+                              onEndBrb={handleEndBrb}
+                              onPunchOut={handlePunchOut}
+                              onEditLogs={handleEditLogs}
+                            />
+                          ))}
+
+                          {collapse && (
+                            <button
+                              type="button"
+                              onClick={() => setExpandedClients((prev) => ({ ...prev, [clientName]: !prev[clientName] }))}
+                              className="w-full flex items-center justify-center gap-3 py-3 rounded-xl border border-dashed border-white/[0.06] bg-white/[0.01] hover:bg-white/[0.03] hover:border-white/[0.12] transition-all duration-300 group cursor-pointer select-none"
+                            >
+                              {/* Stacked initials preview */}
+                              {!expanded && (
+                                <span className="flex -space-x-1.5">
+                                  {inactiveMembers.slice(0, 4).map(({ record }) => (
+                                    <span
+                                      key={record.user.id}
+                                      className="w-5 h-5 rounded-full bg-[#12141f] border border-white/[0.08] flex items-center justify-center text-[7px] font-black text-slate-500"
+                                    >
+                                      {record.user.name.split(' ').slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('')}
+                                    </span>
+                                  ))}
+                                </span>
+                              )}
+                              <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 group-hover:text-slate-300 transition-colors">
+                                {expanded ? 'Hide inactive' : `${inactiveMembers.length} off the floor`}
+                              </span>
+                              <ChevronDown
+                                size={12}
+                                className={`text-slate-600 group-hover:text-slate-400 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`}
+                              />
+                            </button>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 </section>
               );
@@ -409,6 +485,7 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
           <LeaveCalendar leaves={leaves} todayLeaveCount={todayLeaveCount} />
           <HallOfFame stats={breakStats} />
           <BreakViolators stats={breakStats} />
+          <QuotesCard />
 
           {/* Approval Queue */}
           {pendingUsers.length > 0 && (

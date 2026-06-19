@@ -36,6 +36,18 @@ function formatMsToHrMin(ms: number): string {
   return `${m}m`;
 }
 
+// Format duration to digital stopwatch format "HH:MM:SS"
+function formatMsToHMS(ms: number): string {
+  if (ms <= 0) return '00:00:00';
+  const totalSecs = Math.floor(ms / 1000);
+  const h = Math.floor(totalSecs / 3600);
+  const m = Math.floor((totalSecs % 3600) / 60);
+  const s = totalSecs % 60;
+  
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(h)}:${pad(m)}:${pad(s)}`;
+}
+
 export default function ControlCenter({ now, user, status, workedMs, breakMs, brbMs, logs }: ControlCenterProps) {
   const [mounted, setMounted] = useState(false);
   const [prevStatus, setPrevStatus] = useState(status);
@@ -561,7 +573,7 @@ export default function ControlCenter({ now, user, status, workedMs, breakMs, br
                       textShadow: `0 0 16px ${st.color}45`,
                     }}
                   >
-                    {formatMsToHrMin(activeSessionMs)}
+                    {formatMsToHMS(activeSessionMs)}
                   </span>
 
                   <span style={{ fontSize: 7, fontWeight: 700, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.25)', fontFamily: "'Satoshi', sans-serif", marginTop: 4 }}>
@@ -656,7 +668,7 @@ export default function ControlCenter({ now, user, status, workedMs, breakMs, br
               color: breakAlert.level === 'safe' ? '#fff' : breakAlert.color,
               letterSpacing: '-0.02em',
               lineHeight: 1.1,
-            }}>{formatMsToHrMin(breakMs)}</span>
+            }}>{formatMsToHMS(breakMs)}</span>
             
             {/* Micro Progress Line */}
             <div style={{ height: 2, background: 'rgba(255,255,255,0.03)', borderRadius: 1, overflow: 'hidden', width: '100%' }}>
@@ -703,7 +715,7 @@ export default function ControlCenter({ now, user, status, workedMs, breakMs, br
               color: brbAlert.level === 'safe' ? '#fff' : brbAlert.color,
               letterSpacing: '-0.02em',
               lineHeight: 1.1,
-            }}>{formatMsToHrMin(brbMs)}</span>
+            }}>{formatMsToHMS(brbMs)}</span>
             
             {/* Micro Progress Line */}
             <div style={{ height: 2, background: 'rgba(255,255,255,0.03)', borderRadius: 1, overflow: 'hidden', width: '100%' }}>
@@ -750,7 +762,7 @@ export default function ControlCenter({ now, user, status, workedMs, breakMs, br
               color: '#fff',
               letterSpacing: '-0.02em',
               lineHeight: 1.1,
-            }}>{formatMsToHrMin(workedMs)}</span>
+            }}>{formatMsToHMS(workedMs)}</span>
             
             {/* Micro Progress Line */}
             <div style={{ height: 2, background: 'rgba(255,255,255,0.03)', borderRadius: 1, overflow: 'hidden', width: '100%' }}>
@@ -795,7 +807,7 @@ export default function ControlCenter({ now, user, status, workedMs, breakMs, br
               color: combinedAlert.level === 'safe' ? '#fff' : combinedAlert.color,
               letterSpacing: '-0.02em',
               lineHeight: 1.1,
-            }}>{formatMsToHrMin(totalBreak)}</span>
+            }}>{formatMsToHMS(totalBreak)}</span>
             
             {/* Micro Progress Line */}
             <div style={{ height: 2, background: 'rgba(255,255,255,0.03)', borderRadius: 1, overflow: 'hidden', width: '100%' }}>

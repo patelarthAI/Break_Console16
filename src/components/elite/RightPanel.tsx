@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Crown, Trophy, Medal, Flame, AlertTriangle, Hourglass, AlertCircle } from 'lucide-react';
 import { getAllUsersStatus, getSingleUserStatus } from '@/lib/store';
 import { subscribe } from '@/lib/realtime';
@@ -12,17 +12,19 @@ function ini(name: string) {
   return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
 }
 
-const QUOTES = [
-  { text: "Champions aren't made in the lobby. They're built at the desk.", src: "Brigade Creed" },
-  { text: "Don't count the hours — make the hours count.", src: "Elite Standard" },
-  { text: "Intensity of focus separates good from legendary.", src: "Brigade Command" },
-  { text: "Your discipline today is your freedom tomorrow.", src: "The Brigade Way" },
-  { text: "The scoreboard doesn't lie. Show up, stack time, win the day.", src: "Aura Protocol" },
-  { text: "Each log you make is proof you showed up — that matters.", src: "The Pulse System" },
+const MOTIVATIONAL_QUOTES = [
+  { text: "Presence is power. When you're at the desk, opportunities find you.", author: "Elite Standard" },
+  { text: "The best recruiters aren't just talented — they're always there for their candidates.", author: "Recruitment Creed" },
+  { text: "Success is 90% showing up and staying checked in.", author: "Brigade Mindset" },
+  { text: "Every minute away from the desk is a missed connection. Stay active, stay winning.", author: "Focus Protocol" },
+  { text: "Consistency at the desk builds trust with clients and candidates alike.", author: "Pulse System" },
+  { text: "Availability is the ultimate ability. Be present, be legend.", author: "The Brigade Way" },
+  { text: "Focus is a muscle. Train it by staying present and dialed in.", author: "Brigade Command" },
+  { text: "A filled roster starts with an active recruiter. Win the day from your desk.", author: "Aura Protocol" }
 ];
 function todayQ() {
   const n = new Date(), s = new Date(n.getFullYear(), 0, 0);
-  return Math.floor((n.getTime() - s.getTime()) / 86400000) % QUOTES.length;
+  return Math.floor((n.getTime() - s.getTime()) / 86400000) % MOTIVATIONAL_QUOTES.length;
 }
 
 /* ─── Status config ───────────────────────────────────── */
@@ -116,8 +118,14 @@ const DEF_CAMPERS: Camper[] = [];
 export default function RightPanel({ user, leaders, campers }: RightPanelProps) {
   const [team,   setTeam]   = useState<{ id?: string; name: string; status: string }[]>([]);
   const [loading, setLoading] = useState(true);
-  const [qIdx,   setQIdx]   = useState(todayQ());
-  const [fade,   setFade]   = useState(false);
+  const [qIdx, setQIdx] = useState(todayQ());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setQIdx((prev) => (prev + 1) % MOTIVATIONAL_QUOTES.length);
+    }, 10000); // cycle every 10s
+    return () => clearInterval(timer);
+  }, []);
 
   const clientName = user?.clientName || '';
 
@@ -178,12 +186,7 @@ export default function RightPanel({ user, leaders, campers }: RightPanelProps) 
   const away    = team.filter(m => m.status === 'on_break' || m.status === 'on_brb');
   const allClear = away.length === 0;
 
-  const nextQ = () => {
-    if (fade) return;
-    setFade(true);
-    setTimeout(() => { setQIdx(i => (i + 1) % QUOTES.length); setFade(false); }, 160);
-  };
-  const q = QUOTES[qIdx];
+
 
   const auraList = (leaders?.length  ? leaders  : DEF_LEADERS).slice(0, 3);
   const campList = (campers?.length  ? campers  : DEF_CAMPERS).slice(0, 3);
@@ -351,23 +354,6 @@ export default function RightPanel({ user, leaders, campers }: RightPanelProps) 
             );
           })}
         </div>
-
-        {/* Inline quote */}
-        <div style={{
-          marginTop:10, padding:'9px 11px', borderRadius:12,
-          background:'rgba(245,158,11,0.04)', border:'1px solid rgba(245,158,11,0.09)',
-          cursor:'pointer',
-          opacity: fade ? 0 : 1, transform: fade ? 'translateY(3px)' : 'none',
-          transition:'opacity 150ms ease, transform 150ms ease',
-        }} onClick={nextQ}>
-          <div style={{ display:'flex', gap:6 }}>
-            <span style={{ fontSize:18, color:'#F59E0B', opacity:0.25, lineHeight:0.85, fontFamily:"'Satoshi', system-ui, -apple-system, sans-serif", flexShrink:0 }}>"</span>
-            <div>
-              <p style={{ fontSize:10, lineHeight:1.6, color:'rgba(240,240,240,0.48)', fontFamily:"'Satoshi', system-ui, -apple-system, sans-serif", fontStyle:'italic', margin:0 }}>{q.text}</p>
-              <span style={{ fontSize:7, color:'rgba(245,158,11,0.4)', fontFamily:"'Satoshi', system-ui, -apple-system, sans-serif", letterSpacing:'0.12em', textTransform:'uppercase', marginTop:4, display:'block' }}>— {q.src}</span>
-            </div>
-          </div>
-        </div>
       </div>
 
       <Div />
@@ -442,6 +428,37 @@ export default function RightPanel({ user, leaders, campers }: RightPanelProps) 
               </motion.div>
             );
           })}
+        </div>
+      </div>
+
+      <Div />
+      <div style={{
+        marginTop: 5, padding: '12px 14px', borderRadius: 16,
+        background: 'rgba(99, 102, 241, 0.04)', border: '1px solid rgba(99, 102, 241, 0.12)',
+        position: 'relative', overflow: 'hidden',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.03)',
+      }}>
+        {/* Ambient indicator */}
+        <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: 2, background: 'linear-gradient(180deg, #6366f1, transparent)' }} />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+          <span style={{ fontSize: 24, color: '#6366f1', opacity: 0.3, lineHeight: 1, fontFamily: 'serif', marginTop: -4 }}>“</span>
+          <div style={{ flex: 1 }}>
+            <AnimatePresence mode="wait">
+              <motion.p
+                key={qIdx}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.25 }}
+                style={{ fontSize: 10.5, lineHeight: 1.6, color: 'rgba(255,255,255,0.7)', fontFamily: "'Satoshi', sans-serif", fontStyle: 'italic', margin: 0 }}
+              >
+                {MOTIVATIONAL_QUOTES[qIdx].text}
+              </motion.p>
+            </AnimatePresence>
+            <span style={{ fontSize: 7.5, color: '#6366f1', opacity: 0.65, fontFamily: "'Satoshi', sans-serif", letterSpacing: '0.12em', textTransform: 'uppercase', marginTop: 6, display: 'block' }}>
+              — {MOTIVATIONAL_QUOTES[qIdx].author}
+            </span>
+          </div>
         </div>
       </div>
 

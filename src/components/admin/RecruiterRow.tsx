@@ -26,7 +26,7 @@ function getInitials(name: string) {
 
 // ─── SHARED GRID ────────────────────────────────────────────────────────────
 // IMPORTANT: header in LiveFloor.tsx MUST use this exact same string
-export const ROW_GRID = 'grid-cols-[48px_1fr_100px_96px_80px_64px_80px_112px]';
+export const ROW_GRID = 'grid-cols-[48px_1fr_100px_96px_80px_80px_80px_112px]';
 export const ROW_GAP  = 'gap-x-4';
 export const ROW_PX   = 'px-5';
 
@@ -91,18 +91,10 @@ export default function RecruiterRow({
       : workedMs ?? 0
     : workedMs ?? 0;
 
-  // ── SHIFT COLUMN — dynamic context timer ──────────────────────────────────
-  // • On break  → how long THIS break has been running  (amber, ticking)
-  // • On BRB    → how long THIS BRB has been running    (blue, ticking)
-  // • Working   → total worked time                     (green, ticking)
-  // • Else      → total worked time                     (dim)
-  const shiftDisplayMs: number = (() => {
-    if (status === 'on_break' && breakStart) return now - breakStart;
-    if (status === 'on_brb'   && brbStart)   return now - brbStart;
-    return currentWorked;
-  })();
-
-  const shiftIsLive = isActive;
+  // ── SHIFT COLUMN — worked shift time ──────────────────────────────────────
+  // Always shows total worked time (elapsed minus breaks, frozen during breaks)
+  const shiftDisplayMs = currentWorked;
+  const shiftIsLive = isWorking;
 
   // ── Unified Palette ───────────────────────────────────────────────────────
   const COLOR_WORKING = '#10b981';
@@ -124,18 +116,28 @@ export default function RecruiterRow({
   let shiftColor = '#475569';
   let shiftGlow  = 'none';
 
-  if (status === 'on_break' && breakStart) {
-    shiftColor = COLOR_BREAK;
-    shiftGlow  = `0 0 8px ${COLOR_BREAK}50`;
-  } else if (status === 'on_brb' && brbStart) {
-    shiftColor = COLOR_BRB;
-    shiftGlow  = `0 0 8px ${COLOR_BRB}50`;
-  } else if (punchIn) {
+  if (punchIn) {
+    const hours = currentWorked / 3600000;
     if (isWorking) {
-      shiftColor = COLOR_WORKING;
-      shiftGlow  = `0 0 10px ${COLOR_WORKING}40`;
+      if (hours > 9) {
+        shiftColor = '#ef4444';
+        shiftGlow  = '0 0 8px rgba(239,68,68,0.5)';
+      } else if (hours > 8.5) {
+        shiftColor = '#f59e0b';
+        shiftGlow  = '0 0 8px rgba(245,158,11,0.4)';
+      } else {
+        shiftColor = COLOR_WORKING;
+        shiftGlow  = `0 0 8px ${COLOR_WORKING}50`;
+      }
     } else {
-      shiftColor = COLOR_MUTED;
+      // Punched in but currently on break, BRB, or offline
+      if (hours > 9) {
+        shiftColor = '#ef4444';
+      } else if (hours > 8.5) {
+        shiftColor = '#f59e0b';
+      } else {
+        shiftColor = 'rgba(16, 185, 129, 0.45)'; // dim/frozen worked time
+      }
     }
   }
 
@@ -157,11 +159,15 @@ export default function RecruiterRow({
   const colonVisible = Math.floor(now / 1000) % 2 === 0;
 
   // ── Helpers ───────────────────────────────────────────────────────────────
-  function toHM(ms: number) {
-    const mins = Math.max(0, Math.floor(ms / 60000));
+  function toHMS(ms: number) {
+    const totalSecs = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(totalSecs / 3600);
+    const m = Math.floor((totalSecs % 3600) / 60);
+    const s = totalSecs % 60;
     return {
-      h: String(Math.floor(mins / 60)).padStart(2, '0'),
-      m: String(mins % 60).padStart(2, '0'),
+      h: String(h).padStart(2, '0'),
+      m: String(m).padStart(2, '0'),
+      s: String(s).padStart(2, '0'),
     };
   }
 
@@ -176,7 +182,7 @@ export default function RecruiterRow({
     color: string;
     glow: string;
   }) {
-    const { h, m } = toHM(ms);
+    const { h, m, s } = toHMS(ms);
     const fontSize = 'text-[13px]';
     return (
       <div className="relative flex items-center justify-center w-full">
@@ -185,7 +191,7 @@ export default function RecruiterRow({
           className={`absolute ${fontSize} font-bold font-mono tracking-tight leading-none pointer-events-none select-none opacity-[0.035]`}
           style={{ color }}
         >
-          88:88
+          88:88:88
         </span>
         <span
           className={`relative ${fontSize} font-bold font-mono tracking-tight leading-none flex items-center`}
@@ -199,6 +205,13 @@ export default function RecruiterRow({
             :
           </span>
           {m}
+          <span
+            className="mx-[1px] transition-opacity duration-150"
+            style={{ opacity: live && colonVisible ? 0.25 : 1 }}
+          >
+            :
+          </span>
+          {s}
         </span>
       </div>
     );

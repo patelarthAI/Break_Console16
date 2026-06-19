@@ -36,24 +36,16 @@ export default function BreakViolators({ stats }: BreakViolatorsProps) {
           <div className="p-1.5 rounded-lg bg-[#ef4444]/10 border border-[#ef4444]/25 text-[#ef4444]">
             <AlertTriangle size={14} />
           </div>
-          <div>
-            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-[#ef4444] block">Lobby Campers</span>
-            <span className="text-[8px] font-bold text-slate-500 uppercase tracking-wider mt-0.5 block">Break Violators</span>
-          </div>
+          <span className="text-[11px] font-black uppercase tracking-[0.2em] text-[#ef4444] block">Lobby Campers</span>
         </div>
-        <span className="px-2 py-0.5 rounded-lg border border-[#ef4444]/30 bg-[#ef4444]/10 text-[9px] font-bold text-[#ef4444] tracking-wider shadow-[0_0_8px_rgba(239,68,68,0.2)]">LAST 5 DAYS</span>
-      </div>
-
-      <div className="text-[8px] font-black uppercase tracking-[0.15em] text-slate-500 mb-4 flex items-center justify-between border-b border-white/[0.04] pb-2 relative z-10">
-        <span>Break + BRB Limit</span>
-        <span className="font-mono text-slate-400">1h 25m / day</span>
       </div>
 
       {violators.length === 0 ? (
-        <div className="text-center py-5 relative z-10">
-          <div className="text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.5)] text-2xl mb-2">✓</div>
-          <div className="text-xs text-emerald-400 font-black uppercase tracking-widest">No Violations</div>
-          <div className="text-[10px] text-slate-500 mt-1 uppercase tracking-wider font-bold">The team is crushing it 💪</div>
+        <div className="text-center py-6 relative z-10 flex flex-col items-center justify-center gap-2">
+          <div className="w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.3)]">
+            ✓
+          </div>
+          <div className="text-xs text-emerald-400 font-extrabold uppercase tracking-widest">No Violations</div>
         </div>
       ) : (
         <div className="space-y-2.5 relative z-10">
@@ -108,7 +100,6 @@ export default function BreakViolators({ stats }: BreakViolatorsProps) {
                 <span className="font-mono text-[13px] font-semibold tracking-tight text-[#ef4444] drop-shadow-[0_0_8px_rgba(239,68,68,0.25)]">
                   {formatMinutes(row.avgBreakMs + row.avgBrbMs)}
                 </span>
-                <div className="text-[8px] text-[#ef4444]/50 uppercase tracking-widest font-bold mt-0.5">AVG/DAY</div>
               </div>
             </motion.div>
           ))}
