@@ -127,10 +127,10 @@ function ReportTable({ rows, showDate, showName, onEdit }: { rows: DayRow[]; sho
     ].filter(Boolean).join(' ');
 
     return (
-        <div className="w-full overflow-auto max-h-[72vh] rounded-3xl border border-white/[0.06] bg-[#0c0d15]/30 backdrop-blur-md scrollbar-thin">
-            <div className="min-w-[1100px] p-4 flex flex-col gap-2 relative">
+        <div className="w-full overflow-auto max-h-[58vh] rounded-[22px] border border-white/[0.06] bg-[#0c0d15]/30 backdrop-blur-md scrollbar-thin">
+            <div className="min-w-[1100px] p-3 flex flex-col gap-1.5 relative">
                 {/* Sticky Header */}
-                <div className="sticky top-0 z-30 grid gap-4 px-6 py-4 rounded-xl bg-[#0b0c14]/95 border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.5)] items-center backdrop-blur-md select-none" style={{ gridTemplateColumns: gridCols }}>
+                <div className="sticky top-0 z-30 grid gap-4 px-6 py-2.5 rounded-xl bg-[#0b0c14]/95 border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.5)] items-center backdrop-blur-md select-none" style={{ gridTemplateColumns: gridCols }}>
                     {showName && <div className="text-[10px] font-black tracking-[0.2em] uppercase text-slate-500">Recruiter</div>}
                     {showDate && <div className="text-[10px] font-black tracking-[0.2em] uppercase text-slate-500">Date</div>}
                     {showDate && <div className="text-[10px] font-black tracking-[0.2em] uppercase text-slate-500">Day</div>}
@@ -151,7 +151,7 @@ function ReportTable({ rows, showDate, showName, onEdit }: { rows: DayRow[]; sho
                     const anyViol = r.breakViol || r.brbViol || r.lateIn || r.earlyOut;
                     return (
                         <div key={`${r.userId}-${r.date}-${i}`} 
-                            className={`grid gap-4 px-6 py-3 items-center rounded-xl transition-all duration-300 border backdrop-blur-md hover:scale-[1.005] group 
+                            className={`grid gap-4 px-6 py-2 items-center rounded-xl transition-all duration-300 border backdrop-blur-md hover:scale-[1.005] group 
                                 ${anyViol 
                                     ? 'bg-gradient-to-r from-red-500/[0.03] to-transparent border-red-500/20 border-l-4 border-l-rose-500 shadow-[0_4px_16px_rgba(244,63,94,0.05)]' 
                                     : 'bg-white/[0.005] border-white/[0.03] hover:bg-white/[0.015] hover:border-white/[0.06] hover:shadow-[0_8px_20px_rgba(0,0,0,0.25)]'}`}
@@ -214,27 +214,27 @@ function UserSummaryCard({ name, rows }: { name: string; rows: DayRow[] }) {
     const avgBrb = s.daysWorked > 0 ? s.totalBrb / s.daysWorked : 0;
     const hasViol = s.breakViolDays + s.brbViolDays + s.autoLogoutDays > 0;
     return (
-        <div className={`panel-3d transition-all hover:scale-[1.01] ${hasViol ? 'border-rose-500/40 bg-rose-900/20 shadow-[-4px_-4px_10px_rgba(255,255,255,0.01),8px_8px_20px_rgba(225,29,72,0.2),inset_0_1px_1px_rgba(255,255,255,0.08)]' : 'p-5'}`}>
-            <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-600 to-blue-800 border border-blue-400/30 flex items-center justify-center text-sm font-extrabold text-white shadow-lg">{name[0].toUpperCase()}</div>
-                    <p className="text-base font-extrabold text-white tracking-tight">{name}</p>
+        <div className={`panel-3d transition-all hover:scale-[1.01] ${hasViol ? 'border-rose-500/40 bg-rose-900/20 shadow-[-4px_-4px_10px_rgba(255,255,255,0.01),8px_8px_20px_rgba(225,29,72,0.2),inset_0_1px_1px_rgba(255,255,255,0.08)] p-3.5' : 'p-3.5'}`}>
+            <div className="flex items-center justify-between mb-2.5">
+                <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-600 to-blue-800 border border-blue-400/30 flex items-center justify-center text-xs font-black text-white shadow-lg">{name[0].toUpperCase()}</div>
+                    <p className="text-sm font-extrabold text-white tracking-tight">{name}</p>
                 </div>
-                {hasViol && <span className="flex items-center gap-1.5 text-xs text-rose-400 font-bold bg-rose-500/20 border border-rose-500/30 px-3 py-1 rounded-full shadow-[0_0_10px_rgba(244,63,94,0.3)] animate-pulse"><AlertTriangle size={12} /> {s.breakViolDays + s.brbViolDays + s.autoLogoutDays} violation{(s.breakViolDays + s.brbViolDays + s.autoLogoutDays) > 1 ? 's' : ''}</span>}
+                {hasViol && <span className="flex items-center gap-1 text-[10px] text-rose-400 font-bold bg-rose-500/20 border border-rose-500/30 px-2 py-0.5 rounded-full shadow-[0_0_10px_rgba(244,63,94,0.3)] animate-pulse"><AlertTriangle size={10} /> {s.breakViolDays + s.brbViolDays + s.autoLogoutDays} viol</span>}
             </div>
-            <div className="grid grid-cols-3 gap-3 text-center">
+            <div className="grid grid-cols-3 gap-1.5 text-center">
                 {[
                     { label: 'Days', val: `${s.daysWorked}d`, color: 'text-white' },
-                    { label: 'Total Worked', val: formatDuration(s.totalWorked), color: 'text-indigo-400' },
-                    { label: 'Avg Break/day', val: formatDuration(avgBreak), color: avgBreak > BREAK_LIMIT_MS ? 'text-rose-400' : 'text-amber-400' },
-                    { label: 'Avg BRB/day', val: formatDuration(avgBrb), color: avgBrb > BRB_LIMIT_MS ? 'text-sky-400' : 'text-blue-400' },
-                    { label: 'Break Viols', val: s.breakViolDays, color: s.breakViolDays > 0 ? 'text-orange-400' : 'text-slate-500' },
+                    { label: 'Worked', val: formatDuration(s.totalWorked), color: 'text-indigo-400' },
+                    { label: 'Avg Brk/d', val: formatDuration(avgBreak), color: avgBreak > BREAK_LIMIT_MS ? 'text-rose-400' : 'text-amber-400' },
+                    { label: 'Avg BRB/d', val: formatDuration(avgBrb), color: avgBrb > BRB_LIMIT_MS ? 'text-sky-400' : 'text-blue-400' },
+                    { label: 'Brk Viols', val: s.breakViolDays, color: s.breakViolDays > 0 ? 'text-orange-400' : 'text-slate-500' },
                     { label: 'BRB Viols', val: s.brbViolDays, color: s.brbViolDays > 0 ? 'text-sky-400' : 'text-slate-500' },
                     { label: 'Auto Outs', val: s.autoLogoutDays, color: s.autoLogoutDays > 0 ? 'text-red-400' : 'text-slate-500' },
                 ].map(stat => (
-                    <div key={stat.label} className="bg-black/30 border border-white/5 rounded-[1rem] p-3 transition-colors hover:bg-black/50">
-                        <p className="text-[10px] font-bold tracking-widest uppercase text-slate-500 mb-1">{stat.label}</p>
-                        <p className={`text-sm font-extrabold font-mono tracking-tight ${stat.color}`}>{stat.val}</p>
+                    <div key={stat.label} className="bg-black/30 border border-white/5 rounded-lg py-1 px-1.5 transition-colors hover:bg-black/50">
+                        <p className="text-[8px] font-bold tracking-widest uppercase text-slate-500 mb-0.5">{stat.label}</p>
+                        <p className={`text-[11px] font-extrabold font-mono tracking-tight ${stat.color}`}>{stat.val}</p>
                     </div>
                 ))}
             </div>
@@ -438,48 +438,110 @@ export default function MasterReports() {
     const totalViol = (baseS.breakViolDays || 0) + (baseS.brbViolDays || 0) + (baseS.lateInDays || 0) + (baseS.earlyOutDays || 0) + (baseS.autoLogoutDays || 0);
 
     return (
-        <div className="space-y-5">
-            {/* ── Header row ────────────────────────────────────────────── */}
-            {/* ── Header row (2026 Vibrant) ────────────────────────────────────────────── */}
-            <div className="flex items-center justify-between gap-6 mb-8">
-                <div className="flex items-center gap-4">
-                    <div className="relative">
-                        <div className="absolute inset-0 bg-indigo-500/20 blur-xl rounded-full animate-pulse" />
-                        <div className="relative w-14 h-14 bg-[#0a001a] border border-white/10 rounded-2xl flex items-center justify-center">
-                            <FileText size={28} className="text-indigo-400" />
+        <div className="space-y-3.5">
+            {/* ── VIOLATIONS DASHBOARD (KPI Cards - Absolute Top) ─────────────────────────────────────────── */}
+            {!loading && baseS.daysWorked > 0 && (
+                <div className="space-y-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                        {/* Avg Worked — display only */}
+                        <div className="panel-3d border border-indigo-500/20 border-t-2 border-t-indigo-500 bg-[#0b0c14]/40 hover:bg-[#0e101f]/60 hover:border-indigo-500/40 hover:shadow-[0_0_25px_rgba(99,102,241,0.15)] p-3 flex flex-col justify-between transition-all duration-300 rounded-[1.25rem] min-h-[96px]">
+                            <div className="flex items-center justify-between w-full">
+                                <p className="text-[9px] font-black tracking-widest uppercase text-slate-500">Avg Worked / Person</p>
+                                <span className="p-1 rounded-lg bg-indigo-500/10 text-indigo-400">
+                                    <Users size={12} />
+                                </span>
+                            </div>
+                            <div className="mt-1">
+                                <p className="text-xl lg:text-2xl font-black font-mono tracking-tight leading-none text-indigo-400 drop-shadow-[0_0_10px_rgba(99,102,241,0.6)]">{formatDuration(avgWorkedMs)}</p>
+                                <p className="text-[8px] font-bold text-slate-500 uppercase mt-0.5">{uniqueUserCount} people · {range}</p>
+                            </div>
                         </div>
-                    </div>
-                    <div>
-                        <h2 className="text-3xl font-black text-white tracking-tighter mb-1">Analytical Intelligence</h2>
-                        <div className="flex items-center gap-2">
-                           <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
-                           <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Operational Reports 2026</span>
-                        </div>
-                    </div>
-                </div>
-                <motion.button 
-                    onClick={handleCSV} 
-                    whileHover={{ scale: 1.02, y: -2 }} 
-                    whileTap={{ scale: 0.98 }} 
-                    disabled={filteredRows.length === 0}
-                    className="flex items-center gap-3 px-8 py-4 rounded-2xl bg-white text-black text-xs font-black tracking-[0.2em] uppercase hover:bg-indigo-50 transition-all shadow-[0_20px_40px_rgba(255,255,255,0.1)] disabled:opacity-20"
-                >
-                    <Zap size={16} fill="currentColor" /> Generate Dataset
-                </motion.button>
-            </div>
 
-            {/* ── Filter bar — unified style ─────────────────────────────── */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
-                <div className="flex items-center gap-2 bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 focus-within:border-indigo-500/50 transition-all">
-                    <Search className="text-slate-500 flex-shrink-0" size={14} />
-                    <input
-                        type="text"
-                        placeholder="Search recruiter..."
-                        value={recruiterSearch}
-                        onChange={e => setRecruiterSearch(e.target.value)}
-                        className="bg-transparent text-[12px] font-semibold text-white placeholder:text-slate-600 outline-none w-full"
-                    />
+                        {/* Clickable violation tiles */}
+                        {([
+                            { key: 'late_in' as ViolFilter, label: 'Late Logins', count: baseS.lateInDays, active: 'border-amber-500/60 bg-amber-500/10 shadow-[0_0_20px_rgba(245,158,11,0.25)]', idle: baseS.lateInDays > 0 ? 'border-amber-500/20 border-t-2 border-t-amber-500 bg-[#0b0c14]/40 hover:bg-[#1a1208]/60 hover:border-amber-500/40 hover:shadow-[0_0_20px_rgba(245,158,11,0.15)]' : 'border-white/[0.06] border-t-2 border-t-slate-700 bg-black/20 opacity-55 hover:opacity-85', num: baseS.lateInDays > 0 ? 'text-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]' : 'text-slate-600' },
+                            { key: 'break' as ViolFilter, label: 'Break Exceeds', count: baseS.breakViolDays, active: 'border-orange-500/60 bg-orange-500/10 shadow-[0_0_20px_rgba(249,115,22,0.25)]', idle: baseS.breakViolDays > 0 ? 'border-orange-500/20 border-t-2 border-t-orange-500 bg-[#0b0c14]/40 hover:bg-[#1f1005]/60 hover:border-orange-500/40 hover:shadow-[0_0_20px_rgba(249,115,22,0.15)]' : 'border-white/[0.06] border-t-2 border-t-slate-700 bg-black/20 opacity-55 hover:opacity-85', num: baseS.breakViolDays > 0 ? 'text-orange-400 drop-shadow-[0_0_8px_rgba(249,115,22,0.5)]' : 'text-slate-600' },
+                            { key: 'brb' as ViolFilter, label: 'BRB Exceeds', count: baseS.brbViolDays, active: 'border-sky-500/60 bg-sky-500/10 shadow-[0_0_20px_rgba(14,165,233,0.25)]', idle: baseS.brbViolDays > 0 ? 'border-sky-500/20 border-t-2 border-t-sky-500 bg-[#0b0c14]/40 hover:bg-[#071524]/60 hover:border-sky-500/40 hover:shadow-[0_0_20px_rgba(14,165,233,0.15)]' : 'border-white/[0.06] border-t-2 border-t-slate-700 bg-black/20 opacity-55 hover:opacity-85', num: baseS.brbViolDays > 0 ? 'text-sky-400 drop-shadow-[0_0_8px_rgba(14,165,233,0.5)]' : 'text-slate-600' },
+                            { key: 'auto_out' as ViolFilter, label: 'Auto Outs', count: baseS.autoLogoutDays, active: 'border-red-500/60 bg-red-500/10 shadow-[0_0_20px_rgba(239,68,68,0.25)]', idle: baseS.autoLogoutDays > 0 ? 'border-red-500/20 border-t-2 border-t-red-500 bg-[#0b0c14]/40 hover:bg-[#200508]/60 hover:border-red-500/40 hover:shadow-[0_0_20px_rgba(239,68,68,0.15)]' : 'border-white/[0.06] border-t-2 border-t-slate-700 bg-black/20 opacity-55 hover:opacity-85', num: baseS.autoLogoutDays > 0 ? 'text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'text-slate-600' },
+                            { key: 'all' as ViolFilter, label: 'Total Violations', count: totalViol, active: 'border-rose-500/60 bg-rose-500/10 shadow-[0_0_20px_rgba(244,63,94,0.25)]', idle: totalViol > 0 ? 'border-rose-500/20 border-t-2 border-t-rose-500 bg-[#0b0c14]/40 hover:bg-[#200510]/60 hover:border-rose-500/40 hover:shadow-[0_0_20px_rgba(244,63,94,0.15)]' : 'border-emerald-500/20 border-t-2 border-t-emerald-500 bg-[#0b0c14]/40 hover:bg-[#072010]/60 hover:border-emerald-500/40 hover:shadow-[0_0_20px_rgba(16,185,129,0.15)] text-emerald-400', num: totalViol > 0 ? 'text-rose-400 drop-shadow-[0_0_8px_rgba(244,63,94,0.5)]' : 'text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]' },
+                        ]).map(t => {
+                            const isActive = violationFilter === t.key;
+                            return (
+                                <button key={t.label}
+                                    onClick={() => t.count > 0 && setViolationFilter(isActive ? null : t.key)}
+                                    className={`panel-3d p-3 flex flex-col justify-between text-left transition-all duration-300 relative overflow-hidden rounded-[1.25rem] min-h-[96px]
+                                        ${isActive ? t.active + ' scale-[1.02] border-t-2' : t.idle}
+                                        ${t.count === 0 ? 'cursor-default' : 'cursor-pointer hover:scale-[1.02] hover:-translate-y-0.5'}`}>
+                                    {isActive && <div className="absolute top-0 inset-x-0 h-[2px] bg-current opacity-80" />}
+                                    
+                                    <div className="flex items-center justify-between w-full">
+                                        <p className="text-[9px] font-black tracking-widest uppercase text-slate-500">{t.label}</p>
+                                        <span className={`p-1 rounded-lg ${isActive ? 'bg-white/15 text-current' : 'bg-white/[0.02] border border-white/[0.04] text-slate-500'}`}>
+                                            {t.key === 'late_in' && <Clock size={12} />}
+                                            {t.key === 'break' && <Coffee size={12} />}
+                                            {t.key === 'brb' && <Clock3 size={12} />}
+                                            {t.key === 'auto_out' && <LogOut size={12} />}
+                                            {t.key === 'all' && <AlertTriangle size={12} />}
+                                        </span>
+                                    </div>
+                                    
+                                    <div className="flex items-baseline gap-1 mt-1">
+                                        <p className={`text-xl lg:text-2xl font-black font-mono tracking-tight leading-none ${t.num}`}>{t.count}</p>
+                                        <span className="text-[8px] font-bold text-slate-600 uppercase">{t.count === 1 ? 'day' : 'days'}</span>
+                                    </div>
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {/* When a violation tile is active: group results by client */}
+                    {violationFilter && filteredRows.length > 0 && (() => {
+                        const byClient = filteredRows.reduce((acc: Record<string, DayRow[]>, r: DayRow) => {
+                            if (!acc[r.clientName]) acc[r.clientName] = [];
+                            acc[r.clientName].push(r);
+                            return acc;
+                        }, {});
+                        return (
+                            <div className="panel-3d p-3.5 space-y-2.5 rounded-[1.25rem]">
+                                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500">
+                                    {filteredRows.length} record{filteredRows.length !== 1 ? 's' : ''} · grouped by client
+                                </p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                    {Object.entries(byClient).sort(([a], [b]) => a.localeCompare(b)).map(([client, cRows]) => (
+                                        <div key={client} className="bg-white/[0.01] border border-white/[0.04] p-2.5 rounded-xl">
+                                            <div className="flex items-center gap-1.5 mb-1.5">
+                                                <Briefcase size={10} className="text-slate-500" />
+                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider truncate flex-1">{client}</p>
+                                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-white/5 text-slate-500">{cRows.length}</span>
+                                            </div>
+                                            <div className="flex flex-wrap gap-1">
+                                                {[...new Set(cRows.map(r => r.name))].map(name => (
+                                                    <button key={name}
+                                                        onClick={() => addRecruiter(name)}
+                                                        className="text-[9px] font-bold bg-white/[0.04] hover:bg-indigo-500/15 border border-white/[0.08] hover:border-indigo-500/30 text-slate-300 hover:text-indigo-200 px-2 py-0.5 rounded-full transition-all">
+                                                        {name}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })()}
                 </div>
+            )}
+
+            {/* ── Filter bar — unified style (Aligned 6-Column cockpit controls) ─────────────────────────────── */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 items-end">
+                <CustomSelect
+                    multi
+                    options={allRecruiters.map(name => ({ value: name, label: name }))}
+                    value={selectedRecruiters}
+                    onChange={setSelectedRecruiters}
+                    placeholder="Select Recruiters"
+                    searchable
+                />
 
                 <CustomSelect
                     multi
@@ -517,27 +579,37 @@ export default function MasterReports() {
                     value={dateRange}
                     onChange={setDateRange}
                 />
+
+                <motion.button 
+                    onClick={handleCSV} 
+                    whileHover={{ scale: 1.02 }} 
+                    whileTap={{ scale: 0.98 }} 
+                    disabled={filteredRows.length === 0}
+                    className="flex items-center justify-center gap-2 h-[36px] w-full rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-[10px] font-black tracking-[0.2em] uppercase hover:brightness-110 transition-all shadow-[0_4px_12px_rgba(99,102,241,0.2)] disabled:opacity-20 disabled:pointer-events-none"
+                >
+                    <Zap size={13} fill="currentColor" className="text-white" /> Export CSV
+                </motion.button>
             </div>
 
-            {/* ── Active Filters & Match Count ── */}
-            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 mb-6 px-1">
-                <div className="flex flex-wrap items-center gap-2">
+            {/* ── Active Chips & Match Count ── */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1">
+                <div className="flex flex-wrap items-center gap-1.5">
                     {/* Selected recruiter chips */}
                     {selectedRecruiters.map(name => (
-                        <span key={name} className="flex items-center gap-1 text-[10px] font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 px-2.5 py-1 rounded-md">
+                        <span key={name} className="flex items-center gap-1 text-[9px] font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 px-2 py-0.5 rounded-md">
                             {name}
-                            <button onClick={() => removeRecruiter(name)} className="text-indigo-400 hover:text-white transition-colors"><X size={9} /></button>
+                            <button onClick={() => removeRecruiter(name)} className="text-indigo-400 hover:text-white transition-colors"><X size={8} /></button>
                         </span>
                     ))}
 
                     {/* Violation filter chip (when active) */}
                     {violationFilter && (
-                        <span className="flex items-center gap-1.5 text-[10px] font-bold bg-rose-500/15 text-rose-300 border border-rose-500/30 px-2.5 py-1 rounded-md">
-                            {violationFilter === 'late_in' && <Clock size={11} className="text-amber-400" />}
-                            {violationFilter === 'break' && <Coffee size={11} className="text-orange-400" />}
-                            {violationFilter === 'brb' && <Clock3 size={11} className="text-sky-400" />}
-                            {violationFilter === 'auto_out' && <LogOut size={11} className="text-red-400" />}
-                            {violationFilter === 'all' && <AlertTriangle size={11} className="text-rose-400" />}
+                        <span className="flex items-center gap-1 text-[9px] font-bold bg-rose-500/15 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded-md">
+                            {violationFilter === 'late_in' && <Clock size={10} className="text-amber-400" />}
+                            {violationFilter === 'break' && <Coffee size={10} className="text-orange-400" />}
+                            {violationFilter === 'brb' && <Clock3 size={10} className="text-sky-400" />}
+                            {violationFilter === 'auto_out' && <LogOut size={10} className="text-red-400" />}
+                            {violationFilter === 'all' && <AlertTriangle size={10} className="text-rose-400" />}
                             <span>
                                 {violationFilter === 'late_in' ? 'Late Logins' 
                                  : violationFilter === 'break' ? 'Break Exceeds' 
@@ -545,127 +617,41 @@ export default function MasterReports() {
                                  : violationFilter === 'auto_out' ? 'Auto Outs' 
                                  : 'All Violations'}
                             </span>
-                            <button onClick={() => setViolationFilter(null)} className="text-rose-400 hover:text-white transition-colors"><X size={9} /></button>
+                            <button onClick={() => setViolationFilter(null)} className="text-rose-400 hover:text-white transition-colors"><X size={8} /></button>
                         </span>
                     )}
 
                     {(selectedClients.length > 0 || selectedRecruiters.length > 0 || statusDropFilter !== '' || violDropFilter !== '' || violationFilter !== null) && (
                         <button onClick={() => { setSelectedClients([]); setSelectedRecruiters([]); setRecruiterSearch(''); setStatusDropFilter(''); setViolDropFilter(''); setViolationFilter(null); }}
-                            className="flex items-center gap-1 text-[10px] font-bold text-slate-500 hover:text-white transition-colors px-2 py-1 rounded-lg hover:bg-white/5">
-                            <X size={10} /> Clear all
+                            className="flex items-center gap-1 text-[9px] font-bold text-slate-500 hover:text-white transition-colors px-1.5 py-0.5 rounded hover:bg-white/5">
+                            <X size={9} /> Clear all
                         </button>
                     )}
                 </div>
 
-                <div className="flex items-center gap-3 pr-2 pl-4 border-l border-white/10">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 font-mono">
+                <div className="flex items-center gap-2 pr-1 pl-3 border-l border-white/10">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 font-mono">
                         {filteredRows.length} Match{filteredRows.length !== 1 ? 'es' : ''}
                     </span>
                 </div>
             </div>
 
-            {loading && <p className="text-center text-slate-500 font-medium text-sm py-16 animate-pulse">Processing report data…</p>}
-
-            {/* ── VIOLATIONS DASHBOARD ─────────────────────────────────────────── */}
-            {!loading && baseS.daysWorked > 0 && (
-                <div className="space-y-3">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                        {/* Avg Worked — display only */}
-                        <div className="panel-3d border border-indigo-500/30 bg-[linear-gradient(120deg,rgba(99,102,241,0.1),rgba(4,4,15,0.8))] p-4 flex flex-col gap-1">
-                            <p className="text-[10px] font-bold tracking-widest uppercase text-slate-500">Avg Worked / Person</p>
-                            <p className="text-2xl font-black font-mono tabular-nums text-indigo-400">{formatDuration(avgWorkedMs)}</p>
-                            <p className="text-[9px] text-slate-600">{uniqueUserCount} people · {range}</p>
-                        </div>
-
-                        {/* Clickable violation tiles */}
-                        {([
-                            { key: 'late_in' as ViolFilter, label: 'Late Logins', count: baseS.lateInDays, active: 'border-amber-500/60 bg-amber-500/10', idle: baseS.lateInDays > 0 ? 'border-amber-500/30 bg-amber-500/5' : 'border-white/[0.08] bg-black/30', num: baseS.lateInDays > 0 ? 'text-amber-400' : 'text-slate-600' },
-                            { key: 'break' as ViolFilter, label: 'Break Exceeds', count: baseS.breakViolDays, active: 'border-orange-500/60 bg-orange-500/10', idle: baseS.breakViolDays > 0 ? 'border-orange-500/30 bg-orange-500/5' : 'border-white/[0.08] bg-black/30', num: baseS.breakViolDays > 0 ? 'text-orange-400' : 'text-slate-600' },
-                            { key: 'brb' as ViolFilter, label: 'BRB Exceeds', count: baseS.brbViolDays, active: 'border-sky-500/60 bg-sky-500/10', idle: baseS.brbViolDays > 0 ? 'border-sky-500/30 bg-sky-500/5' : 'border-white/[0.08] bg-black/30', num: baseS.brbViolDays > 0 ? 'text-sky-400' : 'text-slate-600' },
-                            { key: 'auto_out' as ViolFilter, label: 'Auto Outs', count: baseS.autoLogoutDays, active: 'border-red-500/60 bg-red-500/10', idle: baseS.autoLogoutDays > 0 ? 'border-red-500/30 bg-red-500/5' : 'border-white/[0.08] bg-black/30', num: baseS.autoLogoutDays > 0 ? 'text-red-400' : 'text-slate-600' },
-                            { key: 'all' as ViolFilter, label: 'Total Violations', count: totalViol, active: 'border-rose-500/60 bg-rose-500/10', idle: totalViol > 0 ? 'border-rose-500/30 bg-rose-500/5' : 'border-emerald-500/20 bg-emerald-500/5', num: totalViol > 0 ? 'text-rose-400' : 'text-emerald-400' },
-                        ]).map(t => {
-                            const isActive = violationFilter === t.key;
-                            return (
-                                <button key={t.label}
-                                    onClick={() => setViolationFilter(isActive ? null : t.key)}
-                                    className={`panel-3d p-5 flex flex-col gap-2 text-left transition-all duration-300 hover:brightness-110 relative overflow-hidden
-                                        ${isActive ? t.active + ' shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_24px_rgba(244,63,94,0.08)]' : t.idle}
-                                        ${t.count === 0 ? 'cursor-default' : 'cursor-pointer hover:-translate-y-0.5'}`}>
-                                    {isActive && <div className="absolute top-0 inset-x-0 h-[3px] bg-current opacity-80 animate-status-line-enter" />}
-                                    
-                                    <div className="flex items-center justify-between w-full">
-                                        <p className="text-[10px] font-bold tracking-widest uppercase text-slate-500">{t.label}</p>
-                                        <span className={`p-1.5 rounded-lg ${isActive ? 'bg-white/10 text-current' : 'bg-white/[0.02] border border-white/[0.04] text-slate-500'}`}>
-                                            {t.key === 'late_in' && <Clock size={13} />}
-                                            {t.key === 'break' && <Coffee size={13} />}
-                                            {t.key === 'brb' && <Clock3 size={13} />}
-                                            {t.key === 'auto_out' && <LogOut size={13} />}
-                                            {t.key === 'all' && <AlertTriangle size={13} />}
-                                        </span>
-                                    </div>
-                                    
-                                    <div className="flex items-baseline gap-2 mt-1">
-                                        <p className={`text-3xl font-black font-mono tracking-tight leading-none ${t.num} drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]`}>{t.count}</p>
-                                        <span className="text-[10px] font-bold text-slate-600 uppercase">{t.count === 1 ? 'day' : 'days'}</span>
-                                    </div>
-                                    
-                                    {isActive && <p className="text-[8px] font-black uppercase tracking-widest text-slate-400 mt-1 animate-pulse">active filter</p>}
-                                </button>
-                            );
-                        })}
-                    </div>
-
-                    {/* When a violation tile is active: group results by client */}
-                    {violationFilter && filteredRows.length > 0 && (() => {
-                        const byClient = filteredRows.reduce((acc: Record<string, DayRow[]>, r: DayRow) => {
-                            if (!acc[r.clientName]) acc[r.clientName] = [];
-                            acc[r.clientName].push(r);
-                            return acc;
-                        }, {});
-                        return (
-                            <div className="panel-3d p-4 space-y-3">
-                                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                                    {filteredRows.length} record{filteredRows.length !== 1 ? 's' : ''} · grouped by client
-                                </p>
-                                {Object.entries(byClient).sort(([a], [b]) => a.localeCompare(b)).map(([client, cRows]) => (
-                                    <div key={client}>
-                                        <div className="flex items-center gap-2 mb-1.5">
-                                            <Briefcase size={11} className="text-slate-600" />
-                                            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{client}</p>
-                                            <span className="text-[10px] text-slate-600">{cRows.length}</span>
-                                        </div>
-                                        <div className="flex flex-wrap gap-1.5 pl-4">
-                                            {[...new Set(cRows.map(r => r.name))].map(name => (
-                                                <button key={name}
-                                                    onClick={() => addRecruiter(name)}
-                                                    className="text-[11px] font-semibold bg-white/[0.04] hover:bg-indigo-500/15 border border-white/[0.08] hover:border-indigo-500/30 text-slate-300 hover:text-indigo-200 px-2.5 py-1 rounded-full transition-all">
-                                                    {name}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        );
-                    })()}
-                </div>
-            )}
-
-            <div className="flex items-center gap-4 text-[10px] font-bold tracking-widest uppercase text-slate-400 px-2">
-                <span className="flex items-center gap-1.5 bg-black/40 px-3 py-1.5 rounded-full border border-white/5"><AlertTriangle size={12} className="text-orange-400" /> Break &gt; 1h 15m</span>
-                <span className="flex items-center gap-1.5 bg-black/40 px-3 py-1.5 rounded-full border border-white/5"><AlertTriangle size={12} className="text-sky-400" /> BRB &gt; 10m</span>
-                <span className="flex items-center gap-1.5 bg-black/40 px-3 py-1.5 rounded-full border border-white/5"><AlertTriangle size={12} className="text-amber-400" /> Login after 8:05 AM CST</span>
-                <span className="flex items-center gap-1.5 bg-black/40 px-3 py-1.5 rounded-full border border-white/5"><AlertTriangle size={12} className="text-purple-400" /> Logout before 5:00 PM CST</span>
-            </div>
+            {loading && <p className="text-center text-slate-500 font-medium text-sm py-12 animate-pulse">Processing report data…</p>}
 
             {!loading && <ReportTable rows={filteredRows} showDate={isMultiDay} showName={true} onEdit={(r) => {
-                const u = rows.find(x => x.userId === r.userId); // In practice we want the User object
                 getAllUsers().then(users => {
                     const fullUser = users.find(u => u.id === r.userId);
                     if (fullUser) setSelectedUserForEdit({ user: fullUser, date: r.date });
                 });
             }} />}
+
+            {/* Policy Legend Footnote under the table */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[8px] font-bold tracking-widest uppercase text-slate-500 px-2 mt-1">
+                <span className="flex items-center gap-1"><AlertTriangle size={10} className="text-orange-400" /> Break &gt; 1h 15m</span>
+                <span className="flex items-center gap-1"><AlertTriangle size={10} className="text-sky-400" /> BRB &gt; 10m</span>
+                <span className="flex items-center gap-1"><AlertTriangle size={10} className="text-amber-400" /> Login after 8:05 AM CST</span>
+                <span className="flex items-center gap-1"><AlertTriangle size={10} className="text-purple-400" /> Logout before 5:00 PM CST</span>
+            </div>
 
             <AnimatePresence>
                 {selectedUserForEdit && (
@@ -680,14 +666,16 @@ export default function MasterReports() {
             </AnimatePresence>
 
             {!loading && isMultiDay && uniqueUsers.length > 0 && (
-                <div className="space-y-4 pt-4 border-t border-white/10">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-gradient-to-br from-[#ffd700]/20 to-[#d4af37]/10 rounded-xl border border-[#ffd700]/30 shadow-[inset_0_0_15px_rgba(255,215,0,0.2)]">
-                            <BarChart2 size={16} className="text-[#ffd700] drop-shadow-[0_0_8px_rgba(255,215,0,0.8)]" />
+                <div className="space-y-3 pt-3 border-t border-white/10">
+                    <div className="flex items-center gap-2">
+                        <div className="p-1.5 bg-gradient-to-br from-[#ffd700]/20 to-[#d4af37]/10 rounded-lg border border-[#ffd700]/30 shadow-[inset_0_0_15px_rgba(255,215,0,0.2)]">
+                            <BarChart2 size={13} className="text-[#ffd700] drop-shadow-[0_0_8px_rgba(255,215,0,0.8)]" />
                         </div>
-                        <h3 className="text-base font-extrabold text-white tracking-tight">Per-Recruiter Breakdown</h3>
+                        <h3 className="text-xs font-black text-white tracking-wider uppercase">Per-Recruiter Breakdown</h3>
                     </div>
-                    {uniqueUsers.map((uid: string) => { const uRows = filteredRows.filter((r: DayRow) => r.userId === uid); return <UserSummaryCard key={uid} name={uRows[0]?.name ?? uid} rows={uRows} />; })}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {uniqueUsers.map((uid: string) => { const uRows = filteredRows.filter((r: DayRow) => r.userId === uid); return <UserSummaryCard key={uid} name={uRows[0]?.name ?? uid} rows={uRows} />; })}
+                    </div>
                 </div>
             )}
         </div>

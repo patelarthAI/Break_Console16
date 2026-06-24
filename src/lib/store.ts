@@ -690,19 +690,17 @@ export async function getUserByNameAndClient(name: string, clientName: string): 
     const { data, error } = await supabase
         .from('users').select(USER_SELECT)
         .ilike('name', name.trim())
-        .ilike('client_name', clientName.trim())
-        .maybeSingle();
+        .ilike('client_name', clientName.trim());
     assertSupabaseOk(error, 'Failed to load user');
-    if (data) return rowToUser(data as UserRow);
+    if (data && data.length > 0) return rowToUser(data[0] as UserRow);
 
     // Fallback: if not found by client, check if this is a master user (admin can log in regardless of client selection)
     const { data: masterData, error: masterError } = await supabase
         .from('users').select(USER_SELECT)
         .ilike('name', name.trim())
-        .eq('is_master', true)
-        .maybeSingle();
+        .eq('is_master', true);
     assertSupabaseOk(masterError, 'Failed to load master user');
-    return masterData ? rowToUser(masterData as UserRow) : null;
+    return masterData && masterData.length > 0 ? rowToUser(masterData[0] as UserRow) : null;
 }
 
 export async function upsertUser(user: User): Promise<User> {
