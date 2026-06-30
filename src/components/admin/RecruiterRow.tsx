@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { formatDuration, getRealNow } from '@/lib/timeUtils';
 import type { UserStatusRecord } from '@/lib/store';
-import { Pencil, LogOut, TrendingUp, User as UserIcon, Play, Square } from 'lucide-react';
+import { Pencil, LogOut, TrendingUp, User as UserIcon, Play, Square, AlertTriangle } from 'lucide-react';
 import { getClientTheme } from '@/lib/utils';
 
 interface RecruiterRowProps {
@@ -91,11 +91,6 @@ export default function RecruiterRow({
       : workedMs ?? 0
     : workedMs ?? 0;
 
-  // ── SHIFT COLUMN — worked shift time ──────────────────────────────────────
-  // Always shows total worked time (elapsed minus breaks, frozen during breaks)
-  const shiftDisplayMs = currentWorked;
-  const shiftIsLive = isWorking;
-
   // ── Unified Palette ───────────────────────────────────────────────────────
   const COLOR_WORKING = '#10b981';
   const COLOR_BREAK   = '#f59e0b';
@@ -112,32 +107,80 @@ export default function RecruiterRow({
   if (status === 'on_brb')   accentColor = COLOR_BRB;
   if (status === 'on_leave') accentColor = COLOR_LEAVE;
 
-  // ── SHIFT timer display color ─────────────────────────────────────────────
-  let shiftColor = '#475569';
-  let shiftGlow  = 'none';
+  // ── Calculate current break/BRB session elapsed time ──────────────────────
+  const breakSessionMs = status === 'on_break' && breakStart ? Math.max(0, now - breakStart) : 0;
+  const brbSessionMs = status === 'on_brb' && brbStart ? Math.max(0, now - brbStart) : 0;
 
-  if (punchIn) {
+  // ── SHIFT COLUMN — worked shift time or live break/BRB timer ──────────────
+  let shiftDisplayMs = currentWorked;
+  let shiftIsLive = isWorking;
+  let shiftLabel = 'SHIFT';
+  let shiftColor = '#475569';
+  let shiftGlow = 'none';
+  let isOverLimit = false;
+
+  if (status === 'working') {
+    shiftDisplayMs = currentWorked;
+    shiftIsLive = true;
     const hours = currentWorked / 3600000;
-    if (isWorking) {
-      if (hours > 9) {
-        shiftColor = '#ef4444';
-        shiftGlow  = '0 0 8px rgba(239,68,68,0.5)';
-      } else if (hours > 8.5) {
-        shiftColor = '#f59e0b';
-        shiftGlow  = '0 0 8px rgba(245,158,11,0.4)';
-      } else {
-        shiftColor = COLOR_WORKING;
-        shiftGlow  = `0 0 8px ${COLOR_WORKING}50`;
-      }
+    if (hours > 9) {
+      shiftColor = '#ef4444';
+      shiftGlow = '0 0 8px rgba(239,68,68,0.5)';
+      shiftLabel = 'OVERTIME';
+    } else if (hours > 8.5) {
+      shiftColor = '#f59e0b';
+      shiftGlow = '0 0 8px rgba(245,158,11,0.4)';
+      shiftLabel = 'SHIFT WARN';
     } else {
-      // Punched in but currently on break, BRB, or offline
-      if (hours > 9) {
-        shiftColor = '#ef4444';
-      } else if (hours > 8.5) {
-        shiftColor = '#f59e0b';
-      } else {
-        shiftColor = 'rgba(16, 185, 129, 0.45)'; // dim/frozen worked time
-      }
+      shiftColor = COLOR_WORKING;
+      shiftGlow = `0 0 8px ${COLOR_WORKING}50`;
+      shiftLabel = 'ON SHIFT';
+    }
+  } else if (status === 'on_break') {
+    shiftDisplayMs = breakSessionMs;
+    shiftIsLive = true;
+    const breakMin = breakSessionMs / 60000;
+    if (breakMin > 75) {
+      shiftColor = '#ef4444';
+      shiftGlow = '0 0 10px rgba(239,68,68,0.8)';
+      shiftLabel = 'EXCEEDED';
+      isOverLimit = true;
+    } else if (breakMin > 60) {
+      shiftColor = '#f97316'; // orange
+      shiftGlow = '0 0 8px rgba(249,115,22,0.5)';
+      shiftLabel = 'BREAK WARN';
+    } else {
+      shiftColor = COLOR_BREAK;
+      shiftGlow = `0 0 8px ${COLOR_BREAK}50`;
+      shiftLabel = 'ON BREAK';
+    }
+  } else if (status === 'on_brb') {
+    shiftDisplayMs = brbSessionMs;
+    shiftIsLive = true;
+    const brbMin = brbSessionMs / 60000;
+    if (brbMin > 10) {
+      shiftColor = '#ef4444';
+      shiftGlow = '0 0 10px rgba(239,68,68,0.8)';
+      shiftLabel = 'EXCEEDED';
+      isOverLimit = true;
+    } else if (brbMin > 8) {
+      shiftColor = '#f59e0b'; // amber
+      shiftGlow = '0 0 8px rgba(245,158,11,0.5)';
+      shiftLabel = 'BRB WARN';
+    } else {
+      shiftColor = COLOR_BRB;
+      shiftGlow = `0 0 8px ${COLOR_BRB}50`;
+      shiftLabel = 'ON BRB';
+    }
+  } else {
+    shiftDisplayMs = workedMs ?? 0;
+    shiftIsLive = false;
+    shiftColor = 'rgba(255, 255, 255, 0.28)';
+    shiftGlow = 'none';
+    shiftLabel = punchIn ? 'SHFT PAUSE' : 'OFFLINE';
+    if (status === 'on_leave') {
+      shiftLabel = 'LEAVE';
+      shiftColor = COLOR_LEAVE;
     }
   }
 
@@ -350,12 +393,23 @@ export default function RecruiterRow({
       </div>
 
       {/* ── 4. Shift — DYNAMIC context timer ──────────────────────────────── */}
-      {/*    On break → break duration (ticking amber)                          */}
-      {/*    On BRB   → BRB duration   (ticking blue)                          */}
-      {/*    Working  → total worked    (ticking green)                         */}
-      <div className="relative flex items-center justify-center">
+      <div className="relative flex flex-col items-center justify-center gap-0.5 select-none text-center">
         <div className="absolute left-[-8px] top-[15%] bottom-[15%] w-[1px] bg-gradient-to-b from-transparent via-white/[0.06] to-transparent pointer-events-none" />
-        <Clock ms={shiftDisplayMs} live={shiftIsLive} color={shiftColor} glow={shiftGlow} />
+        <span
+          className={`text-[8px] font-black tracking-wider uppercase leading-none opacity-75 flex items-center gap-0.5 ${
+            isOverLimit ? 'animate-pulse' : ''
+          }`}
+          style={{
+            color: shiftColor,
+            textShadow: isOverLimit ? '0 0 4px rgba(239, 68, 68, 0.4)' : 'none',
+          }}
+        >
+          {isOverLimit && <AlertTriangle size={8} className="text-red-400" />}
+          {shiftLabel}
+        </span>
+        <div className={isOverLimit ? 'animate-pulse' : ''}>
+          <Clock ms={shiftDisplayMs} live={shiftIsLive} color={shiftColor} glow={shiftGlow} />
+        </div>
       </div>
 
       {/* ── 5. Break total ─────────────────────────────────────────────────── */}
