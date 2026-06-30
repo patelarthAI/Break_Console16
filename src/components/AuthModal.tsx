@@ -63,6 +63,7 @@ export default function AuthModal({ onLogin }: { onLogin: (user: any) => void })
   useEffect(() => { if (isCaptainName) setClient(''); }, [isCaptainName]);
 
   const handleLogin = async () => {
+    if (loading) return;
     const n = name.trim();
     if (!n)                         { setError('Please enter your name'); return; }
     if (requiresClient && !client)  { setError('Please select your client'); return; }

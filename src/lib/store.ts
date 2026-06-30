@@ -687,9 +687,10 @@ function rowToUser(row: UserRow): User {
 
 // ─── User operations ──────────────────────────────────────────────────────────
 export async function getUserByNameAndClient(name: string, clientName: string): Promise<User | null> {
+    const normalizedName = toTitleCase(name);
     const { data, error } = await supabase
         .from('users').select(USER_SELECT)
-        .ilike('name', name.trim())
+        .ilike('name', normalizedName)
         .ilike('client_name', clientName.trim());
     assertSupabaseOk(error, 'Failed to load user');
     if (data && data.length > 0) return rowToUser(data[0] as UserRow);
@@ -697,19 +698,35 @@ export async function getUserByNameAndClient(name: string, clientName: string): 
     // Fallback: if not found by client, check if this is a master user (admin can log in regardless of client selection)
     const { data: masterData, error: masterError } = await supabase
         .from('users').select(USER_SELECT)
-        .ilike('name', name.trim())
+        .ilike('name', normalizedName)
         .eq('is_master', true);
     assertSupabaseOk(masterError, 'Failed to load master user');
     return masterData && masterData.length > 0 ? rowToUser(masterData[0] as UserRow) : null;
 }
 
 export async function upsertUser(user: User): Promise<User> {
+    const normName = toTitleCase(user.name);
+    const normClient = (user.clientName || 'General').trim();
+
+    // Prevent duplicates: Check if another user with the same name and client already exists
+    const { data: existing, error: checkError } = await supabase
+        .from('users')
+        .select('id')
+        .ilike('name', normName)
+        .ilike('client_name', normClient)
+        .neq('id', user.id);
+
+    if (checkError) throw checkError;
+    if (existing && existing.length > 0) {
+        throw new Error(`A user named "${normName}" already exists for client "${normClient}".`);
+    }
+
     const { data, error } = await supabase
         .from('users')
         .upsert({
             id: user.id,
-            name: toTitleCase(user.name),
-            client_name: user.clientName,
+            name: normName,
+            client_name: normClient,
             is_master: user.isMaster,
             is_approved: user.isApproved,
             shift_start: user.shiftStart,
@@ -772,9 +789,43 @@ export async function updateUser(userId: string, updates: {
     shiftStart?: string; shiftEnd?: string; timezone?: string;
     workMode?: 'WFO' | 'WFH';
 }): Promise<User> {
+    // If name or clientName is being updated, verify it won't create a duplicate
+    if (updates.name !== undefined || updates.clientName !== undefined) {
+        let targetName = updates.name;
+        let targetClient = updates.clientName;
+
+        if (targetName === undefined || targetClient === undefined) {
+            const { data: curr, error: fetchError } = await supabase
+                .from('users')
+                .select('name, client_name')
+                .eq('id', userId)
+                .single();
+            if (fetchError) throw fetchError;
+            if (curr) {
+                if (targetName === undefined) targetName = curr.name;
+                if (targetClient === undefined) targetClient = curr.client_name;
+            }
+        }
+
+        const normName = toTitleCase(targetName || '');
+        const normClient = (targetClient || 'General').trim();
+
+        const { data: existing, error: checkError } = await supabase
+            .from('users')
+            .select('id')
+            .ilike('name', normName)
+            .ilike('client_name', normClient)
+            .neq('id', userId);
+
+        if (checkError) throw checkError;
+        if (existing && existing.length > 0) {
+            throw new Error(`A user named "${normName}" already exists for client "${normClient}".`);
+        }
+    }
+
     const payload: Record<string, unknown> = {};
-    if (updates.name !== undefined) payload.name = updates.name;
-    if (updates.clientName !== undefined) payload.client_name = updates.clientName;
+    if (updates.name !== undefined) payload.name = toTitleCase(updates.name);
+    if (updates.clientName !== undefined) payload.client_name = updates.clientName.trim();
     if (updates.isApproved !== undefined) payload.is_approved = updates.isApproved;
     if (updates.shiftStart !== undefined) payload.shift_start = updates.shiftStart;
     if (updates.shiftEnd !== undefined) payload.shift_end = updates.shiftEnd;

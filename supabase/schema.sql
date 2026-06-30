@@ -23,7 +23,8 @@ create table if not exists public.users (
     shift_start text    not null default '08:00',
     shift_end   text    not null default '17:00',
     timezone    text    not null default 'America/Chicago',
-    work_mode   text    not null default 'WFO'   -- 'WFO' | 'WFH'
+    work_mode   text    not null default 'WFO',   -- 'WFO' | 'WFH'
+    unique (name, client_name)
 );
 
 -- ── time_logs (punch / break / brb events) ──────────────────────────────────
