@@ -292,10 +292,66 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
 
-    // Load leaves on page / filter change
+    // Debounce search input to avoid overwhelming the server
+    const [debouncedSearch, setDebouncedSearch] = useState(search);
     useEffect(() => {
-        loadLeavesPage(false, currentPage);
-    }, [currentPage, filterClient, filterEmployee, filterLeaveType, search, filterYear, filterMonth, sortConfig]);
+        const timer = setTimeout(() => {
+            setDebouncedSearch(search);
+            setCurrentPage(1);
+        }, 220);
+        return () => clearTimeout(timer);
+    }, [search]);
+
+    // Reset to page 1 on filter changes
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [filterClient, filterEmployee, filterLeaveType, filterYear, filterMonth]);
+
+    // Load leaves on page / filter change with race-condition safety
+    useEffect(() => {
+        let active = true;
+        setLoading(true);
+
+        async function fetchData() {
+            try {
+                const filters = {
+                    clientName: filterClient.length > 0 ? filterClient : undefined,
+                    employeeName: filterEmployee.length > 0 ? filterEmployee : undefined,
+                    leaveType: filterLeaveType.length > 0 ? filterLeaveType : undefined,
+                    search: debouncedSearch || undefined,
+                    year: filterYear || undefined,
+                    month: filterMonth || undefined,
+                    force: false,
+                };
+
+                const [historyPage, nextSummary] = await Promise.all([
+                    getLeavesPage({
+                        ...filters,
+                        sortKey: sortConfig.key,
+                        sortDir: sortConfig.dir,
+                        page: currentPage,
+                        pageSize: LEAVE_PAGE_SIZE,
+                    }),
+                    getLeaveSummary(filters),
+                ]);
+
+                if (!active) return;
+                setLeaves(historyPage.items);
+                setTotalLeaves(historyPage.total);
+                setSummary(nextSummary);
+                setSmartLeaves([]);
+            } catch (err) {
+                if (!active) return;
+                console.error('Leave fetch error:', err);
+                toastError('Could not load leave records', 'The leave board is temporarily unavailable.');
+            } finally {
+                if (active) setLoading(false);
+            }
+        }
+
+        fetchData();
+        return () => { active = false; };
+    }, [currentPage, filterClient, filterEmployee, filterLeaveType, debouncedSearch, filterYear, filterMonth, sortConfig]);
 
     async function loadLeavesPage(force = false, targetPage = currentPage) {
         setLoading(true);
@@ -305,7 +361,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                 clientName: filterClient.length > 0 ? filterClient : undefined,
                 employeeName: filterEmployee.length > 0 ? filterEmployee : undefined,
                 leaveType: filterLeaveType.length > 0 ? filterLeaveType : undefined,
-                search: search || undefined,
+                search: debouncedSearch || undefined,
                 year: filterYear || undefined,
                 month: filterMonth || undefined,
                 force,

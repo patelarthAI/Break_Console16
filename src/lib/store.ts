@@ -288,7 +288,6 @@ export async function renameClient(id: string, oldName: string, newName: string)
 
 // ─── Leaves ───────────────────────────────────────────────────────────────────
 export async function getLeaves(clientName?: string, force = false): Promise<LeaveRecord[]> {
-
     return withCachedQuery(`leaves:${clientName ?? '*'}`, LEAVES_CACHE_TTL_MS, async () => {
         let query = supabase
             .from('leaves')
@@ -305,7 +304,7 @@ export async function getLeaves(clientName?: string, force = false): Promise<Lea
 }
 
 function sanitizeSearchTerm(term: string): string {
-    return term.replace(/[,%]/g, ' ').trim();
+    return term.replace(/["',%()]/g, ' ').trim();
 }
 
 function applyLeaveDateFilter<T extends {
@@ -395,7 +394,7 @@ export async function getLeavesPage(options?: LeavePageOptions): Promise<Paginat
         }
         query = applyLeaveDateFilter(query, year, month);
         if (normalizedSearch) {
-            query = query.or(`employee_name.ilike.%${normalizedSearch}%,client_name.ilike.%${normalizedSearch}%,leave_type.ilike.%${normalizedSearch}%`);
+            query = query.or(`employee_name.ilike."%${normalizedSearch}%",client_name.ilike."%${normalizedSearch}%",leave_type.ilike."%${normalizedSearch}%"`);
         }
         query = applyLeaveSort(query, sortKey, sortDir);
 
@@ -448,7 +447,7 @@ export async function getLeaveSummary(options?: LeavePageOptions): Promise<Leave
         }
         query = applyLeaveDateFilter(query, year, month);
         if (normalizedSearch) {
-            query = query.or(`employee_name.ilike.%${normalizedSearch}%,client_name.ilike.%${normalizedSearch}%,leave_type.ilike.%${normalizedSearch}%`);
+            query = query.or(`employee_name.ilike."%${normalizedSearch}%",client_name.ilike."%${normalizedSearch}%",leave_type.ilike."%${normalizedSearch}%"`);
         }
 
         const { data, error } = await query;
