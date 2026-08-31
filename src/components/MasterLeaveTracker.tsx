@@ -65,28 +65,28 @@ const SYSTEM_LEAVE_TYPES = ['System: Absent', 'System: Half-Day'];
 const ALL_LEAVE_TYPES = [...LEAVE_TYPES, ...SYSTEM_LEAVE_TYPES];
 const LEAVE_PAGE_SIZE = 25;
 
-const LEAVE_META: Record<string, { dot: string; text: string; bg: string; border: string }> = {
-    'Sick Leave': { dot: '#a78bfa', text: 'text-violet-400', bg: 'bg-violet-500/8', border: 'border-violet-500/20' },
-    'HD-Sick': { dot: '#c4b5fd', text: 'text-violet-300', bg: 'bg-violet-500/8', border: 'border-violet-500/20' },
-    'Casual Leave': { dot: '#60a5fa', text: 'text-blue-400', bg: 'bg-blue-500/8', border: 'border-blue-500/20' },
-    'HD-Casual': { dot: '#93c5fd', text: 'text-blue-300', bg: 'bg-blue-500/8', border: 'border-blue-500/20' },
-    'LWP': { dot: '#7f1d1d', text: 'text-red-700', bg: 'bg-red-900/20', border: 'border-red-900/30' },
-    'HD-LWP': { dot: '#991b1b', text: 'text-red-600', bg: 'bg-red-900/20', border: 'border-red-900/30' },
-    'HD-Sick Room': { dot: '#8b5cf6', text: 'text-violet-500', bg: 'bg-violet-500/8', border: 'border-violet-500/20' },
-    'LWP-Doc not Received': { dot: '#450a0a', text: 'text-red-900', bg: 'bg-red-950/40', border: 'border-red-900/40' },
-    'Paternity': { dot: '#d8b4fe', text: 'text-violet-200', bg: 'bg-violet-500/8', border: 'border-violet-500/20' },
-    'Paid Leave': { dot: '#10b981', text: 'text-emerald-400', bg: 'bg-emerald-500/8', border: 'border-emerald-500/20' },
-    'System: Absent': { dot: '#fbbf24', text: 'text-amber-400', bg: 'bg-amber-500/8', border: 'border-amber-500/20' },
-    'System: Half-Day': { dot: '#fbbf24', text: 'text-amber-400', bg: 'bg-amber-500/8', border: 'border-amber-500/20' },
+const LEAVE_META: Record<string, { dot: string; text: string; bg: string; border: string; glow: string }> = {
+    'Sick Leave': { dot: '#a78bfa', text: 'text-violet-300', bg: 'bg-violet-500/10', border: 'border-violet-500/30', glow: 'rgba(167,139,250,0.4)' },
+    'HD-Sick': { dot: '#c4b5fd', text: 'text-violet-200', bg: 'bg-violet-500/10', border: 'border-violet-500/30', glow: 'rgba(196,181,253,0.4)' },
+    'Casual Leave': { dot: '#60a5fa', text: 'text-sky-300', bg: 'bg-sky-500/10', border: 'border-sky-500/30', glow: 'rgba(96,165,250,0.4)' },
+    'HD-Casual': { dot: '#93c5fd', text: 'text-sky-200', bg: 'bg-sky-500/10', border: 'border-sky-500/30', glow: 'rgba(147,197,253,0.4)' },
+    'LWP': { dot: '#f87171', text: 'text-rose-300', bg: 'bg-rose-500/15', border: 'border-rose-500/35', glow: 'rgba(248,113,113,0.4)' },
+    'HD-LWP': { dot: '#fb7185', text: 'text-rose-200', bg: 'bg-rose-500/15', border: 'border-rose-500/35', glow: 'rgba(251,113,133,0.4)' },
+    'HD-Sick Room': { dot: '#c084fc', text: 'text-purple-300', bg: 'bg-purple-500/10', border: 'border-purple-500/30', glow: 'rgba(192,132,252,0.4)' },
+    'LWP-Doc not Received': { dot: '#ef4444', text: 'text-red-300', bg: 'bg-red-500/20', border: 'border-red-500/40', glow: 'rgba(239,68,68,0.4)' },
+    'Paternity': { dot: '#e879f9', text: 'text-fuchsia-300', bg: 'bg-fuchsia-500/10', border: 'border-fuchsia-500/30', glow: 'rgba(232,121,249,0.4)' },
+    'Paid Leave': { dot: '#34d399', text: 'text-emerald-300', bg: 'bg-emerald-500/15', border: 'border-emerald-500/35', glow: 'rgba(52,211,153,0.4)' },
+    'System: Absent': { dot: '#fbbf24', text: 'text-amber-300', bg: 'bg-amber-500/15', border: 'border-amber-500/35', glow: 'rgba(251,191,36,0.5)' },
+    'System: Half-Day': { dot: '#fbbf24', text: 'text-amber-300', bg: 'bg-amber-500/15', border: 'border-amber-500/35', glow: 'rgba(251,191,36,0.5)' },
 };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 function TypeBadge({ type, isSmart }: { type: string, isSmart?: boolean }) {
     const m = LEAVE_META[type] ?? LEAVE_META['Casual Leave'];
     return (
-        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold tracking-wider uppercase border ${m.text} ${m.bg} ${m.border}`}>
-            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: m.dot }} />
-            {type}
+        <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-[11px] font-black tracking-wider uppercase border shadow-sm ${m.text} ${m.bg} ${m.border}`}>
+            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: m.dot, boxShadow: `0 0 8px ${m.glow}` }} />
+            <span className="truncate">{type}</span>
         </span>
     );
 }
@@ -94,20 +94,20 @@ function TypeBadge({ type, isSmart }: { type: string, isSmart?: boolean }) {
 function StatCard({ label, value, sub, color, accent, active }: { label: string; value: string | number; sub?: string; color: string; accent: string; active?: boolean; }) {
     return (
         <div className={`relative flex flex-col panel-3d px-5 py-4 overflow-hidden transition-all duration-300 group ${active ? 'border-white/20 ring-1 ring-white/10' : 'hover:brightness-110'}`}>
-            {/* Colored top accent bar — same pattern as Live Dashboard */}
+            {/* Colored top accent bar */}
             <div className={`absolute top-0 left-0 right-0 h-[3px] ${accent} ${active ? 'opacity-100' : 'opacity-80'}`} />
             {active && <div className={`absolute -right-4 -top-4 w-12 h-12 ${accent} opacity-10 blur-2xl rounded-full`} />}
             <p className={`text-3xl font-black tabular-nums tracking-tighter leading-none mt-2 ${color}`}>{value}</p>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mt-2">{label}</p>
-            {sub && <p className="text-[10px] text-slate-600 mt-0.5">{sub}</p>}
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-2">{label}</p>
+            {sub && <p className="text-[10px] text-slate-500 mt-0.5">{sub}</p>}
         </div>
     );
 }
 
 // ─── Label / Input tokens ─────────────────────────────────────────────────────
-const lbl = "block text-[11px] font-bold tracking-[0.1em] uppercase text-slate-500 mb-1.5";
-const inp = "w-full bg-white/[0.03] border border-white/[0.08] rounded-lg py-2.5 px-3 text-white text-sm focus:outline-none focus:border-white/20 focus:bg-white/[0.05] transition-all placeholder:text-slate-700 color-scheme-dark";
-const sel = `${inp} appearance-none pr-8 cursor-pointer`;
+const lbl = "block text-[11px] font-black tracking-[0.14em] uppercase text-slate-400 mb-2";
+const inp = "w-full bg-[#121626] border border-white/10 rounded-xl py-3 px-3.5 text-white text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25 transition-all placeholder:text-slate-600 color-scheme-dark shadow-inner font-semibold";
+const sel = `${inp} appearance-none pr-9 cursor-pointer`;
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
     return <div><label className={lbl}>{label}</label>{children}</div>;
@@ -116,7 +116,7 @@ function SelectWrap({ children }: { children: React.ReactNode }) {
     return (
         <div className="relative">
             {children}
-            <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none" />
+            <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
         </div>
     );
 }
@@ -192,40 +192,39 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
     const [filterMonth, setFilterMonth] = useState('');
     const [sortConfig, setSortConfig] = useState<{ key: string, dir: 'asc' | 'desc' }>({ key: 'Date', dir: 'desc' });
 
+    // Initial load
     useEffect(() => {
-        void loadMeta();
+        let mounted = true;
+
+        async function init() {
+            try {
+                const [allUsersData, clientsData] = await Promise.all([
+                    getAllUsers(),
+                    getClients(),
+                ]);
+
+                if (!mounted) return;
+                setAllUsers(allUsersData.filter(u => !u.isMaster));
+                setClients(clientsData);
+            } catch (err) {
+                console.error(err);
+                toastError('Initialization failed', 'Could not load users or clients.');
+            }
+        }
+
+        init();
+        return () => { mounted = false; };
     }, []);
 
-    const filterClientKey = filterClient.join(',');
-    const filterEmployeeKey = filterEmployee.join(',');
-    const filterLeaveTypeKey = filterLeaveType.join(',');
-
+    // Load leaves on page / filter change
     useEffect(() => {
-        void loadLeavesPage();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentPage, filterClientKey, filterEmployeeKey, filterLeaveTypeKey, search, filterYear, filterMonth, sortConfig.key, sortConfig.dir]);
+        loadLeavesPage(false, currentPage);
+    }, [currentPage, filterClient, filterEmployee, filterLeaveType, search, filterYear, filterMonth, sortConfig]);
 
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [filterClientKey, filterEmployeeKey, filterLeaveTypeKey, search, filterYear, filterMonth, sortConfig.key, sortConfig.dir]);
-
-    async function loadMeta() {
-        try {
-            const [c, u] = await Promise.all([
-                getClients(),
-                getAllUsers()
-            ]);
-            setClients(c);
-            setAllUsers(u.filter(u => !u.isMaster));
-        } catch (err) {
-            console.error(err);
-            toastError('Could not load leave metadata', 'Please try again in a moment.');
-        }
-    }
-
-    async function loadLeavesPage(force = false, page = currentPage) {
+    async function loadLeavesPage(force = false, targetPage = currentPage) {
         setLoading(true);
         try {
+            const page = force ? 1 : targetPage;
             const filters = {
                 clientName: filterClient.length > 0 ? filterClient : undefined,
                 employeeName: filterEmployee.length > 0 ? filterEmployee : undefined,
@@ -259,9 +258,20 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
         }
     }
 
-    const availableEmployees = selectedClient
-        ? allUsers.filter(u => u.clientName === selectedClient).sort((a, b) => a.name.localeCompare(b.name))
-        : [];
+    // Available employees memo with pre-selection guarantee
+    const availableEmployees = useMemo(() => {
+        let pool = allUsers;
+        if (selectedClient) {
+            pool = allUsers.filter(u => u.clientName?.trim().toLowerCase() === selectedClient.trim().toLowerCase());
+        }
+        
+        // Always guarantee that if employeeName is set (e.g. while editing or pre-selected), it exists in the list!
+        const names = new Set(pool.map(u => u.name));
+        if (employeeName && !names.has(employeeName)) {
+            pool = [{ id: `emp-${employeeName}`, name: employeeName, clientName: selectedClient || '' } as any, ...pool];
+        }
+        return [...pool].sort((a, b) => a.name.localeCompare(b.name));
+    }, [allUsers, selectedClient, employeeName]);
 
     function resetForm() {
         setEditingId(null);
@@ -280,6 +290,19 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
     function openNew() {
         resetForm();
+        // If a recruiter/employee is already filtered at the top, pre-select them automatically!
+        if (filterEmployee.length > 0) {
+            const empName = filterEmployee[0];
+            setEmployeeName(empName);
+            const userObj = allUsers.find(u => u.name.trim().toLowerCase() === empName.trim().toLowerCase());
+            if (userObj?.clientName) {
+                setSelectedClient(userObj.clientName);
+            } else if (filterClient.length > 0) {
+                setSelectedClient(filterClient[0]);
+            }
+        } else if (filterClient.length > 0) {
+            setSelectedClient(filterClient[0]);
+        }
         setDrawerOpen(true);
     }
 
@@ -744,25 +767,25 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
             </div>
 
             {/* ── Table ───────────────────────────────────────────────────── */}
-            <div className="panel-3d overflow-hidden rounded-[2rem] p-4">
+            <div className="rounded-[2.2rem] bg-[#090b14]/90 backdrop-blur-2xl border border-white/[0.08] p-6 shadow-[0_25px_70px_rgba(0,0,0,0.65)] overflow-hidden">
                 <div className="overflow-x-auto pb-4">
-                    <div className="min-w-[1100px] flex flex-col gap-3">
+                    <div className="min-w-[1180px] flex flex-col gap-3.5">
                         {/* Headers */}
-                        <div className="grid grid-cols-[40px_100px_minmax(150px,2fr)_minmax(130px,1fr)_minmax(160px,1.5fr)_90px_90px_minmax(140px,1.5fr)_100px_90px] gap-3 px-5 py-3 rounded-xl bg-white/[0.03] border border-white/[0.05] shadow-[inset_0_1px_0_rgba(255,255,255,0.02)] items-center">
+                        <div className="grid grid-cols-[48px_115px_minmax(190px,2fr)_minmax(140px,1.2fr)_minmax(180px,1.4fr)_105px_105px_minmax(200px,2fr)_120px_90px] gap-3 px-6 py-4 rounded-2xl bg-white/[0.03] border border-white/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] items-center">
                             {/* Master Checkbox */}
                             <div className="flex items-center justify-center">
                                 <button
                                     type="button"
                                     onClick={toggleSelectAll}
-                                    className="p-1 rounded-md text-slate-500 hover:text-white transition-colors focus:outline-none"
+                                    className="p-1.5 rounded-lg text-slate-400 hover:text-white transition-all hover:bg-white/5 focus:outline-none"
                                     title={isAllVisibleSelected ? "Deselect all on page" : "Select all on page"}
                                 >
                                     {isAllVisibleSelected ? (
-                                        <CheckSquare size={16} className="text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                                        <CheckSquare size={18} className="text-emerald-400 drop-shadow-[0_0_10px_rgba(16,185,129,0.7)]" />
                                     ) : isSomeVisibleSelected ? (
-                                        <MinusSquare size={16} className="text-indigo-400" />
+                                        <MinusSquare size={18} className="text-indigo-400 drop-shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
                                     ) : (
-                                        <Square size={16} className="text-slate-600 hover:text-slate-400" />
+                                        <Square size={18} className="text-slate-500 hover:text-slate-300" />
                                     )}
                                 </button>
                             </div>
@@ -771,26 +794,26 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                 <button key={h} onClick={() => {
                                     if (sortConfig.key === h) setSortConfig({ key: h, dir: sortConfig.dir === 'asc' ? 'desc' : 'asc' });
                                     else setSortConfig({ key: h, dir: 'asc' });
-                                }} className="flex items-center gap-1.5 text-[10px] font-black tracking-[0.15em] uppercase text-slate-500 hover:text-white transition-colors outline-none cursor-pointer group text-left">
+                                }} className="flex items-center gap-1.5 text-xs font-black tracking-[0.14em] uppercase text-slate-400 hover:text-white transition-colors outline-none cursor-pointer group text-left">
                                     {h}
-                                    <span className="flex flex-col opacity-0 group-hover:opacity-50 transition-opacity" style={{ opacity: sortConfig.key === h ? 1 : undefined }}>
-                                        <ChevronUp size={10} className={`-mb-1 transition-colors ${sortConfig.key === h && sortConfig.dir === 'asc' ? 'text-emerald-400' : ''}`} />
-                                        <ChevronDown size={10} className={`transition-colors ${sortConfig.key === h && sortConfig.dir === 'desc' ? 'text-emerald-400' : ''}`} />
+                                    <span className="flex flex-col opacity-0 group-hover:opacity-70 transition-opacity" style={{ opacity: sortConfig.key === h ? 1 : undefined }}>
+                                        <ChevronUp size={11} className={`-mb-1 transition-colors ${sortConfig.key === h && sortConfig.dir === 'asc' ? 'text-emerald-400 drop-shadow-[0_0_6px_rgba(16,185,129,0.8)]' : ''}`} />
+                                        <ChevronDown size={11} className={`transition-colors ${sortConfig.key === h && sortConfig.dir === 'desc' ? 'text-emerald-400 drop-shadow-[0_0_6px_rgba(16,185,129,0.8)]' : ''}`} />
                                     </span>
                                 </button>
                             ))}
-                            <div className="text-[10px] font-black tracking-[0.15em] uppercase text-slate-500 text-right pr-2">Actions</div>
+                            <div className="text-xs font-black tracking-[0.14em] uppercase text-slate-400 text-right pr-2">Actions</div>
                         </div>
 
                         {/* Body Slots: System Alerts */}
                         {currentPage === 1 && filteredSmartLeaves.length > 0 && !loading && (
-                            <div className="mb-2 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4">
-                                <div className="mb-3 flex items-center justify-between gap-3">
-                                    <div>
-                                        <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-400">Recent System Alerts</p>
-                                        <p className="text-xs text-slate-500">These are recent auto-detected leave exceptions from the last 14 days.</p>
+                            <div className="mb-3 rounded-2xl border border-amber-500/25 bg-amber-500/[0.04] p-4 shadow-[0_0_25px_rgba(245,158,11,0.06)]">
+                                <div className="mb-3.5 flex items-center justify-between gap-3 px-2">
+                                    <div className="flex items-center gap-2">
+                                        <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shadow-[0_0_10px_rgba(245,158,11,0.8)]" />
+                                        <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-400">System Auto-Detected Leave Exceptions</p>
                                     </div>
-                                    <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-amber-300">
+                                    <span className="rounded-xl border border-amber-500/30 bg-amber-500/15 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-amber-300 shadow-sm">
                                         {filteredSmartLeaves.length} alert{filteredSmartLeaves.length === 1 ? '' : 's'}
                                     </span>
                                 </div>
@@ -798,49 +821,67 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                     {filteredSmartLeaves.map((l) => {
                                         const isSelected = selectedIds.includes(l.id);
                                         return (
-                                            <div key={l.id} className={`grid grid-cols-[40px_100px_minmax(150px,2fr)_minmax(130px,1fr)_minmax(160px,1.5fr)_90px_90px_minmax(140px,1.5fr)_100px_90px] gap-3 px-5 py-3.5 items-center rounded-2xl border transition-all duration-200
-                                                ${isSelected ? 'border-amber-500/50 bg-amber-500/10 shadow-[0_0_15px_rgba(245,158,11,0.15)] ring-1 ring-amber-500/30' : 'border-amber-500/15 bg-black/20 hover:bg-black/30'}`}>
+                                            <div key={l.id} className={`grid grid-cols-[48px_115px_minmax(190px,2fr)_minmax(140px,1.2fr)_minmax(180px,1.4fr)_105px_105px_minmax(200px,2fr)_120px_90px] gap-3 px-6 py-4 items-center rounded-2xl border transition-all duration-200
+                                                ${isSelected ? 'border-amber-500/60 bg-amber-500/[0.14] shadow-[0_0_25px_rgba(245,158,11,0.2)] ring-1 ring-amber-500/40' : 'border-amber-500/20 bg-black/40 hover:bg-black/60'}`}>
                                                 
                                                 {/* Checkbox */}
                                                 <div className="flex items-center justify-center">
                                                     <button
                                                         type="button"
                                                         onClick={() => toggleSelect(l.id)}
-                                                        className="p-1 rounded-md transition-colors"
+                                                        className="p-1.5 rounded-lg transition-colors hover:bg-amber-500/10"
                                                     >
                                                         {isSelected ? (
-                                                            <CheckSquare size={16} className="text-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.6)]" />
+                                                            <CheckSquare size={18} className="text-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.7)]" />
                                                         ) : (
-                                                            <Square size={16} className="text-slate-600 hover:text-slate-400" />
+                                                            <Square size={18} className="text-slate-500 hover:text-slate-300" />
                                                         )}
                                                     </button>
                                                 </div>
 
-                                                <div className="font-mono text-[11px] font-bold text-slate-400/80 uppercase tracking-widest">{fmtDate(l.date)}</div>
-                                                <div className="flex items-center gap-3 min-w-0">
-                                                    <span className="w-8 h-8 rounded-xl bg-[linear-gradient(145deg,rgba(255,255,255,0.05),rgba(255,255,255,0.01))] border border-white/10 text-[11px] font-black text-white flex items-center justify-center flex-shrink-0">{l.employee_name[0]}</span>
-                                                    <span className="text-[13px] font-bold text-white truncate">{l.employee_name}</span>
+                                                <div className="font-mono text-xs font-bold text-slate-200 tracking-wider uppercase">{fmtDate(l.date)}</div>
+                                                
+                                                <div className="flex items-center gap-3.5 min-w-0">
+                                                    <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500/20 to-amber-700/10 border border-amber-500/30 text-xs font-black text-amber-300 flex items-center justify-center flex-shrink-0 shadow-inner">
+                                                        {l.employee_name[0]}
+                                                    </span>
+                                                    <span className="text-sm font-bold text-white truncate tracking-tight">{l.employee_name}</span>
                                                 </div>
+
                                                 <div className="min-w-0">
-                                                    <span className="inline-block max-w-full truncate text-[9px] font-black uppercase tracking-widest text-slate-400 bg-black/40 border border-white/5 px-2.5 py-1.5 rounded-lg">{l.client_name}</span>
+                                                    <span className="inline-block max-w-full truncate text-[11px] font-bold uppercase tracking-wider text-slate-300 bg-white/[0.04] border border-white/10 px-3 py-1.5 rounded-xl shadow-inner">{l.client_name}</span>
                                                 </div>
+
                                                 <div><TypeBadge type={l.leave_type} isSmart /></div>
-                                                <div className={`text-[11px] font-black tracking-wider uppercase ${l.day_count === 1 ? 'text-blue-400' : 'text-amber-400'}`}>{l.day_count === 1 ? 'Full' : 'Half'}</div>
+
                                                 <div>
-                                                    <span className="inline-flex items-center gap-1 text-amber-500/90 text-[10px] uppercase tracking-widest font-black bg-amber-500/10 px-2 py-1 rounded-md border border-amber-500/20"><AlertCircle size={10} /> Auto</span>
+                                                    <span className={`inline-flex items-center px-3 py-1 rounded-xl text-xs font-black tracking-wider uppercase border shadow-sm ${l.day_count === 1 ? 'bg-sky-500/15 text-sky-300 border-sky-500/30' : 'bg-amber-500/15 text-amber-300 border-amber-500/30'}`}>
+                                                        {l.day_count === 1 ? 'Full' : 'Half'}
+                                                    </span>
                                                 </div>
-                                                <div className="min-w-0 text-slate-500 text-[11px] font-semibold truncate" title={l.reason || ''}>
-                                                    <span className="text-amber-500/70 text-[9px] font-black uppercase tracking-widest">{(l.reason || '').replace(/System Auto-Generated:\s*/i, '').replace(/No punch-in recorded/i, 'No Punch In').replace(/Half-Day/i, 'Less Hours')}</span>
+
+                                                <div>
+                                                    <span className="inline-flex items-center gap-1.5 text-amber-300 text-xs uppercase tracking-wider font-black bg-amber-500/15 px-3 py-1 rounded-xl border border-amber-500/30 shadow-sm">
+                                                        <AlertCircle size={12} /> Auto
+                                                    </span>
                                                 </div>
-                                                <div className="truncate text-slate-500 text-[11px] font-bold"><span className="text-indigo-400/70 italic">System Gen</span></div>
-                                                <div className="flex items-center justify-end gap-1.5 w-full">
+
+                                                <div className="min-w-0 text-slate-300 text-xs font-medium truncate" title={l.reason || ''}>
+                                                    <span className="text-amber-400/90 text-xs font-bold">{(l.reason || '').replace(/System Auto-Generated:\s*/i, '').replace(/No punch-in recorded/i, 'No Punch In').replace(/Half-Day/i, 'Less Hours')}</span>
+                                                </div>
+
+                                                <div className="truncate text-slate-400 text-xs font-bold">
+                                                    <span className="text-indigo-400/80 italic font-semibold">System Gen</span>
+                                                </div>
+
+                                                <div className="flex items-center justify-end gap-2 w-full">
                                                     <button onClick={() => startEdit(l)} title="Approve & Save"
-                                                        className="flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30 text-emerald-400 hover:from-emerald-500 hover:to-emerald-400 hover:text-emerald-950 transition-all">
-                                                        <CheckCircle size={14} />
+                                                        className="flex items-center justify-center w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500 hover:text-black transition-all shadow-[0_0_12px_rgba(16,185,129,0.15)] hover:scale-105 active:scale-95">
+                                                        <CheckCircle size={15} />
                                                     </button>
                                                     <button onClick={() => void declineSmartLeave(l)} title="Decline"
-                                                        className="flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-br from-rose-500/20 to-rose-600/10 border border-rose-500/30 text-rose-400 hover:from-rose-500 hover:to-rose-400 hover:text-rose-950 transition-all">
-                                                        <X size={14} />
+                                                        className="flex items-center justify-center w-8 h-8 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-400 hover:bg-rose-500 hover:text-white transition-all shadow-[0_0_12px_rgba(225,29,72,0.15)] hover:scale-105 active:scale-95">
+                                                        <X size={15} />
                                                     </button>
                                                 </div>
                                             </div>
@@ -852,23 +893,23 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
                         {/* Standard Records */}
                         {loading ? (
-                            <div className="py-20 flex flex-col items-center justify-center gap-3">
-                                <div className="w-6 h-6 border-2 border-slate-800 border-t-indigo-500 rounded-full animate-spin shadow-[0_0_15px_rgba(99,102,241,0.4)]" />
-                                <p className="text-xs font-bold tracking-widest uppercase text-slate-500">Loading records…</p>
+                            <div className="py-24 flex flex-col items-center justify-center gap-3.5">
+                                <div className="w-8 h-8 border-3 border-white/10 border-t-indigo-500 rounded-full animate-spin shadow-[0_0_20px_rgba(99,102,241,0.5)]" />
+                                <p className="text-xs font-bold tracking-widest uppercase text-slate-400">Loading leave records…</p>
                             </div>
                         ) : leaves.length === 0 && filteredSmartLeaves.length === 0 ? (
-                            <div className="py-24 flex flex-col items-center justify-center gap-4">
-                                <div className="w-16 h-16 rounded-3xl bg-white/[0.02] border border-white/5 flex items-center justify-center shadow-[inset_0_2px_10px_rgba(255,255,255,0.02)]">
-                                    <CalendarCheck2 size={28} className="text-slate-600" />
+                            <div className="py-28 flex flex-col items-center justify-center gap-4">
+                                <div className="w-16 h-16 rounded-3xl bg-white/[0.03] border border-white/10 flex items-center justify-center shadow-inner">
+                                    <CalendarCheck2 size={30} className="text-slate-500" />
                                 </div>
                                 <div className="text-center">
-                                    <p className="text-sm font-black text-slate-400 tracking-wide">No records found</p>
-                                    <p className="text-xs font-medium text-slate-600 mt-1">{search || hasFilter ? 'Try adjusting your filters' : 'Click "New Record" to add the first leave entry'}</p>
+                                    <p className="text-base font-black text-slate-300 tracking-wide">No records found</p>
+                                    <p className="text-xs font-medium text-slate-500 mt-1.5">{search || hasFilter ? 'Try adjusting your search or active filters' : 'Click "New Record" to add the first leave entry'}</p>
                                 </div>
                                 {(search || hasFilter) && (
                                     <button onClick={() => { setSearch(''); setFilterClient([]); setFilterEmployee([]); setFilterLeaveType([]); setFilterYear(''); setFilterMonth(''); }}
-                                        className="text-xs uppercase tracking-widest text-indigo-400 hover:text-indigo-300 font-black transition-colors px-4 py-2 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20">
-                                        Clear all filters
+                                        className="text-xs uppercase tracking-widest text-indigo-400 hover:text-indigo-300 font-black transition-colors px-5 py-2.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/25">
+                                        Reset all filters
                                     </button>
                                 )}
                             </div>
@@ -878,83 +919,100 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                     const isSelected = selectedIds.includes(l.id);
                                     return (
                                         <motion.div key={l.id}
-                                            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+                                            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
                                             transition={{ duration: 0.2 }}
-                                            className={`grid grid-cols-[40px_100px_minmax(150px,2fr)_minmax(130px,1fr)_minmax(160px,1.5fr)_90px_90px_minmax(140px,1.5fr)_100px_90px] gap-3 px-5 py-3.5 items-center rounded-2xl transition-all duration-300 group cursor-default
-                                                ${editingId === l.id ? 'bg-[linear-gradient(120deg,rgba(245,158,11,0.08),rgba(0,0,0,0.4))] border border-amber-500/30 shadow-[0_0_20px_rgba(245,158,11,0.1)] ring-1 ring-amber-500/20' 
-                                                : isSelected ? 'bg-[linear-gradient(120deg,rgba(99,102,241,0.08),rgba(16,185,129,0.05))] border border-indigo-500/40 shadow-[0_0_20px_rgba(99,102,241,0.15)] ring-1 ring-indigo-500/20' 
-                                                : 'bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] hover:border-white/10 hover:shadow-xl hover:scale-[1.003]'}`}>
+                                            className={`grid grid-cols-[48px_115px_minmax(190px,2fr)_minmax(140px,1.2fr)_minmax(180px,1.4fr)_105px_105px_minmax(200px,2fr)_120px_90px] gap-3 px-6 py-4.5 items-center rounded-2xl transition-all duration-200 group cursor-default
+                                                ${editingId === l.id ? 'bg-amber-500/[0.12] border border-amber-500/50 shadow-[0_0_30px_rgba(245,158,11,0.2)] ring-1 ring-amber-500/30' 
+                                                : isSelected ? 'bg-gradient-to-r from-indigo-600/[0.18] via-purple-600/[0.08] to-transparent border border-indigo-500/60 shadow-[0_0_30px_rgba(99,102,241,0.22)] ring-1 ring-indigo-500/40' 
+                                                : 'bg-[#0e1220]/75 border border-white/[0.06] hover:bg-[#151a2e] hover:border-indigo-500/30 hover:shadow-[0_6px_30px_rgba(0,0,0,0.5)] hover:scale-[1.002]'}`}>
                                             
                                             {/* Checkbox */}
                                             <div className="flex items-center justify-center">
                                                 <button
                                                     type="button"
                                                     onClick={() => toggleSelect(l.id)}
-                                                    className="p-1 rounded-md transition-colors"
+                                                    className="p-1.5 rounded-lg transition-colors hover:bg-white/5"
                                                 >
                                                     {isSelected ? (
-                                                        <CheckSquare size={16} className="text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                                                        <CheckSquare size={18} className="text-emerald-400 drop-shadow-[0_0_10px_rgba(16,185,129,0.7)]" />
                                                     ) : (
-                                                        <Square size={16} className="text-slate-600 hover:text-slate-400" />
+                                                        <Square size={18} className="text-slate-500 hover:text-slate-300" />
                                                     )}
                                                 </button>
                                             </div>
 
-                                            <div className="font-mono text-[11px] font-bold text-slate-400/80 uppercase tracking-widest">{fmtDate(l.date)}</div>
+                                            {/* Date */}
+                                            <div className="font-mono text-xs font-bold text-slate-200 tracking-wider uppercase">{fmtDate(l.date)}</div>
                                             
-                                            <div className="flex items-center gap-3 min-w-0">
-                                                <span className="w-8 h-8 rounded-xl bg-[linear-gradient(145deg,rgba(255,255,255,0.05),rgba(255,255,255,0.01))] border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] text-[11px] font-black text-white flex items-center justify-center flex-shrink-0 drop-shadow-md">
+                                            {/* Employee */}
+                                            <div className="flex items-center gap-3.5 min-w-0">
+                                                <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-white/15 text-xs font-black text-white flex items-center justify-center flex-shrink-0 shadow-inner">
                                                     {l.employee_name[0]}
                                                 </span>
-                                                <span className="text-[13px] font-bold text-white truncate drop-shadow-sm">{l.employee_name}</span>
+                                                <span className="text-sm font-bold text-white truncate tracking-tight group-hover:text-indigo-200 transition-colors">{l.employee_name}</span>
                                             </div>
 
+                                            {/* Client */}
                                             <div className="min-w-0">
-                                                <span className="inline-block max-w-full truncate text-[9px] font-black uppercase tracking-widest text-slate-400 bg-black/40 border border-white/5 px-2.5 py-1.5 rounded-lg shadow-inner">{l.client_name}</span>
+                                                <span className="inline-block max-w-full truncate text-[11px] font-bold uppercase tracking-wider text-slate-300 bg-white/[0.04] border border-white/10 px-3 py-1.5 rounded-xl shadow-inner">{l.client_name}</span>
                                             </div>
 
+                                            {/* Leave Type */}
                                             <div><TypeBadge type={l.leave_type} isSmart={(l as any).is_smart} /></div>
 
-                                            <div className={`text-[11px] font-black tracking-wider uppercase ${l.day_count === 1 ? 'text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.5)]' : 'text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]'}`}>
-                                                {l.day_count === 1 ? 'Full' : 'Half'}
+                                            {/* Duration */}
+                                            <div>
+                                                <span className={`inline-flex items-center px-3 py-1 rounded-xl text-xs font-black tracking-wider uppercase border shadow-sm ${l.day_count === 1 ? 'bg-sky-500/15 text-sky-300 border-sky-500/30' : 'bg-amber-500/15 text-amber-300 border-amber-500/30'}`}>
+                                                    {l.day_count === 1 ? 'Full' : 'Half'}
+                                                </span>
                                             </div>
 
+                                            {/* Planned */}
                                             <div>
                                                 {(l as any).is_smart ? (
-                                                    <span className="inline-flex items-center gap-1 text-amber-500/90 text-[10px] uppercase tracking-widest font-black bg-amber-500/10 px-2 py-1 rounded-md border border-amber-500/20"><AlertCircle size={10} /> Auto</span>
+                                                    <span className="inline-flex items-center gap-1.5 text-amber-300 text-xs uppercase tracking-wider font-black bg-amber-500/15 px-3 py-1 rounded-xl border border-amber-500/30 shadow-sm"><AlertCircle size={12} /> Auto</span>
                                                 ) : l.is_planned
-                                                    ? <span className="inline-flex items-center gap-1 text-emerald-400/90 text-[10px] uppercase tracking-widest font-black bg-emerald-500/10 px-2 py-1 rounded-md border border-emerald-500/20"><CheckCircle size={10} /> Yes</span>
-                                                    : <span className="inline-flex items-center gap-1 text-rose-400/90 text-[10px] uppercase tracking-widest font-black bg-rose-500/10 px-2 py-1 rounded-md border border-rose-500/20"><AlertCircle size={10} /> No</span>}
+                                                    ? <span className="inline-flex items-center gap-1.5 text-emerald-300 text-xs uppercase tracking-wider font-bold bg-emerald-500/15 px-3 py-1 rounded-xl border border-emerald-500/30 shadow-sm"><CheckCircle size={12} /> Yes</span>
+                                                    : <span className="inline-flex items-center gap-1.5 text-rose-300 text-xs uppercase tracking-wider font-bold bg-rose-500/15 px-3 py-1 rounded-xl border border-rose-500/30 shadow-sm"><AlertCircle size={12} /> No</span>}
                                             </div>
 
-                                            <div className="min-w-0 text-slate-500 text-[11px] font-semibold truncate" title={l.reason || ''}>
-                                                {(l as any).is_smart ? <span className="text-amber-500/70 text-[9px] font-black uppercase tracking-widest">{(l.reason || '').replace(/System Auto-Generated:\s*/i, '').replace(/No punch-in recorded/i, 'No Punch In').replace(/Half-Day/i, 'Less Hours')}</span> : (l.reason || <span className="text-slate-700 font-bold">—</span>)}
+                                            {/* Reason */}
+                                            <div className="min-w-0 text-slate-300 text-xs font-medium truncate" title={l.reason || ''}>
+                                                {(l as any).is_smart ? (
+                                                    <span className="text-amber-400/90 text-xs font-bold">{(l.reason || '').replace(/System Auto-Generated:\s*/i, '').replace(/No punch-in recorded/i, 'No Punch In').replace(/Half-Day/i, 'Less Hours')}</span>
+                                                ) : (
+                                                    l.reason ? <span className="text-slate-200">{l.reason}</span> : <span className="text-slate-600 font-bold">—</span>
+                                                )}
                                             </div>
 
-                                            <div className="truncate text-slate-500 text-[11px] font-bold">{(l as any).is_smart ? <span className="text-indigo-400/70 italic drop-shadow-[0_0_5px_rgba(129,140,248,0.3)]">System Gen</span> : l.approver}</div>
+                                            {/* Logged by */}
+                                            <div className="truncate text-slate-400 text-xs font-bold">
+                                                {(l as any).is_smart ? <span className="text-indigo-400/80 italic font-semibold">System Gen</span> : l.approver}
+                                            </div>
 
-                                            <div className="flex items-center justify-end gap-1.5 w-full">
+                                            {/* Actions */}
+                                            <div className="flex items-center justify-end gap-2 w-full">
                                                 {(l as any).is_smart && (
                                                     <>
                                                         <button onClick={() => startEdit(l)} title="Approve & Save"
-                                                            className="flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30 text-emerald-400 hover:from-emerald-500 hover:to-emerald-400 hover:text-emerald-950 transition-all shadow-[0_0_10px_rgba(16,185,129,0.1)] hover:shadow-[0_0_15px_rgba(16,185,129,0.4)] hover:scale-105 active:scale-95">
-                                                            <CheckCircle size={14} className="drop-shadow-sm" />
+                                                            className="flex items-center justify-center w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500 hover:text-black transition-all shadow-[0_0_12px_rgba(16,185,129,0.15)] hover:scale-105 active:scale-95">
+                                                            <CheckCircle size={15} />
                                                         </button>
                                                         <button onClick={() => declineSmartLeave(l)} title="Decline"
-                                                            className="flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-br from-rose-500/20 to-rose-600/10 border border-rose-500/30 text-rose-400 hover:from-rose-500 hover:to-rose-400 hover:text-rose-950 transition-all shadow-[0_0_10px_rgba(225,29,72,0.1)] hover:shadow-[0_0_15px_rgba(225,29,72,0.4)] hover:scale-105 active:scale-95">
-                                                            <X size={14} className="drop-shadow-sm" />
+                                                            className="flex items-center justify-center w-8 h-8 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-400 hover:bg-rose-500 hover:text-white transition-all shadow-[0_0_12px_rgba(225,29,72,0.15)] hover:scale-105 active:scale-95">
+                                                            <X size={15} />
                                                         </button>
                                                     </>
                                                 )}
                                                 {!(l as any).is_smart && (
-                                                    <button onClick={() => startEdit(l)} title="Edit"
-                                                        className="flex items-center justify-center w-8 h-8 rounded-xl bg-white/[0.03] border border-white/10 text-slate-400 hover:bg-amber-500/20 hover:border-amber-500/40 hover:text-amber-400 transition-all shadow-sm hover:shadow-[0_0_15px_rgba(245,158,11,0.2)] hover:scale-105 active:scale-95">
+                                                    <button onClick={() => startEdit(l)} title="Edit Record"
+                                                        className="flex items-center justify-center w-8 h-8 rounded-xl bg-white/[0.04] border border-white/10 text-slate-300 hover:bg-amber-500/20 hover:border-amber-500/50 hover:text-amber-300 transition-all shadow-sm hover:scale-105 active:scale-95">
                                                         <Edit2 size={13} />
                                                     </button>
                                                 )}
                                                 {!(l as any).is_smart && (
-                                                    <button onClick={() => setDeleteId(l.id)} title="Delete"
-                                                        className="flex items-center justify-center w-8 h-8 rounded-xl bg-white/[0.03] border border-white/10 text-slate-400 hover:bg-rose-500/20 hover:border-rose-500/40 hover:text-rose-400 transition-all shadow-sm hover:shadow-[0_0_15px_rgba(225,29,72,0.2)] hover:scale-105 active:scale-95">
+                                                    <button onClick={() => setDeleteId(l.id)} title="Delete Record"
+                                                        className="flex items-center justify-center w-8 h-8 rounded-xl bg-white/[0.04] border border-white/10 text-slate-300 hover:bg-rose-500/20 hover:border-rose-500/50 hover:text-rose-300 transition-all shadow-sm hover:scale-105 active:scale-95">
                                                         <Trash2 size={13} />
                                                     </button>
                                                 )}
@@ -969,41 +1027,38 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
                 {/* Table Footer */}
                 {visibleLeaves.length > 0 && (
-                    <div className="flex items-center justify-between px-5 py-2.5 border-t border-white/[0.05] bg-black/10">
-                        <p className="text-[11px] text-slate-700 font-medium">
+                    <div className="flex items-center justify-between px-6 py-4 border-t border-white/[0.08] bg-black/20 mt-3 rounded-2xl">
+                        <p className="text-xs text-slate-400 font-semibold">
                             {displayedLeaves.length} records · {uniqueEmpls} {uniqueEmpls === 1 ? 'employee' : 'employees'}
                         </p>
-                        <div className="flex items-center gap-4">
-                            <p className="text-[11px] text-slate-600 font-medium">
+                        <div className="flex items-center gap-5">
+                            <p className="text-xs text-slate-400 font-semibold">
                                 <span className="text-emerald-400 font-black">{totalDays}</span> total days
                             </p>
                             {lwpCount > 0 && (
-                                <p className="text-[11px] font-medium">
-                                    <span className="text-red-400 font-black">{lwpCount}</span> <span className="text-slate-600">LWP</span>
+                                <p className="text-xs font-semibold">
+                                    <span className="text-rose-400 font-black">{lwpCount}</span> <span className="text-slate-400">LWP</span>
                                 </p>
                             )}
-                            <p className="text-[11px] text-slate-600 font-medium">
-                                History page <span className="text-white font-black">{currentPage}</span> of <span className="text-white font-black">{totalPages}</span>
-                            </p>
-                            <p className="text-[11px] text-slate-600 font-medium">
-                                Showing <span className="text-white font-black">{pageStart}-{pageEnd}</span> of <span className="text-white font-black">{totalLeaves}</span>
+                            <p className="text-xs text-slate-400 font-semibold">
+                                Page <span className="text-white font-black">{currentPage}</span> of <span className="text-white font-black">{totalPages}</span>
                             </p>
                             <div className="flex items-center gap-2">
                                 <button
                                     type="button"
                                     onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
                                     disabled={currentPage === 1 || loading}
-                                    className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-3 py-1.5 text-[11px] font-bold text-slate-300 transition-all disabled:opacity-30 disabled:pointer-events-none hover:bg-white/5"
+                                    className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 px-3.5 py-2 text-xs font-bold text-slate-300 transition-all disabled:opacity-30 disabled:pointer-events-none hover:bg-white/10 hover:text-white"
                                 >
-                                    <ChevronLeft size={12} /> Prev
+                                    <ChevronLeft size={14} /> Prev
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
                                     disabled={currentPage >= totalPages || loading}
-                                    className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-3 py-1.5 text-[11px] font-bold text-slate-300 transition-all disabled:opacity-30 disabled:pointer-events-none hover:bg-white/5"
+                                    className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 px-3.5 py-2 text-xs font-bold text-slate-300 transition-all disabled:opacity-30 disabled:pointer-events-none hover:bg-white/10 hover:text-white"
                                 >
-                                    Next <ChevronRight size={12} />
+                                    Next <ChevronRight size={14} />
                                 </button>
                             </div>
                         </div>
@@ -1011,7 +1066,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                 )}
             </div>
 
-            {/* ── Floating Futuristic Bulk Action Dock (HUD) ────────────────── */}
+            {/* ── Floating Action Dock (HUD) ────────────────── */}
             <AnimatePresence>
                 {selectedIds.length > 0 && (
                     <motion.div
@@ -1019,10 +1074,10 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 40, scale: 0.95 }}
                         transition={{ type: 'spring', stiffness: 450, damping: 30 }}
-                        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3.5 px-5 py-3 rounded-2xl bg-[#0b0b14]/90 backdrop-blur-2xl border border-indigo-500/30 shadow-[0_15px_50px_rgba(0,0,0,0.9),0_0_30px_rgba(99,102,241,0.25)] ring-1 ring-white/10"
+                        className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-6 py-3.5 rounded-2xl bg-[#0b0e1b]/95 backdrop-blur-2xl border border-indigo-500/40 shadow-[0_20px_60px_rgba(0,0,0,0.9),0_0_35px_rgba(99,102,241,0.3)] ring-1 ring-white/15"
                     >
-                        <div className="flex items-center gap-2.5 pr-3.5 border-r border-white/10">
-                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.8)]" />
+                        <div className="flex items-center gap-3 pr-4 border-r border-white/15">
+                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_12px_rgba(16,185,129,0.9)]" />
                             <span className="text-xs font-black text-white tracking-wide">
                                 {selectedIds.length} <span className="text-slate-400 font-medium">{selectedIds.length === 1 ? 'record' : 'records'} selected</span>
                             </span>
@@ -1031,17 +1086,17 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                         <button
                             type="button"
                             onClick={() => setBulkDrawerOpen(true)}
-                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 text-white text-xs font-black shadow-[0_0_20px_rgba(99,102,241,0.4)] hover:brightness-110 active:scale-95 transition-all"
+                            className="flex items-center gap-2 px-4.5 py-2 rounded-xl bg-gradient-to-r from-indigo-500 via-indigo-600 to-violet-600 text-white text-xs font-black shadow-[0_0_20px_rgba(99,102,241,0.5)] hover:brightness-110 active:scale-95 transition-all"
                         >
-                            <Sliders size={13} /> Bulk Edit
+                            <Sliders size={14} /> Bulk Edit
                         </button>
 
                         <button
                             type="button"
                             onClick={() => setBulkDeleteConfirm(true)}
-                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-400 hover:bg-rose-500/25 hover:text-rose-300 text-xs font-bold active:scale-95 transition-all"
+                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-500/15 border border-rose-500/35 text-rose-300 hover:bg-rose-500/25 hover:text-white text-xs font-bold active:scale-95 transition-all"
                         >
-                            <Trash2 size={13} /> Delete
+                            <Trash2 size={14} /> Delete
                         </button>
 
                         <button
@@ -1050,7 +1105,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                             className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
                             title="Clear selection"
                         >
-                            <X size={14} />
+                            <X size={15} />
                         </button>
                     </motion.div>
                 )}
@@ -1062,49 +1117,49 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                     <>
                         {/* Backdrop */}
                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+                            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-md"
                             onClick={cancelEdit} />
                         {/* Drawer */}
                         <motion.div
                             initial={{ x: '100%', opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: '100%', opacity: 0 }}
                             transition={{ ease: [0.16, 1, 0.3, 1], duration: 0.4 }}
-                            className="fixed right-0 top-0 bottom-0 z-50 w-[460px] bg-[#0C0C14] border-l border-white/[0.08] shadow-[0_0_80px_rgba(0,0,0,0.85)] flex flex-col">
+                            className="fixed right-0 top-0 bottom-0 z-50 w-[500px] bg-[#0a0c16] border-l border-white/10 shadow-[0_0_90px_rgba(0,0,0,0.9)] flex flex-col">
 
                             {/* Drawer Header */}
-                            <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06]">
+                            <div className="flex items-center justify-between px-7 py-5 border-b border-white/[0.08] bg-white/[0.01]">
                                 <div>
-                                    <p className={`font-black text-sm ${editingId ? 'text-amber-400' : 'text-white'}`}>
+                                    <p className={`font-black text-base ${editingId ? 'text-amber-400' : 'text-white'}`}>
                                         {editingId ? 'Edit Leave Record' : 'Record New Leave'}
                                     </p>
-                                    <p className="text-[10px] text-slate-600 mt-0.5 font-medium tracking-wider uppercase">
-                                        {editingId ? 'Update existing entry' : 'Add to leave tracker'}
+                                    <p className="text-[11px] text-slate-500 mt-0.5 font-bold tracking-wider uppercase">
+                                        {editingId ? 'Update existing leave entry' : 'Add new entry to leave tracker'}
                                     </p>
                                 </div>
-                                <button onClick={cancelEdit} className="p-1.5 rounded-lg text-slate-600 hover:text-white hover:bg-white/5 transition-all">
-                                    <X size={16} />
+                                <button onClick={cancelEdit} className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-all">
+                                    <X size={18} />
                                 </button>
                             </div>
 
                             {/* Drawer Body */}
-                            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-                                {/* Mode Selector (Single Day vs Date Range) — Only when creating new */}
+                            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-7 py-6 space-y-5">
+                                {/* Mode Selector (Single Day vs Date Range) */}
                                 {!editingId && (
-                                    <div className="p-1 rounded-xl bg-white/[0.03] border border-white/[0.06] flex gap-1">
+                                    <div className="p-1.5 rounded-2xl bg-[#121626] border border-white/10 flex gap-1.5">
                                         <button
                                             type="button"
                                             onClick={() => setCreationMode('single')}
-                                            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5
-                                                ${creationMode === 'single' ? 'bg-white/10 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+                                            className={`flex-1 py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2
+                                                ${creationMode === 'single' ? 'bg-indigo-600 text-white shadow-[0_0_15px_rgba(99,102,241,0.4)]' : 'text-slate-400 hover:text-slate-200'}`}
                                         >
                                             Single Day
                                         </button>
                                         <button
                                             type="button"
                                             onClick={() => setCreationMode('range')}
-                                            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5
-                                                ${creationMode === 'range' ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+                                            className={`flex-1 py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2
+                                                ${creationMode === 'range' ? 'bg-indigo-600 text-white shadow-[0_0_15px_rgba(99,102,241,0.4)]' : 'text-slate-400 hover:text-slate-200'}`}
                                         >
-                                            <CalendarRange size={13} /> Date Range
+                                            <CalendarRange size={14} /> Date Range
                                         </button>
                                     </div>
                                 )}
@@ -1115,8 +1170,8 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                         <input type="date" value={date} onChange={e => setDate(e.target.value)} required className={inp} />
                                     </Field>
                                 ) : (
-                                    <div className="space-y-3 p-3.5 rounded-xl bg-indigo-500/[0.04] border border-indigo-500/20">
-                                        <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-3.5 p-4 rounded-2xl bg-indigo-500/[0.05] border border-indigo-500/20">
+                                        <div className="grid grid-cols-2 gap-3.5">
                                             <Field label="Start Date">
                                                 <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} required className={inp} />
                                             </Field>
@@ -1126,18 +1181,18 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                         </div>
 
                                         <div className="flex items-center justify-between pt-1">
-                                            <label className="flex items-center gap-2 cursor-pointer">
+                                            <label className="flex items-center gap-2.5 cursor-pointer">
                                                 <input
                                                     type="checkbox"
                                                     checked={skipWeekends}
                                                     onChange={e => setSkipWeekends(e.target.checked)}
                                                     className="w-4 h-4 rounded border-white/10 bg-white/5 text-indigo-500 focus:ring-0 cursor-pointer"
                                                 />
-                                                <span className="text-xs text-slate-400 font-medium">Skip Weekends (Sat/Sun)</span>
+                                                <span className="text-xs text-slate-300 font-semibold">Skip Weekends (Sat/Sun)</span>
                                             </label>
 
-                                            <span className="inline-flex items-center gap-1 text-[11px] font-black text-indigo-400 bg-indigo-500/15 px-2.5 py-1 rounded-lg border border-indigo-500/25">
-                                                <Sparkles size={11} /> {calculatedRangeDates.length} working days
+                                            <span className="inline-flex items-center gap-1.5 text-xs font-black text-indigo-300 bg-indigo-500/20 px-3 py-1 rounded-xl border border-indigo-500/30">
+                                                <Sparkles size={12} /> {calculatedRangeDates.length} working days
                                             </span>
                                         </div>
                                     </div>
@@ -1145,23 +1200,23 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
                                 <Field label="Client">
                                     <SelectWrap>
-                                        <select value={selectedClient} onChange={e => { setSelectedClient(e.target.value); setEmployeeName(''); }} required className={sel}>
-                                            <option value="" className="bg-[#0d0d1a]">Select client…</option>
-                                            {clients.map(c => <option key={c.id} value={c.name} className="bg-[#0d0d1a]">{c.name}</option>)}
+                                        <select value={selectedClient} onChange={e => { setSelectedClient(e.target.value); }} required className={sel}>
+                                            <option value="" className="bg-[#0d0f18]">Select client…</option>
+                                            {clients.map(c => <option key={c.id} value={c.name} className="bg-[#0d0f18]">{c.name}</option>)}
                                         </select>
                                     </SelectWrap>
                                 </Field>
 
-                                <Field label="Employee">
+                                <Field label="Employee / Recruiter">
                                     <SelectWrap>
-                                        <select value={employeeName} onChange={e => setEmployeeName(e.target.value)} required disabled={!selectedClient} className={`${sel} disabled:opacity-40`}>
-                                            <option value="" className="bg-[#0d0d1a]">{selectedClient ? 'Select employee…' : '← Pick client first'}</option>
-                                            {availableEmployees.map(u => <option key={u.id} value={u.name} className="bg-[#0d0d1a]">{u.name}</option>)}
+                                        <select value={employeeName} onChange={e => setEmployeeName(e.target.value)} required className={sel}>
+                                            <option value="" className="bg-[#0d0f18]">Select recruiter…</option>
+                                            {availableEmployees.map(u => <option key={u.id} value={u.name} className="bg-[#0d0f18]">{u.name}</option>)}
                                         </select>
                                     </SelectWrap>
                                     {employeeName && (
-                                        <p className="text-[10px] text-slate-600 mt-1.5">
-                                            Current logged leaves: <span className="text-emerald-400 font-bold">
+                                        <p className="text-[11px] text-slate-400 mt-1.5 font-medium">
+                                            Logged leaves for {employeeName}: <span className="text-emerald-400 font-bold">
                                                 {leaves.filter(l => l.employee_name === employeeName).reduce((s, l) => s + Number(l.day_count), 0)} days
                                             </span>
                                         </p>
@@ -1179,20 +1234,20 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                                 setDayCount(1);
                                             }
                                         }} className={sel}>
-                                            {ALL_LEAVE_TYPES.map(t => <option key={t} value={t} className="bg-[#0d0d1a]">{t}</option>)}
+                                            {ALL_LEAVE_TYPES.map(t => <option key={t} value={t} className="bg-[#0d0f18]">{t}</option>)}
                                         </select>
                                     </SelectWrap>
                                 </Field>
 
                                 {/* Planned + Duration — Segmented Controls */}
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className={lbl}>Planned?</label>
-                                        <div className="flex rounded-lg overflow-hidden border border-white/[0.08] bg-white/[0.02]">
+                                        <div className="flex rounded-xl overflow-hidden border border-white/10 bg-[#121626] p-1">
                                             <button type="button" onClick={() => setIsPlanned(true)}
-                                                className={`flex-1 py-2 text-xs font-black tracking-wide transition-all duration-150 ${isPlanned ? 'bg-emerald-500/20 text-emerald-400' : 'text-slate-600 hover:text-slate-400'}`}>Yes</button>
+                                                className={`flex-1 py-2 text-xs font-black tracking-wide rounded-lg transition-all ${isPlanned ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/30' : 'text-slate-500 hover:text-slate-300'}`}>Yes</button>
                                             <button type="button" onClick={() => setIsPlanned(false)}
-                                                className={`flex-1 py-2 text-xs font-black tracking-wide transition-all duration-150 ${!isPlanned ? 'bg-rose-500/15 text-rose-400' : 'text-slate-600 hover:text-slate-400'}`}>No</button>
+                                                className={`flex-1 py-2 text-xs font-black tracking-wide rounded-lg transition-all ${!isPlanned ? 'bg-rose-500/25 text-rose-300 border border-rose-500/30' : 'text-slate-500 hover:text-slate-300'}`}>No</button>
                                         </div>
                                     </div>
                                     <div>
@@ -1204,14 +1259,14 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                                 step="0.5"
                                                 value={dayCount} 
                                                 onChange={e => setDayCount(Number(e.target.value))}
-                                                className="w-full bg-white/[0.03] border border-white/10 rounded-lg px-3 py-[7px] text-sm text-white focus:outline-none focus:border-indigo-500/50 transition-colors"
+                                                className={inp}
                                             />
                                         ) : (
-                                            <div className="flex rounded-lg overflow-hidden border border-white/[0.08] bg-white/[0.02]">
+                                            <div className="flex rounded-xl overflow-hidden border border-white/10 bg-[#121626] p-1">
                                                 <button type="button" onClick={() => setDayCount(1)}
-                                                    className={`flex-1 py-2 text-xs font-black tracking-wide transition-all duration-150 ${dayCount === 1 ? 'bg-blue-500/20 text-blue-400' : 'text-slate-600 hover:text-slate-400'}`}>Full</button>
+                                                    className={`flex-1 py-2 text-xs font-black tracking-wide rounded-lg transition-all ${dayCount === 1 ? 'bg-sky-500/25 text-sky-300 border border-sky-500/30' : 'text-slate-500 hover:text-slate-300'}`}>Full (1.0)</button>
                                                 <button type="button" onClick={() => setDayCount(0.5)}
-                                                    className={`flex-1 py-2 text-xs font-black tracking-wide transition-all duration-150 ${dayCount === 0.5 ? 'bg-amber-500/20 text-amber-400' : 'text-slate-600 hover:text-slate-400'}`}>Half</button>
+                                                    className={`flex-1 py-2 text-xs font-black tracking-wide rounded-lg transition-all ${dayCount === 0.5 ? 'bg-amber-500/25 text-amber-300 border border-amber-500/30' : 'text-slate-500 hover:text-slate-300'}`}>Half (0.5)</button>
                                             </div>
                                         )}
                                     </div>
@@ -1222,26 +1277,26 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                         placeholder="e.g. Fever, personal work, vacation…" className={inp} />
                                 </Field>
 
-                                <div className="pt-2 flex items-center gap-1.5">
-                                    <span className="text-[10px] text-slate-700">Logged by</span>
-                                    <span className="text-[10px] font-bold text-slate-500">{currentUser.name}</span>
+                                <div className="pt-2 flex items-center gap-2">
+                                    <span className="text-xs text-slate-500">Logged by</span>
+                                    <span className="text-xs font-bold text-slate-300">{currentUser.name}</span>
                                 </div>
                             </form>
 
                             {/* Drawer Footer */}
-                            <div className="px-6 py-5 border-t border-white/[0.06] flex gap-3">
-                                <motion.button type="button" onClick={handleSubmit as any} disabled={saving || !selectedClient || !employeeName}
+                            <div className="px-7 py-5 border-t border-white/[0.08] flex gap-3.5 bg-white/[0.01]">
+                                <motion.button type="button" onClick={handleSubmit as any} disabled={saving || !employeeName}
                                     whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
-                                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold tracking-wide transition-all disabled:opacity-40 shadow-[inset_0_1px_0_rgba(255,255,255,0.4)]
-                                        ${editingId ? 'bg-amber-500 text-black hover:bg-amber-400' : 'bg-emerald-500 text-black hover:bg-emerald-400'}`}>
+                                    className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-black tracking-wide transition-all disabled:opacity-40 shadow-lg
+                                        ${editingId ? 'bg-amber-500 text-black hover:bg-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.3)]' : 'bg-emerald-500 text-black hover:bg-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.3)]'}`}>
                                     {saving
-                                        ? <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                                        : editingId ? <><Edit2 size={16} /> Update</> 
+                                        ? <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                                        : editingId ? <><Edit2 size={16} /> Update Record</> 
                                         : creationMode === 'range' ? <><CalendarRange size={16} /> Save {calculatedRangeDates.length} Days</>
                                         : <><Plus size={16} /> Save Record</>}
                                 </motion.button>
                                 <button type="button" onClick={cancelEdit}
-                                    className="px-5 py-2.5 rounded-lg border border-white/[0.08] text-slate-400 text-sm font-bold hover:text-white hover:border-white/15 transition-all">
+                                    className="px-6 py-3 rounded-xl border border-white/10 text-slate-300 text-sm font-bold hover:text-white hover:border-white/20 transition-all">
                                     Cancel
                                 </button>
                             </div>
@@ -1256,130 +1311,130 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                     <>
                         {/* Backdrop */}
                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+                            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-md"
                             onClick={() => setBulkDrawerOpen(false)} />
                         
                         {/* Drawer */}
                         <motion.div
                             initial={{ x: '100%', opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: '100%', opacity: 0 }}
                             transition={{ ease: [0.16, 1, 0.3, 1], duration: 0.4 }}
-                            className="fixed right-0 top-0 bottom-0 z-50 w-[460px] bg-[#0C0C14] border-l border-white/[0.08] shadow-[0_0_80px_rgba(0,0,0,0.85)] flex flex-col">
+                            className="fixed right-0 top-0 bottom-0 z-50 w-[500px] bg-[#0a0c16] border-l border-white/10 shadow-[0_0_90px_rgba(0,0,0,0.9)] flex flex-col">
 
                             {/* Drawer Header */}
-                            <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06]">
+                            <div className="flex items-center justify-between px-7 py-5 border-b border-white/[0.08] bg-white/[0.01]">
                                 <div>
-                                    <div className="flex items-center gap-2">
-                                        <p className="font-black text-sm text-indigo-400">Bulk Edit Records</p>
-                                        <span className="px-2 py-0.5 rounded-md bg-indigo-500/20 text-[10px] font-black text-indigo-300 border border-indigo-500/30">
+                                    <div className="flex items-center gap-2.5">
+                                        <p className="font-black text-base text-indigo-400">Bulk Edit Records</p>
+                                        <span className="px-2.5 py-1 rounded-lg bg-indigo-500/20 text-xs font-black text-indigo-300 border border-indigo-500/30">
                                             {selectedIds.length} records
                                         </span>
                                     </div>
-                                    <p className="text-[10px] text-slate-500 mt-0.5 font-medium tracking-wider uppercase">
-                                        Batch update selected leaves
+                                    <p className="text-[11px] text-slate-500 mt-0.5 font-bold tracking-wider uppercase">
+                                        Batch update selected leave entries
                                     </p>
                                 </div>
-                                <button onClick={() => setBulkDrawerOpen(false)} className="p-1.5 rounded-lg text-slate-600 hover:text-white hover:bg-white/5 transition-all">
-                                    <X size={16} />
+                                <button onClick={() => setBulkDrawerOpen(false)} className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-all">
+                                    <X size={18} />
                                 </button>
                             </div>
 
                             {/* Drawer Body */}
-                            <form onSubmit={handleBulkSubmit} className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+                            <form onSubmit={handleBulkSubmit} className="flex-1 overflow-y-auto px-7 py-6 space-y-5">
                                 {/* Selected items snippet preview */}
-                                <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-2">
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Selected Target Entries</p>
-                                    <div className="max-h-28 overflow-y-auto space-y-1.5 pr-1">
+                                <div className="p-4 rounded-2xl bg-[#121626] border border-white/10 space-y-2.5">
+                                    <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Selected Target Entries ({selectedIds.length})</p>
+                                    <div className="max-h-32 overflow-y-auto space-y-2 pr-1">
                                         {selectedRecords.map(r => (
-                                            <div key={r.id} className="flex items-center justify-between text-xs py-1 px-2 rounded-lg bg-black/40 border border-white/5">
-                                                <span className="font-semibold text-white truncate max-w-[180px]">{r.employee_name}</span>
-                                                <span className="text-[10px] font-mono text-slate-400">{fmtDate(r.date)}</span>
+                                            <div key={r.id} className="flex items-center justify-between text-xs py-1.5 px-3 rounded-xl bg-black/50 border border-white/5">
+                                                <span className="font-bold text-white truncate max-w-[200px]">{r.employee_name}</span>
+                                                <span className="text-xs font-mono font-semibold text-slate-300">{fmtDate(r.date)}</span>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
 
                                 {/* Field 1: Leave Type */}
-                                <div className="space-y-2 p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+                                <div className="space-y-2.5 p-4 rounded-2xl bg-[#121626] border border-white/10">
                                     <div className="flex items-center justify-between">
-                                        <label className="flex items-center gap-2 cursor-pointer">
+                                        <label className="flex items-center gap-2.5 cursor-pointer">
                                             <input
                                                 type="checkbox"
                                                 checked={updateLeaveType}
                                                 onChange={e => setUpdateLeaveType(e.target.checked)}
                                                 className="w-4 h-4 rounded border-white/10 bg-white/5 text-indigo-500 focus:ring-0 cursor-pointer"
                                             />
-                                            <span className="text-xs font-bold text-slate-300">Update Leave Type</span>
+                                            <span className="text-xs font-black uppercase tracking-wider text-slate-200">Update Leave Type</span>
                                         </label>
                                     </div>
 
                                     {updateLeaveType && (
                                         <SelectWrap>
                                             <select value={bulkLeaveType} onChange={e => setBulkLeaveType(e.target.value)} className={sel}>
-                                                {ALL_LEAVE_TYPES.map(t => <option key={t} value={t} className="bg-[#0d0d1a]">{t}</option>)}
+                                                {ALL_LEAVE_TYPES.map(t => <option key={t} value={t} className="bg-[#0d0f18]">{t}</option>)}
                                             </select>
                                         </SelectWrap>
                                     )}
                                 </div>
 
                                 {/* Field 2: Planned Status */}
-                                <div className="space-y-2 p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+                                <div className="space-y-2.5 p-4 rounded-2xl bg-[#121626] border border-white/10">
                                     <div className="flex items-center justify-between">
-                                        <label className="flex items-center gap-2 cursor-pointer">
+                                        <label className="flex items-center gap-2.5 cursor-pointer">
                                             <input
                                                 type="checkbox"
                                                 checked={updatePlanned}
                                                 onChange={e => setUpdatePlanned(e.target.checked)}
                                                 className="w-4 h-4 rounded border-white/10 bg-white/5 text-indigo-500 focus:ring-0 cursor-pointer"
                                             />
-                                            <span className="text-xs font-bold text-slate-300">Update Planned Status</span>
+                                            <span className="text-xs font-black uppercase tracking-wider text-slate-200">Update Planned Status</span>
                                         </label>
                                     </div>
 
                                     {updatePlanned && (
-                                        <div className="flex rounded-lg overflow-hidden border border-white/[0.08] bg-white/[0.02]">
+                                        <div className="flex rounded-xl overflow-hidden border border-white/10 bg-black/40 p-1">
                                             <button type="button" onClick={() => setBulkIsPlanned(true)}
-                                                className={`flex-1 py-2 text-xs font-black tracking-wide transition-all duration-150 ${bulkIsPlanned ? 'bg-emerald-500/20 text-emerald-400' : 'text-slate-600 hover:text-slate-400'}`}>Yes</button>
+                                                className={`flex-1 py-2 text-xs font-black tracking-wide rounded-lg transition-all ${bulkIsPlanned ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/30' : 'text-slate-500 hover:text-slate-300'}`}>Yes</button>
                                             <button type="button" onClick={() => setBulkIsPlanned(false)}
-                                                className={`flex-1 py-2 text-xs font-black tracking-wide transition-all duration-150 ${!bulkIsPlanned ? 'bg-rose-500/15 text-rose-400' : 'text-slate-600 hover:text-slate-400'}`}>No</button>
+                                                className={`flex-1 py-2 text-xs font-black tracking-wide rounded-lg transition-all ${!bulkIsPlanned ? 'bg-rose-500/25 text-rose-300 border border-rose-500/30' : 'text-slate-500 hover:text-slate-300'}`}>No</button>
                                         </div>
                                     )}
                                 </div>
 
                                 {/* Field 3: Duration */}
-                                <div className="space-y-2 p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+                                <div className="space-y-2.5 p-4 rounded-2xl bg-[#121626] border border-white/10">
                                     <div className="flex items-center justify-between">
-                                        <label className="flex items-center gap-2 cursor-pointer">
+                                        <label className="flex items-center gap-2.5 cursor-pointer">
                                             <input
                                                 type="checkbox"
                                                 checked={updateDuration}
                                                 onChange={e => setUpdateDuration(e.target.checked)}
                                                 className="w-4 h-4 rounded border-white/10 bg-white/5 text-indigo-500 focus:ring-0 cursor-pointer"
                                             />
-                                            <span className="text-xs font-bold text-slate-300">Update Duration</span>
+                                            <span className="text-xs font-black uppercase tracking-wider text-slate-200">Update Duration</span>
                                         </label>
                                     </div>
 
                                     {updateDuration && (
-                                        <div className="flex rounded-lg overflow-hidden border border-white/[0.08] bg-white/[0.02]">
+                                        <div className="flex rounded-xl overflow-hidden border border-white/10 bg-black/40 p-1">
                                             <button type="button" onClick={() => setBulkDayCount(1)}
-                                                className={`flex-1 py-2 text-xs font-black tracking-wide transition-all duration-150 ${bulkDayCount === 1 ? 'bg-blue-500/20 text-blue-400' : 'text-slate-600 hover:text-slate-400'}`}>Full Day (1.0)</button>
+                                                className={`flex-1 py-2 text-xs font-black tracking-wide rounded-lg transition-all ${bulkDayCount === 1 ? 'bg-sky-500/25 text-sky-300 border border-sky-500/30' : 'text-slate-500 hover:text-slate-300'}`}>Full Day (1.0)</button>
                                             <button type="button" onClick={() => setBulkDayCount(0.5)}
-                                                className={`flex-1 py-2 text-xs font-black tracking-wide transition-all duration-150 ${bulkDayCount === 0.5 ? 'bg-amber-500/20 text-amber-400' : 'text-slate-600 hover:text-slate-400'}`}>Half Day (0.5)</button>
+                                                className={`flex-1 py-2 text-xs font-black tracking-wide rounded-lg transition-all ${bulkDayCount === 0.5 ? 'bg-amber-500/25 text-amber-300 border border-amber-500/30' : 'text-slate-500 hover:text-slate-300'}`}>Half Day (0.5)</button>
                                         </div>
                                     )}
                                 </div>
 
                                 {/* Field 4: Reason */}
-                                <div className="space-y-2 p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+                                <div className="space-y-2.5 p-4 rounded-2xl bg-[#121626] border border-white/10">
                                     <div className="flex items-center justify-between">
-                                        <label className="flex items-center gap-2 cursor-pointer">
+                                        <label className="flex items-center gap-2.5 cursor-pointer">
                                             <input
                                                 type="checkbox"
                                                 checked={updateReason}
                                                 onChange={e => setUpdateReason(e.target.checked)}
                                                 className="w-4 h-4 rounded border-white/10 bg-white/5 text-indigo-500 focus:ring-0 cursor-pointer"
                                             />
-                                            <span className="text-xs font-bold text-slate-300">Update Reason</span>
+                                            <span className="text-xs font-black uppercase tracking-wider text-slate-200">Update Reason</span>
                                         </label>
                                     </div>
 
@@ -1388,7 +1443,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                             type="text"
                                             value={bulkReason}
                                             onChange={e => setBulkReason(e.target.value)}
-                                            placeholder="e.g. Approved leave, emergency, etc."
+                                            placeholder="e.g. Approved leave, emergency, brother marriage, etc."
                                             className={inp}
                                         />
                                     )}
@@ -1396,16 +1451,16 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                             </form>
 
                             {/* Drawer Footer */}
-                            <div className="px-6 py-5 border-t border-white/[0.06] flex gap-3">
+                            <div className="px-7 py-5 border-t border-white/[0.08] flex gap-3.5 bg-white/[0.01]">
                                 <motion.button
                                     type="button"
                                     onClick={handleBulkSubmit as any}
                                     disabled={bulkSaving || (!updateLeaveType && !updatePlanned && !updateDuration && !updateReason)}
                                     whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
-                                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-gradient-to-r from-indigo-500 to-violet-600 text-white text-sm font-bold tracking-wide transition-all disabled:opacity-40 shadow-[0_0_20px_rgba(99,102,241,0.3)]"
+                                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-indigo-500 via-indigo-600 to-violet-600 text-white text-sm font-black tracking-wide transition-all disabled:opacity-40 shadow-[0_0_25px_rgba(99,102,241,0.35)]"
                                 >
                                     {bulkSaving ? (
-                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                     ) : (
                                         <><Check size={16} /> Apply to {selectedIds.length} Records</>
                                     )}
@@ -1413,7 +1468,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                 <button
                                     type="button"
                                     onClick={() => setBulkDrawerOpen(false)}
-                                    className="px-5 py-2.5 rounded-lg border border-white/[0.08] text-slate-400 text-sm font-bold hover:text-white hover:border-white/15 transition-all"
+                                    className="px-6 py-3 rounded-xl border border-white/10 text-slate-300 text-sm font-bold hover:text-white hover:border-white/20 transition-all"
                                 >
                                     Cancel
                                 </button>
