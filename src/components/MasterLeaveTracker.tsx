@@ -106,7 +106,6 @@ function StatCard({
     label, 
     value, 
     sub, 
-    color, 
     accent, 
     active, 
     onClick,
@@ -115,7 +114,6 @@ function StatCard({
     label: string; 
     value: string | number; 
     sub?: string; 
-    color: string; 
     accent: string; 
     active?: boolean; 
     onClick?: () => void;
@@ -125,27 +123,33 @@ function StatCard({
         <button
             type="button"
             onClick={onClick}
-            className={`relative flex flex-col text-left rounded-xl bg-[#0c0e17]/85 backdrop-blur-md border px-4.5 py-3.5 overflow-hidden transition-all duration-200 group cursor-pointer ${
+            className={`relative flex flex-col justify-between text-left rounded-2xl bg-[#0e111d] border min-h-[116px] p-4.5 transition-all duration-200 group cursor-pointer overflow-hidden ${
                 active 
-                    ? 'border-indigo-500/50 bg-indigo-500/[0.08] shadow-[0_0_24px_rgba(99,102,241,0.18)] ring-1 ring-indigo-500/30' 
-                    : 'border-white/[0.08] hover:border-white/20 hover:bg-[#121626]'
+                    ? 'border-indigo-500/60 bg-gradient-to-b from-indigo-500/[0.12] to-indigo-500/[0.03] shadow-[0_0_24px_rgba(99,102,241,0.18)] ring-1 ring-indigo-500/40' 
+                    : 'border-white/[0.08] hover:border-white/20 hover:bg-[#131726]'
             }`}
         >
-            <div className={`absolute top-0 left-0 right-0 h-[2px] ${accent} ${active ? 'opacity-100' : 'opacity-60 group-hover:opacity-100 transition-opacity'}`} />
+            <div className={`absolute top-0 left-0 right-0 h-[2px] ${accent} ${active ? 'opacity-100' : 'opacity-50 group-hover:opacity-100 transition-opacity'}`} />
             
-            <div className="flex items-center justify-between gap-2">
-                <p className={`text-2xl font-extrabold tabular-nums tracking-tight leading-none ${color}`}>{value}</p>
-                <div className={`w-7 h-7 rounded-lg flex items-center justify-center border ${active ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300' : 'bg-white/[0.03] border-white/[0.08] text-zinc-400 group-hover:text-white'}`}>
+            {/* Top Row: Label & Icon */}
+            <div className="flex items-center justify-between w-full">
+                <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 group-hover:text-zinc-200 transition-colors">{label}</span>
+                    {active && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse shadow-[0_0_8px_rgba(99,102,241,0.8)]" />}
+                </div>
+                <div className={`w-7 h-7 rounded-lg flex items-center justify-center border transition-all ${active ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300' : 'bg-white/[0.04] border-white/[0.08] text-zinc-400 group-hover:text-white group-hover:bg-white/[0.08]'}`}>
                     <Icon size={14} />
                 </div>
             </div>
 
-            <div className="mt-2.5">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
-                    <span>{label}</span>
-                    {active && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />}
-                </p>
-                {sub && <p className="text-[10px] text-zinc-500 font-medium mt-0.5">{sub}</p>}
+            {/* Middle: Crisp Count */}
+            <div className="my-1">
+                <p className="text-2xl font-black text-white tabular-nums tracking-tight leading-none">{value}</p>
+            </div>
+
+            {/* Bottom Row: Subtitle */}
+            <div className="flex items-center justify-between w-full">
+                <p className="text-[11px] text-zinc-400 font-normal truncate leading-none">{sub || '—'}</p>
             </div>
         </button>
     );
@@ -692,12 +696,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                         <FileSpreadsheet size={19} className="text-indigo-400" />
                     </div>
                     <div>
-                        <div className="flex items-center gap-2.5">
-                            <h1 className="text-xl font-extrabold text-white tracking-tight">Leave Management</h1>
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                Live Desk
-                            </span>
-                        </div>
+                        <h1 className="text-xl font-extrabold text-white tracking-tight">Leave Management</h1>
                         <p className="text-xs text-zinc-400 mt-0.5 font-medium">Enterprise workforce attendance, historical balances, and leave approvals</p>
                     </div>
                 </div>
@@ -706,14 +705,14 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                         type="button"
                         onClick={handleExport} 
                         disabled={visibleLeaves.length === 0}
-                        className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/[0.04] border border-white/[0.08] text-zinc-300 text-xs font-semibold hover:bg-white/[0.08] hover:text-white transition-all disabled:opacity-30 disabled:pointer-events-none"
+                        className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-zinc-200 text-xs font-semibold hover:bg-white/[0.08] hover:text-white transition-all disabled:opacity-30 disabled:pointer-events-none"
                     >
                         <Download size={13} /> Export CSV
                     </button>
                     <button 
                         type="button"
                         onClick={openNew}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-bold tracking-wide transition-all shadow-[0_0_24px_rgba(99,102,241,0.35)] hover:scale-[1.01] active:scale-[0.99]"
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white text-xs font-bold tracking-wide transition-all shadow-[0_0_20px_rgba(99,102,241,0.3)] hover:scale-[1.01] active:scale-[0.99]"
                     >
                         <Plus size={14} /> New Record
                     </button>
@@ -721,13 +720,12 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
             </div>
 
             {/* ── Interactive KPI Stat Ribbon ─────────────────────────────── */}
-            <div className="grid grid-cols-5 gap-3">
+            <div className="grid grid-cols-5 gap-3.5">
                 <StatCard 
                     label="Total Leaves" 
                     value={totalDays.toFixed(1)} 
-                    color="text-emerald-400" 
                     accent="bg-emerald-500" 
-                    sub="all approved days" 
+                    sub="All approved days" 
                     icon={Activity}
                     active={filterLeaveType.length === 0}
                     onClick={() => setFilterLeaveType([])}
@@ -735,9 +733,8 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                 <StatCard 
                     label="Sick Leaves" 
                     value={sickCount.toFixed(1)} 
-                    color="text-violet-400" 
                     accent="bg-violet-500" 
-                    sub="medical & health" 
+                    sub="Medical & health" 
                     icon={HeartPulse}
                     active={filterLeaveType.includes('Sick Leave')}
                     onClick={() => setFilterLeaveType(prev => prev.includes('Sick Leave') ? [] : ['Sick Leave', 'HD-Sick'])}
@@ -745,9 +742,8 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                 <StatCard 
                     label="Casual Leaves" 
                     value={casualCount.toFixed(1)} 
-                    color="text-sky-400" 
                     accent="bg-sky-500" 
-                    sub="personal & vacation" 
+                    sub="Personal & vacation" 
                     icon={CalendarIcon}
                     active={filterLeaveType.includes('Casual Leave')}
                     onClick={() => setFilterLeaveType(prev => prev.includes('Casual Leave') ? [] : ['Casual Leave', 'HD-Casual'])}
@@ -755,9 +751,8 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                 <StatCard 
                     label="LWP Days" 
                     value={lwpCount.toFixed(1)} 
-                    color={lwpCount > 0 ? 'text-rose-400' : 'text-zinc-500'} 
-                    accent={lwpCount > 0 ? 'bg-rose-500' : 'bg-zinc-800'} 
-                    sub="leave without pay" 
+                    accent={lwpCount > 0 ? 'bg-rose-500' : 'bg-zinc-700'} 
+                    sub="Leave without pay" 
                     icon={Clock}
                     active={filterLeaveType.includes('LWP')}
                     onClick={() => setFilterLeaveType(prev => prev.includes('LWP') ? [] : ['LWP', 'HD-LWP', 'LWP-Doc not Received'])}
@@ -765,9 +760,8 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                 <StatCard 
                     label="Unplanned" 
                     value={unplanned} 
-                    color={unplanned > 0 ? 'text-amber-400' : 'text-zinc-500'} 
-                    accent={unplanned > 0 ? 'bg-amber-500' : 'bg-zinc-800'} 
-                    sub="missing prior notice" 
+                    accent={unplanned > 0 ? 'bg-amber-500' : 'bg-zinc-700'} 
+                    sub="Missing prior notice" 
                     icon={AlertCircle}
                 />
             </div>
@@ -777,14 +771,14 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                 <div className="flex items-center gap-2.5 flex-wrap">
                     {/* Search Input with Hotkey */}
                     <div className="relative flex-1 min-w-[240px] max-w-[360px]">
-                        <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+                        <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
                         <input 
                             ref={searchInputRef}
                             type="text" 
                             placeholder="Search records, recruiter, client…" 
                             value={search} 
                             onChange={e => setSearch(e.target.value)}
-                            className="w-full bg-[#121626] border border-white/[0.08] rounded-xl py-2 pl-9 pr-14 text-xs text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500/80 focus:ring-1 focus:ring-indigo-500/30 transition-all font-medium" 
+                            className="w-full bg-[#121626] border border-white/[0.08] rounded-xl h-9.5 pl-10 pr-10 text-xs text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500/80 focus:ring-1 focus:ring-indigo-500/30 transition-all font-medium" 
                         />
                         {search ? (
                             <button 
@@ -795,7 +789,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                 <X size={13} />
                             </button>
                         ) : (
-                            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-mono font-bold text-zinc-500 bg-white/[0.04] border border-white/[0.08] px-1.5 py-0.5 rounded pointer-events-none">
+                            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-mono font-semibold text-zinc-400 bg-white/[0.06] border border-white/10 px-1.5 py-0.5 rounded pointer-events-none">
                                 /
                             </span>
                         )}
