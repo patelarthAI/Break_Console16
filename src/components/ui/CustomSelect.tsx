@@ -99,36 +99,31 @@ export default function CustomSelect(props: CustomSelectProps) {
           width: '100%',
           height: '36px',
           padding: '0 12px',
-          borderRadius: 'var(--r-input)',
-          border: `1px solid ${isOpen ? 'var(--accent-border)' : hasValue ? 'var(--accent-border)' : 'var(--border)'}`,
-          background: hasValue ? 'var(--accent-dim)' : 'var(--bg-input)',
-          fontFamily: 'var(--f-body)',
+          borderRadius: '8px',
+          border: `1px solid ${isOpen ? 'rgba(99,102,241,0.6)' : hasValue ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.1)'}`,
+          background: hasValue ? 'rgba(99,102,241,0.12)' : '#151928',
+          fontFamily: 'inherit',
           fontSize: '12px',
           cursor: 'pointer',
-          transition: 'border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease',
-          boxShadow: isOpen ? '0 0 0 3px rgba(168,85,247,0.10)' : 'none',
+          transition: 'all 0.15s ease',
+          boxShadow: isOpen ? '0 0 0 2px rgba(99,102,241,0.2)' : 'none',
           outline: 'none',
         }}
       >
-        <div className="flex-1 min-w-0 text-left truncate mr-2">{triggerLabel()}</div>
+        <div className="flex-1 min-w-0 text-left truncate mr-2 text-zinc-200">{triggerLabel()}</div>
         <div className="flex items-center gap-1 flex-shrink-0">
           {hasValue && multi && multiValue.length > 0 && (
             <button
               type="button"
               onClick={e => { e.stopPropagation(); clearAll(); }}
-              className="hover:opacity-100 transition-opacity"
-              style={{ color: 'var(--text-muted)', opacity: 0.6, padding: '2px', borderRadius: '4px' }}
+              className="hover:text-white text-zinc-400 p-0.5 rounded transition-colors"
             >
-              <X size={11} />
+              <X size={12} />
             </button>
           )}
           <ChevronDown
             size={13}
-            style={{
-              color: isOpen || hasValue ? 'var(--accent-pale)' : 'var(--text-muted)',
-              transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-              transition: 'transform 0.2s ease, color 0.18s ease',
-            }}
+            className={`transition-transform duration-200 ${isOpen ? 'rotate-180 text-indigo-400' : hasValue ? 'text-indigo-400' : 'text-zinc-400'}`}
           />
         </div>
       </button>

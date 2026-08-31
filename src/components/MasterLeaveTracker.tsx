@@ -123,33 +123,34 @@ function StatCard({
         <button
             type="button"
             onClick={onClick}
-            className={`relative flex flex-col justify-between text-left rounded-2xl bg-[#0e111d] border min-h-[116px] p-4.5 transition-all duration-200 group cursor-pointer overflow-hidden ${
+            style={{ padding: '16px 18px', minHeight: '112px' }}
+            className={`relative flex flex-col justify-between text-left rounded-xl bg-[#0f1220] border transition-all duration-150 group cursor-pointer overflow-hidden ${
                 active 
-                    ? 'border-indigo-500/60 bg-gradient-to-b from-indigo-500/[0.12] to-indigo-500/[0.03] shadow-[0_0_24px_rgba(99,102,241,0.18)] ring-1 ring-indigo-500/40' 
-                    : 'border-white/[0.08] hover:border-white/20 hover:bg-[#131726]'
+                    ? 'border-indigo-500/60 bg-gradient-to-b from-indigo-500/[0.14] to-indigo-500/[0.04] shadow-[0_0_24px_rgba(99,102,241,0.2)] ring-1 ring-indigo-500/40' 
+                    : 'border-white/[0.08] hover:border-white/20 hover:bg-[#141828]'
             }`}
         >
-            <div className={`absolute top-0 left-0 right-0 h-[2px] ${accent} ${active ? 'opacity-100' : 'opacity-50 group-hover:opacity-100 transition-opacity'}`} />
+            <div className={`absolute top-0 left-0 right-0 h-[2px] ${accent} ${active ? 'opacity-100' : 'opacity-40 group-hover:opacity-100 transition-opacity'}`} />
             
             {/* Top Row: Label & Icon */}
             <div className="flex items-center justify-between w-full">
                 <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 group-hover:text-zinc-200 transition-colors">{label}</span>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-300 group-hover:text-white transition-colors">{label}</span>
                     {active && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse shadow-[0_0_8px_rgba(99,102,241,0.8)]" />}
                 </div>
-                <div className={`w-7 h-7 rounded-lg flex items-center justify-center border transition-all ${active ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300' : 'bg-white/[0.04] border-white/[0.08] text-zinc-400 group-hover:text-white group-hover:bg-white/[0.08]'}`}>
+                <div className={`w-7 h-7 rounded-lg flex items-center justify-center border transition-all ${active ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300' : 'bg-white/[0.04] border-white/[0.08] text-zinc-400 group-hover:text-white'}`}>
                     <Icon size={14} />
                 </div>
             </div>
 
             {/* Middle: Crisp Count */}
-            <div className="my-1">
+            <div className="my-1.5">
                 <p className="text-2xl font-black text-white tabular-nums tracking-tight leading-none">{value}</p>
             </div>
 
             {/* Bottom Row: Subtitle */}
             <div className="flex items-center justify-between w-full">
-                <p className="text-[11px] text-zinc-400 font-normal truncate leading-none">{sub || '—'}</p>
+                <p className="text-[11px] text-zinc-400 font-medium truncate leading-none">{sub || '—'}</p>
             </div>
         </button>
     );
@@ -767,18 +768,19 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
             </div>
 
             {/* ── Command & Filter Bar ─────────────────────────────────────── */}
-            <div className="rounded-2xl bg-[#0c0e17]/90 backdrop-blur-xl border border-white/[0.08] p-3 shadow-xl z-20 relative flex flex-col gap-2.5">
+            <div className="rounded-xl bg-[#0f1220] border border-white/[0.08] p-3 shadow-lg z-20 relative flex flex-col gap-2.5">
                 <div className="flex items-center gap-2.5 flex-wrap">
                     {/* Search Input with Hotkey */}
                     <div className="relative flex-1 min-w-[240px] max-w-[360px]">
-                        <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                        <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none z-10" />
                         <input 
                             ref={searchInputRef}
                             type="text" 
                             placeholder="Search records, recruiter, client…" 
                             value={search} 
                             onChange={e => setSearch(e.target.value)}
-                            className="w-full bg-[#121626] border border-white/[0.08] rounded-xl h-9.5 pl-10 pr-10 text-xs text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500/80 focus:ring-1 focus:ring-indigo-500/30 transition-all font-medium" 
+                            style={{ paddingLeft: '38px', paddingRight: '38px', height: '36px' }}
+                            className="w-full bg-[#151928] border border-white/10 rounded-lg text-xs text-white placeholder:text-zinc-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-medium" 
                         />
                         {search ? (
                             <button 
@@ -854,28 +856,28 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
                 {/* Active Filter Chips Bar */}
                 {hasFilter && (
-                    <div className="flex items-center justify-between pt-2 border-t border-white/[0.04] text-xs">
+                    <div className="flex items-center justify-between pt-2 border-t border-white/[0.06] text-xs">
                         <div className="flex items-center gap-2 flex-wrap">
                             {filterYear && (
-                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-[11px] font-semibold text-indigo-400">
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-indigo-500/15 border border-indigo-500/30 text-[11px] font-semibold text-indigo-300">
                                     {filterYear}{filterMonth ? ` · ${new Date(2000, Number(filterMonth) - 1, 1).toLocaleDateString('en-US', { month: 'short' })}` : ''}
                                     <button type="button" onClick={() => { setFilterYear(''); setFilterMonth(''); }} className="hover:text-white transition-colors"><X size={10} /></button>
                                 </span>
                             )}
                             {filterClient.map(c => (
-                                <span key={c} className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-violet-500/10 border border-violet-500/20 text-[11px] font-semibold text-violet-400">
+                                <span key={c} className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-violet-500/15 border border-violet-500/30 text-[11px] font-semibold text-violet-300">
                                     {c}
                                     <button type="button" onClick={() => { setFilterClient(filterClient.filter(x => x !== c)); setFilterEmployee([]); }} className="hover:text-white transition-colors"><X size={10} /></button>
                                 </span>
                             ))}
                             {filterEmployee.map(emp => (
-                                <span key={emp} className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] font-semibold text-emerald-400">
+                                <span key={emp} className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-[11px] font-semibold text-emerald-300">
                                     {emp}
                                     <button type="button" onClick={() => setFilterEmployee(filterEmployee.filter(x => x !== emp))} className="hover:text-white transition-colors"><X size={10} /></button>
                                 </span>
                             ))}
                             {filterLeaveType.map(lt => (
-                                <span key={lt} className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] font-semibold text-amber-400">
+                                <span key={lt} className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-[11px] font-semibold text-amber-300">
                                     {lt}
                                     <button type="button" onClick={() => setFilterLeaveType(filterLeaveType.filter(x => x !== lt))} className="hover:text-white transition-colors"><X size={10} /></button>
                                 </span>
@@ -883,12 +885,12 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                             <button 
                                 type="button"
                                 onClick={() => { setFilterClient([]); setFilterEmployee([]); setFilterLeaveType([]); setSearch(''); setFilterYear(''); setFilterMonth(''); }}
-                                className="flex items-center gap-1 text-[11px] font-bold text-rose-400 hover:text-rose-300 transition-colors px-2 py-0.5 rounded-lg hover:bg-rose-500/10"
+                                className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-400 hover:text-rose-300 transition-colors px-2 py-0.5 rounded-md bg-rose-500/10 border border-rose-500/20 hover:bg-rose-500/20"
                             >
                                 <X size={10} /> Reset All
                             </button>
                         </div>
-                        <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 flex-shrink-0">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 flex-shrink-0">
                             {visibleLeaves.length} {visibleLeaves.length === 1 ? 'entry' : 'entries'} found
                         </span>
                     </div>
