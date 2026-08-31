@@ -1,12 +1,14 @@
 'use client';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     FileSpreadsheet, Plus, Trash2, Download, CheckCircle,
     Edit2, X, ChevronDown, ChevronUp, CalendarCheck2,
     AlertCircle, Search,
     ChevronLeft, ChevronRight,
-    CheckSquare, Square, MinusSquare, Sliders, CalendarRange, Sparkles, Check
+    CheckSquare, Square, MinusSquare, Sliders, CalendarRange, Sparkles, Check,
+    Activity, Clock, User as UserIcon, Building2, Tag, Calendar as CalendarIcon,
+    Flame, ShieldCheck, HeartPulse
 } from 'lucide-react';
 import {
     getAllUsers, getClients, ClientRow,
@@ -21,12 +23,21 @@ import CustomSelect from '@/components/ui/CustomSelect';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-/** Convert ISO date string (YYYY-MM-DD) → DD-Mon-YY, e.g. "07-Jan-25" */
+/** Format date cleanly: "28 Aug 2026" */
 function fmtDate(iso: string): string {
     if (!iso) return '';
     const [yr, mo, dy] = iso.split('-');
-    return `${dy}-${MONTHS[parseInt(mo, 10) - 1] || 'Jan'}-${yr ? yr.slice(2) : ''}`;
+    const m = MONTHS[parseInt(mo, 10) - 1] || 'Jan';
+    return `${parseInt(dy, 10)} ${m} ${yr}`;
+}
+
+/** Get weekday: "Thu" */
+function getWeekday(iso: string): string {
+    if (!iso) return '';
+    const d = new Date(iso + 'T00:00:00');
+    return isNaN(d.getTime()) ? '' : DAYS_OF_WEEK[d.getDay()];
 }
 
 /** Calculate all date strings between start and end with optional weekend skipping */
@@ -66,56 +77,83 @@ const ALL_LEAVE_TYPES = [...LEAVE_TYPES, ...SYSTEM_LEAVE_TYPES];
 const LEAVE_PAGE_SIZE = 25;
 
 const LEAVE_META: Record<string, { dot: string; text: string; bg: string; border: string; glow: string }> = {
-    'Sick Leave': { dot: '#a78bfa', text: 'text-violet-300', bg: 'bg-violet-500/10', border: 'border-violet-500/30', glow: 'rgba(167,139,250,0.4)' },
-    'HD-Sick': { dot: '#c4b5fd', text: 'text-violet-200', bg: 'bg-violet-500/10', border: 'border-violet-500/30', glow: 'rgba(196,181,253,0.4)' },
-    'Casual Leave': { dot: '#60a5fa', text: 'text-sky-300', bg: 'bg-sky-500/10', border: 'border-sky-500/30', glow: 'rgba(96,165,250,0.4)' },
-    'HD-Casual': { dot: '#93c5fd', text: 'text-sky-200', bg: 'bg-sky-500/10', border: 'border-sky-500/30', glow: 'rgba(147,197,253,0.4)' },
-    'LWP': { dot: '#f87171', text: 'text-rose-300', bg: 'bg-rose-500/15', border: 'border-rose-500/35', glow: 'rgba(248,113,113,0.4)' },
-    'HD-LWP': { dot: '#fb7185', text: 'text-rose-200', bg: 'bg-rose-500/15', border: 'border-rose-500/35', glow: 'rgba(251,113,133,0.4)' },
-    'HD-Sick Room': { dot: '#c084fc', text: 'text-purple-300', bg: 'bg-purple-500/10', border: 'border-purple-500/30', glow: 'rgba(192,132,252,0.4)' },
-    'LWP-Doc not Received': { dot: '#ef4444', text: 'text-red-300', bg: 'bg-red-500/20', border: 'border-red-500/40', glow: 'rgba(239,68,68,0.4)' },
-    'Paternity': { dot: '#e879f9', text: 'text-fuchsia-300', bg: 'bg-fuchsia-500/10', border: 'border-fuchsia-500/30', glow: 'rgba(232,121,249,0.4)' },
-    'Paid Leave': { dot: '#34d399', text: 'text-emerald-300', bg: 'bg-emerald-500/15', border: 'border-emerald-500/35', glow: 'rgba(52,211,153,0.4)' },
-    'System: Absent': { dot: '#fbbf24', text: 'text-amber-300', bg: 'bg-amber-500/15', border: 'border-amber-500/35', glow: 'rgba(251,191,36,0.5)' },
-    'System: Half-Day': { dot: '#fbbf24', text: 'text-amber-300', bg: 'bg-amber-500/15', border: 'border-amber-500/35', glow: 'rgba(251,191,36,0.5)' },
+    'Sick Leave': { dot: '#a78bfa', text: 'text-violet-300', bg: 'bg-violet-500/15', border: 'border-violet-500/30', glow: 'rgba(167,139,250,0.5)' },
+    'HD-Sick': { dot: '#c4b5fd', text: 'text-violet-200', bg: 'bg-violet-500/15', border: 'border-violet-500/30', glow: 'rgba(196,181,253,0.5)' },
+    'Casual Leave': { dot: '#38bdf8', text: 'text-sky-300', bg: 'bg-sky-500/15', border: 'border-sky-500/30', glow: 'rgba(56,189,248,0.5)' },
+    'HD-Casual': { dot: '#7dd3fc', text: 'text-sky-200', bg: 'bg-sky-500/15', border: 'border-sky-500/30', glow: 'rgba(125,211,252,0.5)' },
+    'LWP': { dot: '#f43f5e', text: 'text-rose-300', bg: 'bg-rose-500/15', border: 'border-rose-500/35', glow: 'rgba(244,63,94,0.5)' },
+    'HD-LWP': { dot: '#fb7185', text: 'text-rose-200', bg: 'bg-rose-500/15', border: 'border-rose-500/35', glow: 'rgba(251,113,133,0.5)' },
+    'HD-Sick Room': { dot: '#c084fc', text: 'text-purple-300', bg: 'bg-purple-500/15', border: 'border-purple-500/30', glow: 'rgba(192,132,252,0.5)' },
+    'LWP-Doc not Received': { dot: '#ef4444', text: 'text-red-300', bg: 'bg-red-500/20', border: 'border-red-500/40', glow: 'rgba(239,68,68,0.5)' },
+    'Paternity': { dot: '#e879f9', text: 'text-fuchsia-300', bg: 'bg-fuchsia-500/15', border: 'border-fuchsia-500/30', glow: 'rgba(232,121,249,0.5)' },
+    'Paid Leave': { dot: '#10b981', text: 'text-emerald-300', bg: 'bg-emerald-500/15', border: 'border-emerald-500/35', glow: 'rgba(16,185,129,0.5)' },
+    'System: Absent': { dot: '#f59e0b', text: 'text-amber-300', bg: 'bg-amber-500/15', border: 'border-amber-500/35', glow: 'rgba(245,158,11,0.5)' },
+    'System: Half-Day': { dot: '#f59e0b', text: 'text-amber-300', bg: 'bg-amber-500/15', border: 'border-amber-500/35', glow: 'rgba(245,158,11,0.5)' },
 };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
-function TypeBadge({ type, isSmart }: { type: string, isSmart?: boolean }) {
+function TypeBadge({ type }: { type: string }) {
     const m = LEAVE_META[type] ?? LEAVE_META['Casual Leave'];
     return (
-        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold tracking-wide border shadow-sm ${m.text} ${m.bg} ${m.border}`}>
+        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold tracking-wide border shadow-sm ${m.text} ${m.bg} ${m.border}`}>
             <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: m.dot, boxShadow: `0 0 6px ${m.glow}` }} />
             <span className="truncate">{type}</span>
         </span>
     );
 }
 
-function StatCard({ label, value, sub, color, accent, active, onClick }: { label: string; value: string | number; sub?: string; color: string; accent: string; active?: boolean; onClick?: () => void }) {
+function StatCard({ 
+    label, 
+    value, 
+    sub, 
+    color, 
+    accent, 
+    active, 
+    onClick,
+    icon: Icon
+}: { 
+    label: string; 
+    value: string | number; 
+    sub?: string; 
+    color: string; 
+    accent: string; 
+    active?: boolean; 
+    onClick?: () => void;
+    icon: any;
+}) {
     return (
         <button
             type="button"
             onClick={onClick}
-            className={`relative flex flex-col text-left rounded-2xl bg-[#0e111f]/90 border px-5 py-4 overflow-hidden transition-all duration-200 group cursor-pointer ${
+            className={`relative flex flex-col text-left rounded-xl bg-[#0c0e17]/85 backdrop-blur-md border px-4.5 py-3.5 overflow-hidden transition-all duration-200 group cursor-pointer ${
                 active 
-                    ? 'border-indigo-500/50 bg-indigo-500/[0.08] shadow-[0_0_20px_rgba(99,102,241,0.15)] ring-1 ring-indigo-500/30' 
-                    : 'border-white/[0.08] hover:border-white/20 hover:bg-[#121628]'
+                    ? 'border-indigo-500/50 bg-indigo-500/[0.08] shadow-[0_0_24px_rgba(99,102,241,0.18)] ring-1 ring-indigo-500/30' 
+                    : 'border-white/[0.08] hover:border-white/20 hover:bg-[#121626]'
             }`}
         >
-            <div className={`absolute top-0 left-0 right-0 h-[2px] ${accent} ${active ? 'opacity-100' : 'opacity-70 group-hover:opacity-100 transition-opacity'}`} />
-            <p className={`text-2xl font-bold tabular-nums tracking-tight leading-none mt-1 ${color}`}>{value}</p>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mt-2 flex items-center justify-between">
-                <span>{label}</span>
-                {active && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />}
-            </p>
-            {sub && <p className="text-[10px] text-slate-500 mt-0.5">{sub}</p>}
+            <div className={`absolute top-0 left-0 right-0 h-[2px] ${accent} ${active ? 'opacity-100' : 'opacity-60 group-hover:opacity-100 transition-opacity'}`} />
+            
+            <div className="flex items-center justify-between gap-2">
+                <p className={`text-2xl font-extrabold tabular-nums tracking-tight leading-none ${color}`}>{value}</p>
+                <div className={`w-7 h-7 rounded-lg flex items-center justify-center border ${active ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300' : 'bg-white/[0.03] border-white/[0.08] text-zinc-400 group-hover:text-white'}`}>
+                    <Icon size={14} />
+                </div>
+            </div>
+
+            <div className="mt-2.5">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
+                    <span>{label}</span>
+                    {active && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />}
+                </p>
+                {sub && <p className="text-[10px] text-zinc-500 font-medium mt-0.5">{sub}</p>}
+            </div>
         </button>
     );
 }
 
 // ─── Label / Input tokens ─────────────────────────────────────────────────────
-const lbl = "block text-xs font-medium text-slate-300 mb-1.5";
-const inp = "w-full bg-[#131726] border border-white/10 rounded-xl py-2.5 px-3.5 text-slate-100 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 transition-all placeholder:text-slate-500 color-scheme-dark font-normal";
+const lbl = "block text-xs font-semibold text-zinc-300 mb-1.5 tracking-wide";
+const inp = "w-full bg-[#121626] border border-white/10 rounded-xl py-2.5 px-3.5 text-zinc-100 text-xs font-medium focus:outline-none focus:border-indigo-500/80 focus:ring-1 focus:ring-indigo-500/30 transition-all placeholder:text-zinc-500 color-scheme-dark";
 const sel = `${inp} appearance-none pr-9 cursor-pointer`;
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -125,7 +163,7 @@ function SelectWrap({ children }: { children: React.ReactNode }) {
     return (
         <div className="relative">
             {children}
-            <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
         </div>
     );
 }
@@ -133,6 +171,7 @@ function SelectWrap({ children }: { children: React.ReactNode }) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function MasterLeaveTracker({ currentUser }: { currentUser: User }) {
     const { success, error: toastError } = useToast();
+    const searchInputRef = useRef<HTMLInputElement>(null);
 
     // Data
     const [leaves, setLeaves] = useState<LeaveRecord[]>([]);
@@ -196,7 +235,6 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
     const [filterEmployee, setFilterEmployee] = useState<string[]>([]);
     const [filterLeaveType, setFilterLeaveType] = useState<string[]>([]);
     const [search, setSearch] = useState('');
-    // Separate Year + Month filters for flexible date range
     const [filterYear, setFilterYear] = useState('');
     const [filterMonth, setFilterMonth] = useState('');
     const [sortConfig, setSortConfig] = useState<{ key: string, dir: 'asc' | 'desc' }>({ key: 'Date', dir: 'desc' });
@@ -233,6 +271,20 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
         init();
         return () => { mounted = false; };
+    }, []);
+
+    // Keyboard shortcut listener: "/" or "Ctrl+K" to focus search
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if ((e.key === '/' || (e.ctrlKey && e.key === 'k') || (e.metaKey && e.key === 'k')) && 
+                document.activeElement?.tagName !== 'INPUT' && 
+                document.activeElement?.tagName !== 'TEXTAREA') {
+                e.preventDefault();
+                searchInputRef.current?.focus();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
 
     // Load leaves on page / filter change
@@ -284,7 +336,6 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
             pool = allUsers.filter(u => u.clientName?.trim().toLowerCase() === selectedClient.trim().toLowerCase());
         }
         
-        // Always guarantee that if employeeName is set, it exists in the options list!
         const names = new Set(pool.map(u => u.name.trim()));
         if (employeeName && !names.has(employeeName.trim())) {
             pool = [{ id: `emp-${employeeName}`, name: employeeName, clientName: selectedClient || '' } as any, ...pool];
@@ -309,7 +360,6 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
     function openNew() {
         resetForm();
-        // Intelligent auto-preselection based on filters or search
         let empName = '';
         if (filterEmployee.length > 0) {
             empName = filterEmployee[0];
@@ -350,7 +400,6 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
         setDrawerOpen(false);
     }
 
-    // Dynamic list of dates calculated for range creation
     const calculatedRangeDates = useMemo(() => {
         if (creationMode !== 'range') return [];
         return getDatesInRange(startDate, endDate, skipWeekends);
@@ -453,7 +502,6 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
         success(isSystem ? 'Leave dismissed' : 'Leave deleted', `${name}'s record has been removed.`);
     }
 
-    // Bulk action handlers
     async function handleBulkSubmit(e: React.FormEvent) {
         e.preventDefault();
         if (selectedIds.length === 0) return;
@@ -583,7 +631,6 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
     const hasFilter = !!(filterClient.length || filterEmployee.length || filterLeaveType.length || search || filterYear);
 
-    // Unique employee names scoped to selected clients (for filter dropdown)
     const filterableEmployees = useMemo(() => {
         const pool = filterClient.length > 0
             ? allUsers.filter(u => filterClient.includes(u.clientName)).map(u => u.name)
@@ -612,7 +659,6 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
     const clearSelection = () => setSelectedIds([]);
 
-    // Summary of selected records for bulk edit drawer
     const selectedRecords = useMemo(() => {
         return visibleLeaves.filter(l => selectedIds.includes(l.id));
     }, [visibleLeaves, selectedIds]);
@@ -639,37 +685,50 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                 onCancel={() => setBulkDeleteConfirm(false)}
             />
 
-            {/* ── Header ──────────────────────────────────────────────────── */}
+            {/* ── Page Header ─────────────────────────────────────────────── */}
             <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.15)]">
-                        <FileSpreadsheet size={18} className="text-emerald-400" />
+                <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 flex items-center justify-center shadow-[0_0_20px_rgba(99,102,241,0.2)]">
+                        <FileSpreadsheet size={19} className="text-indigo-400" />
                     </div>
                     <div>
-                        <h1 className="text-lg font-bold text-white tracking-tight">Leave Management</h1>
-                        <p className="text-xs text-slate-400 mt-0.5 font-normal tracking-wide">Enterprise workforce attendance, historical balances, and leave approvals</p>
+                        <div className="flex items-center gap-2.5">
+                            <h1 className="text-xl font-extrabold text-white tracking-tight">Leave Management</h1>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                Live Desk
+                            </span>
+                        </div>
+                        <p className="text-xs text-zinc-400 mt-0.5 font-medium">Enterprise workforce attendance, historical balances, and leave approvals</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-3">
-                    <button onClick={handleExport} disabled={visibleLeaves.length === 0}
-                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.08] text-slate-300 text-xs font-semibold hover:bg-white/[0.08] hover:text-white transition-all disabled:opacity-30 disabled:pointer-events-none">
-                        <Download size={14} /> Export CSV
+                <div className="flex items-center gap-2.5">
+                    <button 
+                        type="button"
+                        onClick={handleExport} 
+                        disabled={visibleLeaves.length === 0}
+                        className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/[0.04] border border-white/[0.08] text-zinc-300 text-xs font-semibold hover:bg-white/[0.08] hover:text-white transition-all disabled:opacity-30 disabled:pointer-events-none"
+                    >
+                        <Download size={13} /> Export CSV
                     </button>
-                    <button onClick={openNew}
-                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold tracking-wide transition-all shadow-[0_0_20px_rgba(99,102,241,0.35)] hover:scale-[1.01] active:scale-[0.99]">
-                        <Plus size={15} /> New Record
+                    <button 
+                        type="button"
+                        onClick={openNew}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-bold tracking-wide transition-all shadow-[0_0_24px_rgba(99,102,241,0.35)] hover:scale-[1.01] active:scale-[0.99]"
+                    >
+                        <Plus size={14} /> New Record
                     </button>
                 </div>
             </div>
 
-            {/* ── Stats Row — Interactive KPI tiles ───────────────────────── */}
+            {/* ── Interactive KPI Stat Ribbon ─────────────────────────────── */}
             <div className="grid grid-cols-5 gap-3">
                 <StatCard 
                     label="Total Leaves" 
                     value={totalDays.toFixed(1)} 
                     color="text-emerald-400" 
                     accent="bg-emerald-500" 
-                    sub="days taken" 
+                    sub="all approved days" 
+                    icon={Activity}
                     active={filterLeaveType.length === 0}
                     onClick={() => setFilterLeaveType([])}
                 />
@@ -678,7 +737,8 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                     value={sickCount.toFixed(1)} 
                     color="text-violet-400" 
                     accent="bg-violet-500" 
-                    sub="health & medical" 
+                    sub="medical & health" 
+                    icon={HeartPulse}
                     active={filterLeaveType.includes('Sick Leave')}
                     onClick={() => setFilterLeaveType(prev => prev.includes('Sick Leave') ? [] : ['Sick Leave', 'HD-Sick'])}
                 />
@@ -688,52 +748,81 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                     color="text-sky-400" 
                     accent="bg-sky-500" 
                     sub="personal & vacation" 
+                    icon={CalendarIcon}
                     active={filterLeaveType.includes('Casual Leave')}
                     onClick={() => setFilterLeaveType(prev => prev.includes('Casual Leave') ? [] : ['Casual Leave', 'HD-Casual'])}
                 />
                 <StatCard 
                     label="LWP Days" 
                     value={lwpCount.toFixed(1)} 
-                    color={lwpCount > 0 ? 'text-rose-400' : 'text-slate-500'} 
-                    accent={lwpCount > 0 ? 'bg-rose-500' : 'bg-slate-800'} 
-                    sub="unpaid leaves" 
+                    color={lwpCount > 0 ? 'text-rose-400' : 'text-zinc-500'} 
+                    accent={lwpCount > 0 ? 'bg-rose-500' : 'bg-zinc-800'} 
+                    sub="leave without pay" 
+                    icon={Clock}
                     active={filterLeaveType.includes('LWP')}
                     onClick={() => setFilterLeaveType(prev => prev.includes('LWP') ? [] : ['LWP', 'HD-LWP', 'LWP-Doc not Received'])}
                 />
                 <StatCard 
                     label="Unplanned" 
                     value={unplanned} 
-                    color={unplanned > 0 ? 'text-amber-400' : 'text-slate-500'} 
-                    accent={unplanned > 0 ? 'bg-amber-500' : 'bg-slate-800'} 
-                    sub="missing notice" 
+                    color={unplanned > 0 ? 'text-amber-400' : 'text-zinc-500'} 
+                    accent={unplanned > 0 ? 'bg-amber-500' : 'bg-zinc-800'} 
+                    sub="missing prior notice" 
+                    icon={AlertCircle}
                 />
             </div>
 
-            {/* ── Unified Command & Filter Bar ────────────────────────────── */}
-            <div className="rounded-2xl bg-[#0e111f]/90 border border-white/[0.08] shadow-lg z-20 relative">
-                <div className="flex items-center gap-3 p-3 flex-wrap">
+            {/* ── Command & Filter Bar ─────────────────────────────────────── */}
+            <div className="rounded-2xl bg-[#0c0e17]/90 backdrop-blur-xl border border-white/[0.08] p-3 shadow-xl z-20 relative flex flex-col gap-2.5">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                    {/* Search Input with Hotkey */}
+                    <div className="relative flex-1 min-w-[240px] max-w-[360px]">
+                        <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+                        <input 
+                            ref={searchInputRef}
+                            type="text" 
+                            placeholder="Search records, recruiter, client…" 
+                            value={search} 
+                            onChange={e => setSearch(e.target.value)}
+                            className="w-full bg-[#121626] border border-white/[0.08] rounded-xl py-2 pl-9 pr-14 text-xs text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500/80 focus:ring-1 focus:ring-indigo-500/30 transition-all font-medium" 
+                        />
+                        {search ? (
+                            <button 
+                                type="button"
+                                onClick={() => setSearch('')} 
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md text-zinc-400 hover:text-white transition-colors"
+                            >
+                                <X size={13} />
+                            </button>
+                        ) : (
+                            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-mono font-bold text-zinc-500 bg-white/[0.04] border border-white/[0.08] px-1.5 py-0.5 rounded pointer-events-none">
+                                /
+                            </span>
+                        )}
+                    </div>
+
+                    <div className="w-px h-6 bg-white/[0.08] flex-shrink-0" />
+
                     {/* Year Selector */}
                     <CustomSelect
                         options={availableYears.map(yr => ({ value: yr, label: yr }))}
                         value={filterYear}
                         onChange={(val) => { setFilterYear(val); if (!val) setFilterMonth(''); }}
-                        placeholder="All Years"
-                        className="min-w-[120px]"
+                        placeholder="Year"
+                        className="min-w-[110px]"
                     />
 
                     {/* Month Selector */}
                     <CustomSelect
                         options={['01','02','03','04','05','06','07','08','09','10','11','12'].map(m => ({
                             value: m,
-                            label: new Date(2000, Number(m) - 1, 1).toLocaleDateString('en-US', { month: 'long' })
+                            label: new Date(2000, Number(m) - 1, 1).toLocaleDateString('en-US', { month: 'short' })
                         }))}
                         value={filterMonth}
                         onChange={setFilterMonth}
-                        placeholder="All Months"
-                        className={`min-w-[140px] ${!filterYear ? 'opacity-40 pointer-events-none' : ''}`}
+                        placeholder="Month"
+                        className={`min-w-[110px] ${!filterYear ? 'opacity-40 pointer-events-none' : ''}`}
                     />
-
-                    <div className="w-px h-6 bg-white/10 flex-shrink-0" />
 
                     {/* Client Multi-Select */}
                     <CustomSelect
@@ -741,9 +830,9 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                         options={clients.map(c => ({ value: c.name, label: c.name }))}
                         value={filterClient}
                         onChange={(vals) => { setFilterClient(vals); setFilterEmployee([]); }}
-                        placeholder="All Clients"
+                        placeholder="Client"
                         searchable={clients.length > 5}
-                        className="min-w-[170px] max-w-[240px]"
+                        className="min-w-[160px] max-w-[220px]"
                     />
 
                     {/* Employee Multi-Select */}
@@ -752,9 +841,9 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                         options={filterableEmployees.map(n => ({ value: n, label: n }))}
                         value={filterEmployee}
                         onChange={setFilterEmployee}
-                        placeholder="All Employees"
+                        placeholder="Recruiter"
                         searchable={filterableEmployees.length > 5}
-                        className="min-w-[170px] max-w-[240px]"
+                        className="min-w-[160px] max-w-[220px]"
                     />
 
                     {/* Leave Type Selector */}
@@ -763,89 +852,67 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                         options={ALL_LEAVE_TYPES.map(lt => ({ value: lt, label: lt }))}
                         value={filterLeaveType}
                         onChange={setFilterLeaveType}
-                        placeholder="All Leave Types"
+                        placeholder="Leave Type"
                         searchable
-                        className="min-w-[170px] max-w-[240px]"
+                        className="min-w-[160px] max-w-[220px]"
                     />
+                </div>
 
-                    <div className="w-px h-6 bg-white/10 flex-shrink-0" />
-
-                    {/* Search Input with Clear Button */}
-                    <div className="relative flex-1 min-w-[200px]">
-                        <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-                        <input 
-                            type="text" 
-                            placeholder="Search records, recruiter, client…" 
-                            value={search} 
-                            onChange={e => setSearch(e.target.value)}
-                            className="w-full bg-[#131726] border border-white/10 rounded-xl py-2.5 pl-9 pr-9 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500/80 focus:ring-1 focus:ring-indigo-500/30 transition-all font-medium" 
-                        />
-                        {search && (
+                {/* Active Filter Chips Bar */}
+                {hasFilter && (
+                    <div className="flex items-center justify-between pt-2 border-t border-white/[0.04] text-xs">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            {filterYear && (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-[11px] font-semibold text-indigo-400">
+                                    {filterYear}{filterMonth ? ` · ${new Date(2000, Number(filterMonth) - 1, 1).toLocaleDateString('en-US', { month: 'short' })}` : ''}
+                                    <button type="button" onClick={() => { setFilterYear(''); setFilterMonth(''); }} className="hover:text-white transition-colors"><X size={10} /></button>
+                                </span>
+                            )}
+                            {filterClient.map(c => (
+                                <span key={c} className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-violet-500/10 border border-violet-500/20 text-[11px] font-semibold text-violet-400">
+                                    {c}
+                                    <button type="button" onClick={() => { setFilterClient(filterClient.filter(x => x !== c)); setFilterEmployee([]); }} className="hover:text-white transition-colors"><X size={10} /></button>
+                                </span>
+                            ))}
+                            {filterEmployee.map(emp => (
+                                <span key={emp} className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] font-semibold text-emerald-400">
+                                    {emp}
+                                    <button type="button" onClick={() => setFilterEmployee(filterEmployee.filter(x => x !== emp))} className="hover:text-white transition-colors"><X size={10} /></button>
+                                </span>
+                            ))}
+                            {filterLeaveType.map(lt => (
+                                <span key={lt} className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] font-semibold text-amber-400">
+                                    {lt}
+                                    <button type="button" onClick={() => setFilterLeaveType(filterLeaveType.filter(x => x !== lt))} className="hover:text-white transition-colors"><X size={10} /></button>
+                                </span>
+                            ))}
                             <button 
                                 type="button"
-                                onClick={() => setSearch('')} 
-                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-slate-400 hover:text-white transition-colors"
+                                onClick={() => { setFilterClient([]); setFilterEmployee([]); setFilterLeaveType([]); setSearch(''); setFilterYear(''); setFilterMonth(''); }}
+                                className="flex items-center gap-1 text-[11px] font-bold text-rose-400 hover:text-rose-300 transition-colors px-2 py-0.5 rounded-lg hover:bg-rose-500/10"
                             >
-                                <X size={13} />
+                                <X size={10} /> Reset All
                             </button>
-                        )}
+                        </div>
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 flex-shrink-0">
+                            {visibleLeaves.length} {visibleLeaves.length === 1 ? 'entry' : 'entries'} found
+                        </span>
                     </div>
-                </div>
-
-                {/* Active Filters + Match Count */}
-                {hasFilter && (
-                <div className="flex items-center justify-between px-3.5 pb-3 pt-0 border-t border-white/[0.04]">
-                    <div className="flex items-center gap-2 flex-wrap pt-2.5">
-                        {filterYear && (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-xs font-semibold text-indigo-400">
-                                {filterYear}{filterMonth ? ` · ${new Date(2000, Number(filterMonth) - 1, 1).toLocaleDateString('en-US', { month: 'short' })}` : ''}
-                                <button onClick={() => { setFilterYear(''); setFilterMonth(''); }} className="hover:text-white transition-colors"><X size={11} /></button>
-                            </span>
-                        )}
-                        {filterClient.map(c => (
-                            <span key={c} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-500/10 border border-violet-500/20 text-xs font-semibold text-violet-400">
-                                {c}
-                                <button onClick={() => { setFilterClient(filterClient.filter(x => x !== c)); setFilterEmployee([]); }} className="hover:text-white transition-colors"><X size={11} /></button>
-                            </span>
-                        ))}
-                        {filterEmployee.map(emp => (
-                            <span key={emp} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs font-semibold text-emerald-400">
-                                {emp}
-                                <button onClick={() => setFilterEmployee(filterEmployee.filter(x => x !== emp))} className="hover:text-white transition-colors"><X size={11} /></button>
-                            </span>
-                        ))}
-                        {filterLeaveType.map(lt => (
-                            <span key={lt} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs font-semibold text-amber-400">
-                                {lt}
-                                <button onClick={() => setFilterLeaveType(filterLeaveType.filter(x => x !== lt))} className="hover:text-white transition-colors"><X size={11} /></button>
-                            </span>
-                        ))}
-                        {(filterClient.length > 0 || filterEmployee.length > 0 || filterLeaveType.length > 0 || search || filterYear) && (
-                            <button onClick={() => { setFilterClient([]); setFilterEmployee([]); setFilterLeaveType([]); setSearch(''); setFilterYear(''); setFilterMonth(''); }}
-                                className="flex items-center gap-1 text-xs font-semibold text-rose-400 hover:text-rose-300 transition-colors px-2 py-1 rounded-lg hover:bg-rose-500/10">
-                                <X size={11} /> Reset All
-                            </button>
-                        )}
-                    </div>
-                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex-shrink-0 ml-3 pt-2.5">
-                        {visibleLeaves.length} record{visibleLeaves.length !== 1 ? 's' : ''}
-                    </span>
-                </div>
                 )}
             </div>
 
-            {/* ── Table ───────────────────────────────────────────────────── */}
-            <div className="rounded-2xl bg-[#090b14]/95 backdrop-blur-2xl border border-white/[0.08] p-5 shadow-2xl overflow-hidden pb-28">
+            {/* ── Enterprise Data Grid Container ──────────────────────────── */}
+            <div className="rounded-2xl bg-[#0c0e17]/90 backdrop-blur-xl border border-white/[0.08] shadow-2xl overflow-hidden pb-28">
                 <div className="overflow-x-auto pb-2">
-                    <div className="min-w-[1180px] flex flex-col gap-2.5">
-                        {/* Headers */}
-                        <div className="grid grid-cols-[40px_105px_minmax(180px,2fr)_minmax(130px,1.2fr)_minmax(160px,1.4fr)_95px_95px_minmax(180px,2fr)_110px_70px] gap-3 px-5 py-3 rounded-xl bg-white/[0.02] border border-white/[0.05] items-center">
-                            {/* Master Checkbox */}
+                    <div className="min-w-[1220px]">
+                        {/* Table Header Row */}
+                        <div className="grid grid-cols-[44px_120px_minmax(180px,2fr)_minmax(130px,1.2fr)_minmax(160px,1.4fr)_100px_100px_minmax(180px,2fr)_110px_70px] gap-3 px-5 py-3.5 bg-[#101322] border-b border-white/[0.08] items-center">
+                            {/* Master Selection Checkbox */}
                             <div className="flex items-center justify-center">
                                 <button
                                     type="button"
                                     onClick={toggleSelectAll}
-                                    className="p-1 rounded-md text-slate-400 hover:text-white transition-all hover:bg-white/5 focus:outline-none"
+                                    className="p-1 rounded-md text-zinc-400 hover:text-white transition-all hover:bg-white/5 focus:outline-none"
                                     title={isAllVisibleSelected ? "Deselect all on page" : "Select all on page"}
                                 >
                                     {isAllVisibleSelected ? (
@@ -853,16 +920,21 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                     ) : isSomeVisibleSelected ? (
                                         <MinusSquare size={16} className="text-indigo-400 drop-shadow-[0_0_6px_rgba(99,102,241,0.5)]" />
                                     ) : (
-                                        <Square size={16} className="text-slate-500 hover:text-slate-300" />
+                                        <Square size={16} className="text-zinc-600 hover:text-zinc-300" />
                                     )}
                                 </button>
                             </div>
 
                             {['Date', 'Employee', 'Client', 'Leave Type', 'Duration', 'Planned', 'Reason', 'Logged by'].map(h => (
-                                <button key={h} onClick={() => {
-                                    if (sortConfig.key === h) setSortConfig({ key: h, dir: sortConfig.dir === 'asc' ? 'desc' : 'asc' });
-                                    else setSortConfig({ key: h, dir: 'asc' });
-                                }} className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400 hover:text-white transition-colors outline-none cursor-pointer group text-left">
+                                <button 
+                                    key={h} 
+                                    type="button"
+                                    onClick={() => {
+                                        if (sortConfig.key === h) setSortConfig({ key: h, dir: sortConfig.dir === 'asc' ? 'desc' : 'asc' });
+                                        else setSortConfig({ key: h, dir: 'asc' });
+                                    }} 
+                                    className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-400 hover:text-white transition-colors outline-none cursor-pointer group text-left"
+                                >
                                     {h}
                                     <span className="flex flex-col opacity-0 group-hover:opacity-70 transition-opacity" style={{ opacity: sortConfig.key === h ? 1 : undefined }}>
                                         <ChevronUp size={10} className={`-mb-1 transition-colors ${sortConfig.key === h && sortConfig.dir === 'asc' ? 'text-indigo-400' : ''}`} />
@@ -870,108 +942,22 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                     </span>
                                 </button>
                             ))}
-                            <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 text-right pr-2">Actions</div>
+                            <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 text-right pr-2">Actions</div>
                         </div>
 
-                        {/* Body Slots: System Alerts */}
-                        {currentPage === 1 && filteredSmartLeaves.length > 0 && !loading && (
-                            <div className="mb-2.5 rounded-xl border border-amber-500/20 bg-amber-500/[0.03] p-3.5">
-                                <div className="mb-3 flex items-center justify-between gap-3 px-1">
-                                    <div className="flex items-center gap-2">
-                                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.8)]" />
-                                        <p className="text-xs font-semibold uppercase tracking-wider text-amber-400">System Auto-Detected Leave Exceptions</p>
-                                    </div>
-                                    <span className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-300">
-                                        {filteredSmartLeaves.length} alert{filteredSmartLeaves.length === 1 ? '' : 's'}
-                                    </span>
-                                </div>
-                                <div className="space-y-2">
-                                    {filteredSmartLeaves.map((l) => {
-                                        const isSelected = selectedIds.includes(l.id);
-                                        return (
-                                            <div key={l.id} className={`grid grid-cols-[40px_105px_minmax(180px,2fr)_minmax(130px,1.2fr)_minmax(160px,1.4fr)_95px_95px_minmax(180px,2fr)_110px_70px] gap-3 px-5 py-3.5 items-center rounded-xl border transition-all duration-150
-                                                ${isSelected ? 'border-amber-500/50 bg-amber-500/[0.12] ring-1 ring-amber-500/30' : 'border-amber-500/15 bg-black/30 hover:bg-black/50'}`}>
-                                                
-                                                {/* Checkbox */}
-                                                <div className="flex items-center justify-center">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => toggleSelect(l.id)}
-                                                        className="p-1 rounded-md transition-colors hover:bg-amber-500/10"
-                                                    >
-                                                        {isSelected ? (
-                                                            <CheckSquare size={16} className="text-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.7)]" />
-                                                        ) : (
-                                                            <Square size={16} className="text-slate-500 hover:text-slate-300" />
-                                                        )}
-                                                    </button>
-                                                </div>
-
-                                                <div className="font-mono text-xs font-semibold text-slate-300 uppercase">{fmtDate(l.date)}</div>
-                                                
-                                                <div className="flex items-center gap-2.5 min-w-0">
-                                                    <span className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-500/30 text-xs font-bold text-amber-300 flex items-center justify-center flex-shrink-0">
-                                                        {l.employee_name[0]}
-                                                    </span>
-                                                    <span className="text-sm font-semibold text-white truncate">{l.employee_name}</span>
-                                                </div>
-
-                                                <div className="min-w-0">
-                                                    <span className="inline-block max-w-full truncate text-[11px] font-medium text-slate-300 bg-white/[0.04] border border-white/10 px-2.5 py-1 rounded-md">{l.client_name}</span>
-                                                </div>
-
-                                                <div><TypeBadge type={l.leave_type} isSmart /></div>
-
-                                                <div>
-                                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold border ${l.day_count === 1 ? 'bg-sky-500/10 text-sky-300 border-sky-500/25' : 'bg-amber-500/10 text-amber-300 border-amber-500/25'}`}>
-                                                        {l.day_count === 1 ? 'Full (1.0)' : 'Half (0.5)'}
-                                                    </span>
-                                                </div>
-
-                                                <div>
-                                                    <span className="inline-flex items-center gap-1 text-amber-300 text-xs font-semibold bg-amber-500/10 px-2.5 py-0.5 rounded-md border border-amber-500/25">
-                                                        <AlertCircle size={11} /> Auto
-                                                    </span>
-                                                </div>
-
-                                                <div className="min-w-0 text-slate-300 text-xs truncate" title={l.reason || ''}>
-                                                    <span className="text-amber-400/90 text-xs font-medium">{(l.reason || '').replace(/System Auto-Generated:\s*/i, '').replace(/No punch-in recorded/i, 'No Punch In').replace(/Half-Day/i, 'Less Hours')}</span>
-                                                </div>
-
-                                                <div className="truncate text-slate-400 text-xs font-medium">
-                                                    <span className="text-indigo-400/80 italic font-semibold">System Gen</span>
-                                                </div>
-
-                                                <div className="flex items-center justify-end gap-1.5 w-full">
-                                                    <button onClick={() => startEdit(l)} title="Approve & Save"
-                                                        className="flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500 hover:text-black transition-all">
-                                                        <CheckCircle size={14} />
-                                                    </button>
-                                                    <button onClick={() => void declineSmartLeave(l)} title="Decline"
-                                                        className="flex items-center justify-center w-7 h-7 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-400 hover:bg-rose-500 hover:text-white transition-all">
-                                                        <X size={14} />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Standard Records */}
+                        {/* Loading Skeleton Shimmer */}
                         {loading ? (
-                            <div className="space-y-2 py-1">
-                                {[1, 2, 3, 4, 5, 6].map((idx) => (
-                                    <div key={idx} className="grid grid-cols-[40px_105px_minmax(180px,2fr)_minmax(130px,1.2fr)_minmax(160px,1.4fr)_95px_95px_minmax(180px,2fr)_110px_70px] gap-3 px-5 py-3.5 items-center rounded-xl bg-white/[0.02] border border-white/[0.04] animate-pulse">
+                            <div className="divide-y divide-white/[0.04]">
+                                {[1, 2, 3, 4, 5, 6, 7].map((idx) => (
+                                    <div key={idx} className="grid grid-cols-[44px_120px_minmax(180px,2fr)_minmax(130px,1.2fr)_minmax(160px,1.4fr)_100px_100px_minmax(180px,2fr)_110px_70px] gap-3 px-5 py-3.5 items-center animate-pulse">
                                         <div className="w-4 h-4 rounded bg-white/10 mx-auto" />
-                                        <div className="h-4 w-16 rounded bg-white/10" />
+                                        <div className="h-4 w-20 rounded bg-white/10" />
                                         <div className="flex items-center gap-2.5">
                                             <div className="w-7 h-7 rounded-lg bg-white/10" />
                                             <div className="h-4 w-28 rounded bg-white/10" />
                                         </div>
                                         <div className="h-4 w-20 rounded bg-white/10" />
-                                        <div className="h-5 w-24 rounded-lg bg-white/10" />
+                                        <div className="h-5 w-24 rounded-md bg-white/10" />
                                         <div className="h-5 w-16 rounded-md bg-white/10" />
                                         <div className="h-5 w-14 rounded-md bg-white/10" />
                                         <div className="h-4 w-32 rounded bg-white/10" />
@@ -985,156 +971,197 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                             </div>
                         ) : leaves.length === 0 && filteredSmartLeaves.length === 0 ? (
                             <div className="py-24 flex flex-col items-center justify-center gap-3.5">
-                                <div className="w-14 h-14 rounded-2xl bg-white/[0.02] border border-white/10 flex items-center justify-center">
-                                    <CalendarCheck2 size={26} className="text-slate-500" />
+                                <div className="w-14 h-14 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center justify-center">
+                                    <CalendarCheck2 size={26} className="text-zinc-500" />
                                 </div>
                                 <div className="text-center">
-                                    <p className="text-sm font-semibold text-slate-300">No records found</p>
-                                    <p className="text-xs text-slate-500 mt-1">{search || hasFilter ? 'Try adjusting your search or active filters' : 'Click "New Record" to add the first leave entry'}</p>
+                                    <p className="text-sm font-semibold text-zinc-300">No records found</p>
+                                    <p className="text-xs text-zinc-500 mt-1">{search || hasFilter ? 'Try adjusting your search or active filters' : 'Click "New Record" to add the first leave entry'}</p>
                                 </div>
                                 {(search || hasFilter) && (
-                                    <button onClick={() => { setSearch(''); setFilterClient([]); setFilterEmployee([]); setFilterLeaveType([]); setFilterYear(''); setFilterMonth(''); }}
-                                        className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors px-4 py-2 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20">
+                                    <button 
+                                        type="button"
+                                        onClick={() => { setSearch(''); setFilterClient([]); setFilterEmployee([]); setFilterLeaveType([]); setFilterYear(''); setFilterMonth(''); }}
+                                        className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors px-4 py-2 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20"
+                                    >
                                         Reset all filters
                                     </button>
                                 )}
                             </div>
                         ) : (
-                            <AnimatePresence initial={false}>
-                                {leaves.map((l) => {
-                                    const isSelected = selectedIds.includes(l.id);
-                                    return (
-                                        <motion.div key={l.id}
-                                            initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98 }}
-                                            transition={{ duration: 0.15 }}
-                                            className={`grid grid-cols-[40px_105px_minmax(180px,2fr)_minmax(130px,1.2fr)_minmax(160px,1.4fr)_95px_95px_minmax(180px,2fr)_110px_70px] gap-3 px-5 py-3.5 items-center rounded-xl transition-all duration-150 group cursor-default
-                                                ${editingId === l.id ? 'bg-amber-500/[0.08] border border-amber-500/40 ring-1 ring-amber-500/20' 
-                                                : isSelected ? 'bg-indigo-500/[0.12] border border-indigo-500/40 ring-1 ring-indigo-500/30' 
-                                                : 'bg-[#0e1220]/75 border border-white/[0.06] hover:bg-[#141829] hover:border-white/15'}`}>
-                                            
-                                            {/* Checkbox */}
-                                            <div className="flex items-center justify-center">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => toggleSelect(l.id)}
-                                                    className="p-1 rounded-md transition-colors hover:bg-white/5"
-                                                >
-                                                    {isSelected ? (
-                                                        <CheckSquare size={16} className="text-emerald-400 drop-shadow-[0_0_6px_rgba(16,185,129,0.7)]" />
+                            <div className="divide-y divide-white/[0.04]">
+                                <AnimatePresence initial={false}>
+                                    {visibleLeaves.map((l) => {
+                                        const isSelected = selectedIds.includes(l.id);
+                                        const initials = l.employee_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+
+                                        return (
+                                            <motion.div 
+                                                key={l.id}
+                                                initial={{ opacity: 0 }} 
+                                                animate={{ opacity: 1 }} 
+                                                exit={{ opacity: 0 }}
+                                                transition={{ duration: 0.12 }}
+                                                className={`grid grid-cols-[44px_120px_minmax(180px,2fr)_minmax(130px,1.2fr)_minmax(160px,1.4fr)_100px_100px_minmax(180px,2fr)_110px_70px] gap-3 px-5 py-3.5 items-center transition-all duration-150 group cursor-default
+                                                    ${editingId === l.id ? 'bg-amber-500/[0.08] ring-1 ring-amber-500/20' 
+                                                    : isSelected ? 'bg-indigo-500/[0.12] ring-1 ring-indigo-500/30' 
+                                                    : 'hover:bg-[#141829]'}`}
+                                            >
+                                                {/* Checkbox */}
+                                                <div className="flex items-center justify-center">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => toggleSelect(l.id)}
+                                                        className="p-1 rounded-md transition-colors hover:bg-white/5"
+                                                    >
+                                                        {isSelected ? (
+                                                            <CheckSquare size={16} className="text-emerald-400 drop-shadow-[0_0_6px_rgba(16,185,129,0.7)]" />
+                                                        ) : (
+                                                            <Square size={16} className="text-zinc-600 hover:text-zinc-300" />
+                                                        )}
+                                                    </button>
+                                                </div>
+
+                                                {/* Date */}
+                                                <div>
+                                                    <p className="text-xs font-semibold text-zinc-200 tracking-tight">{fmtDate(l.date)}</p>
+                                                    <p className="text-[10px] text-zinc-500 font-medium">{getWeekday(l.date)}</p>
+                                                </div>
+                                                
+                                                {/* Employee */}
+                                                <div className="flex items-center gap-2.5 min-w-0">
+                                                    <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 text-indigo-300 text-xs font-bold flex items-center justify-center flex-shrink-0">
+                                                        {initials}
+                                                    </div>
+                                                    <span className="text-sm font-semibold text-zinc-100 truncate group-hover:text-indigo-200 transition-colors">
+                                                        {l.employee_name}
+                                                    </span>
+                                                </div>
+
+                                                {/* Client */}
+                                                <div className="min-w-0">
+                                                    <span className="inline-block max-w-full truncate text-[11px] font-medium text-zinc-300 bg-white/[0.04] border border-white/10 px-2.5 py-1 rounded-md">
+                                                        {l.client_name}
+                                                    </span>
+                                                </div>
+
+                                                {/* Leave Type */}
+                                                <div><TypeBadge type={l.leave_type} /></div>
+
+                                                {/* Duration */}
+                                                <div>
+                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold border ${l.day_count === 1 ? 'bg-sky-500/10 text-sky-300 border-sky-500/25' : 'bg-amber-500/10 text-amber-300 border-amber-500/25'}`}>
+                                                        {l.day_count === 1 ? '1.0 Day' : '0.5 Day'}
+                                                    </span>
+                                                </div>
+
+                                                {/* Planned */}
+                                                <div>
+                                                    {(l as any).is_smart ? (
+                                                        <span className="inline-flex items-center gap-1 text-amber-300 text-xs font-semibold bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/25">
+                                                            <AlertCircle size={11} /> Auto
+                                                        </span>
+                                                    ) : l.is_planned ? (
+                                                        <span className="inline-flex items-center gap-1 text-emerald-400 text-xs font-semibold bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/25">
+                                                            <CheckCircle size={11} /> Yes
+                                                        </span>
                                                     ) : (
-                                                        <Square size={16} className="text-slate-500 hover:text-slate-300" />
+                                                        <span className="inline-flex items-center gap-1 text-rose-400 text-xs font-semibold bg-rose-500/10 px-2 py-0.5 rounded-md border border-rose-500/25">
+                                                            <AlertCircle size={11} /> No
+                                                        </span>
                                                     )}
-                                                </button>
-                                            </div>
+                                                </div>
 
-                                            {/* Date */}
-                                            <div className="font-mono text-xs font-semibold text-slate-300 uppercase">{fmtDate(l.date)}</div>
-                                            
-                                            {/* Employee */}
-                                            <div className="flex items-center gap-2.5 min-w-0">
-                                                <span className="w-7 h-7 rounded-lg bg-indigo-500/15 border border-indigo-500/30 text-xs font-bold text-indigo-300 flex items-center justify-center flex-shrink-0">
-                                                    {l.employee_name[0]}
-                                                </span>
-                                                <span className="text-sm font-semibold text-slate-100 truncate group-hover:text-indigo-200 transition-colors">{l.employee_name}</span>
-                                            </div>
+                                                {/* Reason */}
+                                                <div className="min-w-0 text-zinc-300 text-xs truncate" title={l.reason || ''}>
+                                                    {l.reason ? <span className="text-zinc-200">{l.reason}</span> : <span className="text-zinc-600 font-bold">—</span>}
+                                                </div>
 
-                                            {/* Client */}
-                                            <div className="min-w-0">
-                                                <span className="inline-block max-w-full truncate text-[11px] font-medium text-slate-300 bg-white/[0.04] border border-white/10 px-2.5 py-1 rounded-md">{l.client_name}</span>
-                                            </div>
+                                                {/* Logged by */}
+                                                <div className="truncate text-zinc-400 text-xs font-medium">
+                                                    {(l as any).is_smart ? (
+                                                        <span className="text-indigo-400/80 italic font-semibold">System Gen</span>
+                                                    ) : (
+                                                        <span>{l.approver || '—'}</span>
+                                                    )}
+                                                </div>
 
-                                            {/* Leave Type */}
-                                            <div><TypeBadge type={l.leave_type} isSmart={(l as any).is_smart} /></div>
-
-                                            {/* Duration */}
-                                            <div>
-                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold border ${l.day_count === 1 ? 'bg-sky-500/10 text-sky-300 border-sky-500/25' : 'bg-amber-500/10 text-amber-300 border-amber-500/25'}`}>
-                                                    {l.day_count === 1 ? 'Full (1.0)' : 'Half (0.5)'}
-                                                </span>
-                                            </div>
-
-                                            {/* Planned */}
-                                            <div>
-                                                {(l as any).is_smart ? (
-                                                    <span className="inline-flex items-center gap-1 text-amber-300 text-xs font-semibold bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/25"><AlertCircle size={11} /> Auto</span>
-                                                ) : l.is_planned
-                                                    ? <span className="inline-flex items-center gap-1 text-emerald-400 text-xs font-semibold bg-emerald-500/10 px-2.5 py-0.5 rounded-md border border-emerald-500/25"><CheckCircle size={11} /> Yes</span>
-                                                    : <span className="inline-flex items-center gap-1 text-rose-400 text-xs font-semibold bg-rose-500/10 px-2.5 py-0.5 rounded-md border border-rose-500/25"><AlertCircle size={11} /> No</span>}
-                                            </div>
-
-                                            {/* Reason */}
-                                            <div className="min-w-0 text-slate-300 text-xs truncate" title={l.reason || ''}>
-                                                {(l as any).is_smart ? (
-                                                    <span className="text-amber-400/90 text-xs font-medium">{(l.reason || '').replace(/System Auto-Generated:\s*/i, '').replace(/No punch-in recorded/i, 'No Punch In').replace(/Half-Day/i, 'Less Hours')}</span>
-                                                ) : (
-                                                    l.reason ? <span className="text-slate-200">{l.reason}</span> : <span className="text-slate-600 font-bold">—</span>
-                                                )}
-                                            </div>
-
-                                            {/* Logged by */}
-                                            <div className="truncate text-slate-400 text-xs font-medium">
-                                                {(l as any).is_smart ? <span className="text-indigo-400/80 italic font-semibold">System Gen</span> : l.approver}
-                                            </div>
-
-                                            {/* Actions */}
-                                            <div className="flex items-center justify-end gap-1.5 w-full">
-                                                {(l as any).is_smart && (
-                                                    <>
-                                                        <button onClick={() => startEdit(l)} title="Approve & Save"
-                                                            className="flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500 hover:text-black transition-all">
-                                                            <CheckCircle size={14} />
+                                                {/* Actions */}
+                                                <div className="flex items-center justify-end gap-1.5 w-full">
+                                                    {(l as any).is_smart && (
+                                                        <>
+                                                            <button 
+                                                                type="button"
+                                                                onClick={() => startEdit(l)} 
+                                                                title="Approve & Save"
+                                                                className="flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500 hover:text-black transition-all"
+                                                            >
+                                                                <CheckCircle size={13} />
+                                                            </button>
+                                                            <button 
+                                                                type="button"
+                                                                onClick={() => declineSmartLeave(l)} 
+                                                                title="Decline"
+                                                                className="flex items-center justify-center w-7 h-7 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-400 hover:bg-rose-500 hover:text-white transition-all"
+                                                            >
+                                                                <X size={13} />
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                    {!(l as any).is_smart && (
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => startEdit(l)} 
+                                                            title="Edit Record"
+                                                            className="flex items-center justify-center w-7 h-7 rounded-lg bg-white/[0.03] border border-white/10 text-zinc-400 hover:bg-indigo-500/20 hover:border-indigo-500/40 hover:text-indigo-300 transition-all"
+                                                        >
+                                                            <Edit2 size={12} />
                                                         </button>
-                                                        <button onClick={() => declineSmartLeave(l)} title="Decline"
-                                                            className="flex items-center justify-center w-7 h-7 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-400 hover:bg-rose-500 hover:text-white transition-all">
-                                                            <X size={14} />
+                                                    )}
+                                                    {!(l as any).is_smart && (
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => setDeleteId(l.id)} 
+                                                            title="Delete Record"
+                                                            className="flex items-center justify-center w-7 h-7 rounded-lg bg-white/[0.03] border border-white/10 text-zinc-400 hover:bg-rose-500/20 hover:border-rose-500/40 hover:text-rose-300 transition-all"
+                                                        >
+                                                            <Trash2 size={12} />
                                                         </button>
-                                                    </>
-                                                )}
-                                                {!(l as any).is_smart && (
-                                                    <button onClick={() => startEdit(l)} title="Edit Record"
-                                                        className="flex items-center justify-center w-7 h-7 rounded-lg bg-white/[0.04] border border-white/10 text-slate-300 hover:bg-indigo-500/20 hover:border-indigo-500/40 hover:text-indigo-300 transition-all">
-                                                        <Edit2 size={12} />
-                                                    </button>
-                                                )}
-                                                {!(l as any).is_smart && (
-                                                    <button onClick={() => setDeleteId(l.id)} title="Delete Record"
-                                                        className="flex items-center justify-center w-7 h-7 rounded-lg bg-white/[0.04] border border-white/10 text-slate-300 hover:bg-rose-500/20 hover:border-rose-500/40 hover:text-rose-300 transition-all">
-                                                        <Trash2 size={12} />
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </motion.div>
-                                    );
-                                })}
-                            </AnimatePresence>
+                                                    )}
+                                                </div>
+                                            </motion.div>
+                                        );
+                                    })}
+                                </AnimatePresence>
+                            </div>
                         )}
                     </div>
                 </div>
 
-                {/* Table Footer */}
+                {/* Table Footer / Pagination */}
                 {visibleLeaves.length > 0 && (
-                    <div className="flex items-center justify-between px-5 py-3.5 border-t border-white/[0.08] bg-black/20 mt-3 rounded-xl">
-                        <p className="text-xs text-slate-400 font-medium">
-                            {displayedLeaves.length} records · {uniqueEmpls} {uniqueEmpls === 1 ? 'employee' : 'employees'}
+                    <div className="flex items-center justify-between px-5 py-3.5 border-t border-white/[0.08] bg-[#0c0e17] mt-1">
+                        <p className="text-xs text-zinc-400 font-medium">
+                            Showing <span className="text-zinc-200 font-bold">{displayedLeaves.length}</span> of <span className="text-zinc-200 font-bold">{totalLeaves}</span> records · <span className="text-zinc-300 font-semibold">{uniqueEmpls}</span> {uniqueEmpls === 1 ? 'employee' : 'employees'}
                         </p>
                         <div className="flex items-center gap-5">
-                            <p className="text-xs text-slate-400 font-medium">
-                                <span className="text-emerald-400 font-bold">{totalDays}</span> total days
+                            <p className="text-xs text-zinc-400 font-medium">
+                                <span className="text-emerald-400 font-bold">{totalDays.toFixed(1)}</span> total days
                             </p>
                             {lwpCount > 0 && (
                                 <p className="text-xs font-medium">
-                                    <span className="text-rose-400 font-bold">{lwpCount}</span> <span className="text-slate-400">LWP</span>
+                                    <span className="text-rose-400 font-bold">{lwpCount.toFixed(1)}</span> <span className="text-zinc-500">LWP</span>
                                 </p>
                             )}
-                            <p className="text-xs text-slate-400 font-medium">
-                                Page <span className="text-white font-bold">{currentPage}</span> of <span className="text-white font-bold">{totalPages}</span>
+                            <p className="text-xs text-zinc-400 font-medium">
+                                Page <span className="text-zinc-100 font-bold">{currentPage}</span> of <span className="text-zinc-100 font-bold">{totalPages}</span>
                             </p>
                             <div className="flex items-center gap-2">
                                 <button
                                     type="button"
                                     onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
                                     disabled={currentPage === 1 || loading}
-                                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-slate-300 transition-all disabled:opacity-30 disabled:pointer-events-none hover:bg-white/10 hover:text-white"
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-zinc-300 transition-all disabled:opacity-30 disabled:pointer-events-none hover:bg-white/10 hover:text-white"
                                 >
                                     <ChevronLeft size={13} /> Prev
                                 </button>
@@ -1142,7 +1169,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                     type="button"
                                     onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
                                     disabled={currentPage >= totalPages || loading}
-                                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-slate-300 transition-all disabled:opacity-30 disabled:pointer-events-none hover:bg-white/10 hover:text-white"
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-zinc-300 transition-all disabled:opacity-30 disabled:pointer-events-none hover:bg-white/10 hover:text-white"
                                 >
                                     Next <ChevronRight size={13} />
                                 </button>
@@ -1152,7 +1179,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                 )}
             </div>
 
-            {/* ── Floating Action Capsule (HUD) ────────────────── */}
+            {/* ── Floating Bulk Action HUD Capsule ────────────────────────── */}
             <AnimatePresence>
                 {selectedIds.length > 0 && (
                     <motion.div
@@ -1160,12 +1187,12 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 30, scale: 0.96 }}
                         transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-                        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3.5 px-5 py-2.5 rounded-2xl bg-[#0f1220]/95 backdrop-blur-xl border border-white/15 shadow-[0_16px_40px_rgba(0,0,0,0.8),0_0_20px_rgba(99,102,241,0.25)] ring-1 ring-black/40"
+                        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-2.5 rounded-2xl bg-[#0f1220]/95 backdrop-blur-xl border border-white/15 shadow-[0_16px_40px_rgba(0,0,0,0.8),0_0_24px_rgba(99,102,241,0.3)] ring-1 ring-black/40"
                     >
                         <div className="flex items-center gap-2.5 pr-3.5 border-r border-white/10">
                             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
-                            <span className="text-xs font-semibold text-white tracking-wide">
-                                {selectedIds.length} <span className="text-slate-400 font-normal">{selectedIds.length === 1 ? 'record' : 'records'} selected</span>
+                            <span className="text-xs font-bold text-white tracking-wide">
+                                {selectedIds.length} <span className="text-zinc-400 font-normal">{selectedIds.length === 1 ? 'record' : 'records'} selected</span>
                             </span>
                         </div>
 
@@ -1180,7 +1207,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                         <button
                             type="button"
                             onClick={() => setBulkDeleteConfirm(true)}
-                            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-300 hover:text-white text-xs font-semibold active:scale-95 transition-all"
+                            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 hover:text-white text-xs font-semibold active:scale-95 transition-all"
                         >
                             <Trash2 size={13} /> Delete
                         </button>
@@ -1188,7 +1215,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                         <button
                             type="button"
                             onClick={clearSelection}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors ml-1"
+                            className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors ml-1"
                             title="Clear selection"
                         >
                             <X size={14} />
@@ -1197,45 +1224,49 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                 )}
             </AnimatePresence>
 
-            {/* ── Single Record / Date Range Form Drawer ──────────────────── */}
+            {/* ── Slide-over Form Drawer (Single / Range) ──────────────────── */}
             <AnimatePresence>
                 {drawerOpen && (
                     <>
-                        {/* Backdrop */}
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                        <motion.div 
+                            initial={{ opacity: 0 }} 
+                            animate={{ opacity: 1 }} 
+                            exit={{ opacity: 0 }}
                             className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
-                            onClick={cancelEdit} />
-                        {/* Drawer */}
+                            onClick={cancelEdit} 
+                        />
                         <motion.div
-                            initial={{ x: '100%', opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: '100%', opacity: 0 }}
+                            initial={{ x: '100%', opacity: 0 }} 
+                            animate={{ x: 0, opacity: 1 }} 
+                            exit={{ x: '100%', opacity: 0 }}
                             transition={{ ease: [0.16, 1, 0.3, 1], duration: 0.35 }}
-                            className="fixed right-0 top-0 bottom-0 z-50 w-[480px] bg-[#0c0e18] border-l border-white/[0.08] shadow-[0_0_80px_rgba(0,0,0,0.9)] flex flex-col">
-
+                            className="fixed right-0 top-0 bottom-0 z-50 w-[480px] bg-[#0c0e18] border-l border-white/[0.08] shadow-[0_0_80px_rgba(0,0,0,0.9)] flex flex-col"
+                        >
                             {/* Drawer Header */}
                             <div className="flex items-center justify-between px-6 py-4.5 border-b border-white/[0.08]">
                                 <div>
-                                    <p className="font-bold text-base text-slate-100">
+                                    <p className="font-extrabold text-base text-zinc-100">
                                         {editingId ? 'Edit Leave Record' : 'Record New Leave'}
                                     </p>
-                                    <p className="text-xs text-slate-500 mt-0.5">
+                                    <p className="text-xs text-zinc-500 mt-0.5">
                                         {editingId ? 'Update existing leave entry' : 'Add new entry to leave tracker'}
                                     </p>
                                 </div>
-                                <button onClick={cancelEdit} className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-all">
+                                <button type="button" onClick={cancelEdit} className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-all">
                                     <X size={16} />
                                 </button>
                             </div>
 
                             {/* Drawer Body */}
-                            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-5 space-y-4.5">
-                                {/* Mode Selector (Single Day vs Date Range) */}
+                            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+                                {/* Mode Selector */}
                                 {!editingId && (
-                                    <div className="p-1 rounded-xl bg-[#131726] border border-white/10 flex gap-1">
+                                    <div className="p-1 rounded-xl bg-[#121626] border border-white/10 flex gap-1">
                                         <button
                                             type="button"
                                             onClick={() => setCreationMode('single')}
                                             className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5
-                                                ${creationMode === 'single' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                                                ${creationMode === 'single' ? 'bg-indigo-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'}`}
                                         >
                                             Single Day
                                         </button>
@@ -1243,7 +1274,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                             type="button"
                                             onClick={() => setCreationMode('range')}
                                             className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5
-                                                ${creationMode === 'range' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                                                ${creationMode === 'range' ? 'bg-indigo-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'}`}
                                         >
                                             <CalendarRange size={13} /> Date Range
                                         </button>
@@ -1274,7 +1305,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                                     onChange={e => setSkipWeekends(e.target.checked)}
                                                     className="w-4 h-4 rounded border-white/10 bg-white/5 text-indigo-500 focus:ring-0 cursor-pointer"
                                                 />
-                                                <span className="text-xs text-slate-300 font-medium">Skip Weekends (Sat/Sun)</span>
+                                                <span className="text-xs text-zinc-300 font-medium">Skip Weekends (Sat/Sun)</span>
                                             </label>
 
                                             <span className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-300 bg-indigo-500/15 px-2.5 py-0.5 rounded-md border border-indigo-500/25">
@@ -1286,10 +1317,12 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
                                 <Field label="Client">
                                     <SelectWrap>
-                                        <select value={selectedClient} onChange={e => {
-                                            const newClient = e.target.value;
-                                            setSelectedClient(newClient);
-                                        }} required className={sel}>
+                                        <select 
+                                            value={selectedClient} 
+                                            onChange={e => setSelectedClient(e.target.value)} 
+                                            required 
+                                            className={sel}
+                                        >
                                             <option value="" className="bg-[#0d0f18]">Select client…</option>
                                             {clients.map(c => <option key={c.id} value={c.name} className="bg-[#0d0f18]">{c.name}</option>)}
                                         </select>
@@ -1298,20 +1331,25 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
                                 <Field label="Employee / Recruiter">
                                     <SelectWrap>
-                                        <select value={employeeName} onChange={e => {
-                                            const newEmp = e.target.value;
-                                            setEmployeeName(newEmp);
-                                            if (newEmp && !selectedClient) {
-                                                const match = allUsers.find(u => u.name === newEmp);
-                                                if (match?.clientName) setSelectedClient(match.clientName);
-                                            }
-                                        }} required className={sel}>
+                                        <select 
+                                            value={employeeName} 
+                                            onChange={e => {
+                                                const newEmp = e.target.value;
+                                                setEmployeeName(newEmp);
+                                                if (newEmp && !selectedClient) {
+                                                    const match = allUsers.find(u => u.name === newEmp);
+                                                    if (match?.clientName) setSelectedClient(match.clientName);
+                                                }
+                                            }} 
+                                            required 
+                                            className={sel}
+                                        >
                                             <option value="" className="bg-[#0d0f18]">Select recruiter…</option>
                                             {availableEmployees.map(u => <option key={u.id} value={u.name} className="bg-[#0d0f18]">{u.name}</option>)}
                                         </select>
                                     </SelectWrap>
                                     {employeeName && (
-                                        <p className="text-xs text-slate-400 mt-1 font-normal">
+                                        <p className="text-xs text-zinc-400 mt-1 font-normal">
                                             Logged leaves for {employeeName}: <span className="text-emerald-400 font-semibold">
                                                 {leaves.filter(l => l.employee_name === employeeName).reduce((s, l) => s + Number(l.day_count), 0)} days
                                             </span>
@@ -1321,29 +1359,43 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
                                 <Field label="Leave Type">
                                     <SelectWrap>
-                                        <select value={leaveType} onChange={e => {
-                                            const val = e.target.value;
-                                            setLeaveType(val);
-                                            if (val.startsWith('HD-')) {
-                                                setDayCount(0.5);
-                                            } else {
-                                                setDayCount(1);
-                                            }
-                                        }} className={sel}>
+                                        <select 
+                                            value={leaveType} 
+                                            onChange={e => {
+                                                const val = e.target.value;
+                                                setLeaveType(val);
+                                                if (val.startsWith('HD-')) {
+                                                    setDayCount(0.5);
+                                                } else {
+                                                    setDayCount(1);
+                                                }
+                                            }} 
+                                            className={sel}
+                                        >
                                             {ALL_LEAVE_TYPES.map(t => <option key={t} value={t} className="bg-[#0d0f18]">{t}</option>)}
                                         </select>
                                     </SelectWrap>
                                 </Field>
 
-                                {/* Planned + Duration — Segmented Controls */}
+                                {/* Planned + Duration Segmented Controls */}
                                 <div className="grid grid-cols-2 gap-3.5">
                                     <div>
                                         <label className={lbl}>Planned?</label>
-                                        <div className="flex rounded-xl overflow-hidden border border-white/10 bg-[#131726] p-1">
-                                            <button type="button" onClick={() => setIsPlanned(true)}
-                                                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${isPlanned ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-slate-500 hover:text-slate-300'}`}>Yes</button>
-                                            <button type="button" onClick={() => setIsPlanned(false)}
-                                                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${!isPlanned ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'text-slate-500 hover:text-slate-300'}`}>No</button>
+                                        <div className="flex rounded-xl overflow-hidden border border-white/10 bg-[#121626] p-1">
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setIsPlanned(true)}
+                                                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${isPlanned ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                            >
+                                                Yes
+                                            </button>
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setIsPlanned(false)}
+                                                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${!isPlanned ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                            >
+                                                No
+                                            </button>
                                         </div>
                                     </div>
                                     <div>
@@ -1358,39 +1410,65 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                                 className={inp}
                                             />
                                         ) : (
-                                            <div className="flex rounded-xl overflow-hidden border border-white/10 bg-[#131726] p-1">
-                                                <button type="button" onClick={() => setDayCount(1)}
-                                                    className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${dayCount === 1 ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'text-slate-500 hover:text-slate-300'}`}>Full (1.0)</button>
-                                                <button type="button" onClick={() => setDayCount(0.5)}
-                                                    className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${dayCount === 0.5 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'text-slate-500 hover:text-slate-300'}`}>Half (0.5)</button>
+                                            <div className="flex rounded-xl overflow-hidden border border-white/10 bg-[#121626] p-1">
+                                                <button 
+                                                    type="button" 
+                                                    onClick={() => setDayCount(1)}
+                                                    className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${dayCount === 1 ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                                >
+                                                    Full (1.0)
+                                                </button>
+                                                <button 
+                                                    type="button" 
+                                                    onClick={() => setDayCount(0.5)}
+                                                    className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${dayCount === 0.5 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                                >
+                                                    Half (0.5)
+                                                </button>
                                             </div>
                                         )}
                                     </div>
                                 </div>
 
                                 <Field label="Reason (optional)">
-                                    <input type="text" value={reason} onChange={e => setReason(e.target.value)}
-                                        placeholder="e.g. Fever, personal work, vacation…" className={inp} />
+                                    <input 
+                                        type="text" 
+                                        value={reason} 
+                                        onChange={e => setReason(e.target.value)}
+                                        placeholder="e.g. Fever, personal work, vacation…" 
+                                        className={inp} 
+                                    />
                                 </Field>
 
-                                <div className="pt-1 flex items-center gap-1.5 text-xs text-slate-500">
+                                <div className="pt-1 flex items-center gap-1.5 text-xs text-zinc-500">
                                     <span>Logged by</span>
-                                    <span className="font-semibold text-slate-300">{currentUser.name}</span>
+                                    <span className="font-semibold text-zinc-300">{currentUser.name}</span>
                                 </div>
                             </form>
 
                             {/* Drawer Footer */}
                             <div className="px-6 py-4.5 border-t border-white/[0.08] flex gap-3">
-                                <button type="button" onClick={handleSubmit as any} disabled={saving || !employeeName}
-                                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold shadow-[0_0_20px_rgba(99,102,241,0.3)] transition-all disabled:opacity-40">
-                                    {saving
-                                        ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                        : editingId ? <><Edit2 size={14} /> Update Record</> 
-                                        : creationMode === 'range' ? <><CalendarRange size={14} /> Save {calculatedRangeDates.length} Days</>
-                                        : <><Plus size={14} /> Save Record</>}
+                                <button 
+                                    type="button" 
+                                    onClick={handleSubmit as any} 
+                                    disabled={saving || !employeeName}
+                                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-sm font-semibold shadow-[0_0_20px_rgba(99,102,241,0.3)] transition-all disabled:opacity-40"
+                                >
+                                    {saving ? (
+                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    ) : editingId ? (
+                                        <><Edit2 size={14} /> Update Record</> 
+                                    ) : creationMode === 'range' ? (
+                                        <><CalendarRange size={14} /> Save {calculatedRangeDates.length} Days</>
+                                    ) : (
+                                        <><Plus size={14} /> Save Record</>
+                                    )}
                                 </button>
-                                <button type="button" onClick={cancelEdit}
-                                    className="px-5 py-2.5 rounded-xl border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 text-sm font-semibold transition-all">
+                                <button 
+                                    type="button" 
+                                    onClick={cancelEdit}
+                                    className="px-5 py-2.5 rounded-xl border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] text-zinc-300 text-sm font-semibold transition-all"
+                                >
                                     Cancel
                                 </button>
                             </div>
@@ -1403,52 +1481,55 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
             <AnimatePresence>
                 {bulkDrawerOpen && (
                     <>
-                        {/* Backdrop */}
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                        <motion.div 
+                            initial={{ opacity: 0 }} 
+                            animate={{ opacity: 1 }} 
+                            exit={{ opacity: 0 }}
                             className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
-                            onClick={() => setBulkDrawerOpen(false)} />
+                            onClick={() => setBulkDrawerOpen(false)} 
+                        />
                         
-                        {/* Drawer */}
                         <motion.div
-                            initial={{ x: '100%', opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: '100%', opacity: 0 }}
+                            initial={{ x: '100%', opacity: 0 }} 
+                            animate={{ x: 0, opacity: 1 }} 
+                            exit={{ x: '100%', opacity: 0 }}
                             transition={{ ease: [0.16, 1, 0.3, 1], duration: 0.35 }}
-                            className="fixed right-0 top-0 bottom-0 z-50 w-[480px] bg-[#0c0e18] border-l border-white/[0.08] shadow-[0_0_80px_rgba(0,0,0,0.9)] flex flex-col">
-
+                            className="fixed right-0 top-0 bottom-0 z-50 w-[480px] bg-[#0c0e18] border-l border-white/[0.08] shadow-[0_0_80px_rgba(0,0,0,0.9)] flex flex-col"
+                        >
                             {/* Drawer Header */}
                             <div className="flex items-center justify-between px-6 py-4.5 border-b border-white/[0.08]">
                                 <div>
                                     <div className="flex items-center gap-2">
-                                        <p className="font-bold text-base text-slate-100">Bulk Edit Records</p>
+                                        <p className="font-extrabold text-base text-zinc-100">Bulk Edit Records</p>
                                         <span className="px-2 py-0.5 rounded-md bg-indigo-500/20 text-xs font-semibold text-indigo-300 border border-indigo-500/30">
                                             {selectedIds.length} records
                                         </span>
                                     </div>
-                                    <p className="text-xs text-slate-500 mt-0.5">
+                                    <p className="text-xs text-zinc-500 mt-0.5">
                                         Batch update selected leave entries
                                     </p>
                                 </div>
-                                <button onClick={() => setBulkDrawerOpen(false)} className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-all">
+                                <button type="button" onClick={() => setBulkDrawerOpen(false)} className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-all">
                                     <X size={16} />
                                 </button>
                             </div>
 
                             {/* Drawer Body */}
                             <form onSubmit={handleBulkSubmit} className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-                                {/* Selected items snippet preview */}
-                                <div className="p-3.5 rounded-xl bg-[#131726] border border-white/10 space-y-2">
-                                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Selected Target Entries ({selectedIds.length})</p>
+                                <div className="p-3.5 rounded-xl bg-[#121626] border border-white/10 space-y-2">
+                                    <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Selected Target Entries ({selectedIds.length})</p>
                                     <div className="max-h-28 overflow-y-auto space-y-1.5 pr-1">
                                         {selectedRecords.map(r => (
                                             <div key={r.id} className="flex items-center justify-between text-xs py-1 px-2.5 rounded-lg bg-black/40 border border-white/5">
-                                                <span className="font-medium text-slate-200 truncate max-w-[200px]">{r.employee_name}</span>
-                                                <span className="font-mono text-xs text-slate-400">{fmtDate(r.date)}</span>
+                                                <span className="font-medium text-zinc-200 truncate max-w-[200px]">{r.employee_name}</span>
+                                                <span className="font-mono text-xs text-zinc-400">{fmtDate(r.date)}</span>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
 
                                 {/* Field 1: Leave Type */}
-                                <div className="space-y-2 p-3.5 rounded-xl bg-[#131726] border border-white/10">
+                                <div className="space-y-2 p-3.5 rounded-xl bg-[#121626] border border-white/10">
                                     <label className="flex items-center gap-2.5 cursor-pointer">
                                         <input
                                             type="checkbox"
@@ -1456,7 +1537,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                             onChange={e => setUpdateLeaveType(e.target.checked)}
                                             className="w-4 h-4 rounded border-white/10 bg-white/5 text-indigo-500 focus:ring-0 cursor-pointer"
                                         />
-                                        <span className="text-xs font-semibold text-slate-200">Update Leave Type</span>
+                                        <span className="text-xs font-semibold text-zinc-200">Update Leave Type</span>
                                     </label>
 
                                     {updateLeaveType && (
@@ -1469,7 +1550,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                 </div>
 
                                 {/* Field 2: Planned Status */}
-                                <div className="space-y-2 p-3.5 rounded-xl bg-[#131726] border border-white/10">
+                                <div className="space-y-2 p-3.5 rounded-xl bg-[#121626] border border-white/10">
                                     <label className="flex items-center gap-2.5 cursor-pointer">
                                         <input
                                             type="checkbox"
@@ -1477,21 +1558,31 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                             onChange={e => setUpdatePlanned(e.target.checked)}
                                             className="w-4 h-4 rounded border-white/10 bg-white/5 text-indigo-500 focus:ring-0 cursor-pointer"
                                         />
-                                        <span className="text-xs font-semibold text-slate-200">Update Planned Status</span>
+                                        <span className="text-xs font-semibold text-zinc-200">Update Planned Status</span>
                                     </label>
 
                                     {updatePlanned && (
                                         <div className="flex rounded-xl overflow-hidden border border-white/10 bg-black/30 p-1">
-                                            <button type="button" onClick={() => setBulkIsPlanned(true)}
-                                                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${bulkIsPlanned ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-slate-500 hover:text-slate-300'}`}>Yes</button>
-                                            <button type="button" onClick={() => setBulkIsPlanned(false)}
-                                                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${!bulkIsPlanned ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'text-slate-500 hover:text-slate-300'}`}>No</button>
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setBulkIsPlanned(true)}
+                                                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${bulkIsPlanned ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                            >
+                                                Yes
+                                            </button>
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setBulkIsPlanned(false)}
+                                                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${!bulkIsPlanned ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                            >
+                                                No
+                                            </button>
                                         </div>
                                     )}
                                 </div>
 
                                 {/* Field 3: Duration */}
-                                <div className="space-y-2 p-3.5 rounded-xl bg-[#131726] border border-white/10">
+                                <div className="space-y-2 p-3.5 rounded-xl bg-[#121626] border border-white/10">
                                     <label className="flex items-center gap-2.5 cursor-pointer">
                                         <input
                                             type="checkbox"
@@ -1499,21 +1590,31 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                             onChange={e => setUpdateDuration(e.target.checked)}
                                             className="w-4 h-4 rounded border-white/10 bg-white/5 text-indigo-500 focus:ring-0 cursor-pointer"
                                         />
-                                        <span className="text-xs font-semibold text-slate-200">Update Duration</span>
+                                        <span className="text-xs font-semibold text-zinc-200">Update Duration</span>
                                     </label>
 
                                     {updateDuration && (
                                         <div className="flex rounded-xl overflow-hidden border border-white/10 bg-black/30 p-1">
-                                            <button type="button" onClick={() => setBulkDayCount(1)}
-                                                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${bulkDayCount === 1 ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'text-slate-500 hover:text-slate-300'}`}>Full Day (1.0)</button>
-                                            <button type="button" onClick={() => setBulkDayCount(0.5)}
-                                                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${bulkDayCount === 0.5 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'text-slate-500 hover:text-slate-300'}`}>Half Day (0.5)</button>
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setBulkDayCount(1)}
+                                                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${bulkDayCount === 1 ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                            >
+                                                Full Day (1.0)
+                                            </button>
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setBulkDayCount(0.5)}
+                                                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${bulkDayCount === 0.5 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                            >
+                                                Half Day (0.5)
+                                            </button>
                                         </div>
                                     )}
                                 </div>
 
                                 {/* Field 4: Reason */}
-                                <div className="space-y-2 p-3.5 rounded-xl bg-[#131726] border border-white/10">
+                                <div className="space-y-2 p-3.5 rounded-xl bg-[#121626] border border-white/10">
                                     <label className="flex items-center gap-2.5 cursor-pointer">
                                         <input
                                             type="checkbox"
@@ -1521,7 +1622,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                             onChange={e => setUpdateReason(e.target.checked)}
                                             className="w-4 h-4 rounded border-white/10 bg-white/5 text-indigo-500 focus:ring-0 cursor-pointer"
                                         />
-                                        <span className="text-xs font-semibold text-slate-200">Update Reason</span>
+                                        <span className="text-xs font-semibold text-zinc-200">Update Reason</span>
                                     </label>
 
                                     {updateReason && (
@@ -1542,7 +1643,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                     type="button"
                                     onClick={handleBulkSubmit as any}
                                     disabled={bulkSaving || (!updateLeaveType && !updatePlanned && !updateDuration && !updateReason)}
-                                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold shadow-[0_0_20px_rgba(99,102,241,0.3)] transition-all disabled:opacity-40"
+                                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-sm font-semibold shadow-[0_0_20px_rgba(99,102,241,0.3)] transition-all disabled:opacity-40"
                                 >
                                     {bulkSaving ? (
                                         <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -1553,7 +1654,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                 <button
                                     type="button"
                                     onClick={() => setBulkDrawerOpen(false)}
-                                    className="px-5 py-2.5 rounded-xl border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 text-sm font-semibold transition-all"
+                                    className="px-5 py-2.5 rounded-xl border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] text-zinc-300 text-sm font-semibold transition-all"
                                 >
                                     Cancel
                                 </button>
