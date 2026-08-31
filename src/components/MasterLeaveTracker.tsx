@@ -5,11 +5,13 @@ import {
     FileSpreadsheet, Plus, Trash2, Download, CheckCircle,
     Edit2, X, ChevronDown, ChevronUp, CalendarCheck2,
     AlertCircle, Search,
-    ChevronLeft, ChevronRight
+    ChevronLeft, ChevronRight,
+    CheckSquare, Square, MinusSquare, Sliders, CalendarRange, Sparkles, Check
 } from 'lucide-react';
 import {
     getAllUsers, getClients, ClientRow,
-    addLeave, updateLeave, deleteLeave, getLeavesPage, getLeaveSummary, SmartLeaveRecord, LeaveSummary
+    addLeave, updateLeave, deleteLeave, getLeavesPage, getLeaveSummary, SmartLeaveRecord, LeaveSummary,
+    bulkUpdateLeaves, bulkDeleteLeaves, bulkAddLeaves
 } from '@/lib/store';
 import { User, LeaveRecord } from '@/types';
 import { dateStr, exportExcel } from '@/lib/timeUtils';
@@ -22,8 +24,29 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 
 /** Convert ISO date string (YYYY-MM-DD) → DD-Mon-YY, e.g. "07-Jan-25" */
 function fmtDate(iso: string): string {
+    if (!iso) return '';
     const [yr, mo, dy] = iso.split('-');
-    return `${dy}-${MONTHS[parseInt(mo, 10) - 1]}-${yr.slice(2)}`;
+    return `${dy}-${MONTHS[parseInt(mo, 10) - 1] || 'Jan'}-${yr ? yr.slice(2) : ''}`;
+}
+
+/** Calculate all date strings between start and end with optional weekend skipping */
+function getDatesInRange(start: string, end: string, excludeWeekends: boolean): string[] {
+    const dates: string[] = [];
+    const s = new Date(start + 'T00:00:00');
+    const e = new Date(end + 'T00:00:00');
+    if (isNaN(s.getTime()) || isNaN(e.getTime()) || s > e) return dates;
+    const cur = new Date(s);
+    while (cur <= e) {
+        const dayOfWeek = cur.getDay(); // 0 = Sun, 6 = Sat
+        if (!excludeWeekends || (dayOfWeek !== 0 && dayOfWeek !== 6)) {
+            const y = cur.getFullYear();
+            const m = String(cur.getMonth() + 1).padStart(2, '0');
+            const d = String(cur.getDate()).padStart(2, '0');
+            dates.push(`${y}-${m}-${d}`);
+        }
+        cur.setDate(cur.getDate() + 1);
+    }
+    return dates;
 }
 
 const LEAVE_TYPES = [
@@ -123,21 +146,41 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
-    // Form drawer
+    // Multi-select state
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const [bulkDrawerOpen, setBulkDrawerOpen] = useState(false);
+    const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
+
+    // Form drawer (Single & Date Range Add / Single Edit)
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
+    const [creationMode, setCreationMode] = useState<'single' | 'range'>('single');
 
-    // Pending delete (for ConfirmDialog)
+    // Pending single delete (for ConfirmDialog)
     const [deleteId, setDeleteId] = useState<string | null>(null);
 
-    // Form fields
+    // Form fields (Single / Range)
     const [date, setDate] = useState(dateStr(new Date()));
+    const [startDate, setStartDate] = useState(dateStr(new Date()));
+    const [endDate, setEndDate] = useState(dateStr(new Date()));
+    const [skipWeekends, setSkipWeekends] = useState(true);
     const [selectedClient, setSelectedClient] = useState('');
     const [employeeName, setEmployeeName] = useState('');
     const [isPlanned, setIsPlanned] = useState(true);
     const [reason, setReason] = useState('');
     const [leaveType, setLeaveType] = useState('Sick Leave');
     const [dayCount, setDayCount] = useState<number>(1);
+
+    // Bulk Edit Form fields
+    const [bulkLeaveType, setBulkLeaveType] = useState('Casual Leave');
+    const [bulkIsPlanned, setBulkIsPlanned] = useState(true);
+    const [bulkDayCount, setBulkDayCount] = useState<number>(1);
+    const [bulkReason, setBulkReason] = useState('');
+    const [updateLeaveType, setUpdateLeaveType] = useState(true);
+    const [updatePlanned, setUpdatePlanned] = useState(false);
+    const [updateDuration, setUpdateDuration] = useState(false);
+    const [updateReason, setUpdateReason] = useState(false);
+    const [bulkSaving, setBulkSaving] = useState(false);
 
     // Filters
     const [filterClient, setFilterClient] = useState<string[]>([]);
@@ -221,18 +264,48 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
         : [];
 
     function resetForm() {
-        setEditingId(null); setDate(dateStr(new Date())); setSelectedClient('');
-        setEmployeeName(''); setIsPlanned(true); setReason(''); setLeaveType('Sick Leave'); setDayCount(1);
+        setEditingId(null);
+        setCreationMode('single');
+        setDate(dateStr(new Date()));
+        setStartDate(dateStr(new Date()));
+        setEndDate(dateStr(new Date()));
+        setSkipWeekends(true);
+        setSelectedClient('');
+        setEmployeeName('');
+        setIsPlanned(true);
+        setReason('');
+        setLeaveType('Sick Leave');
+        setDayCount(1);
     }
 
-    function openNew() { resetForm(); setDrawerOpen(true); }
-    function startEdit(l: LeaveRecord) {
-        setEditingId(l.id); setDate(l.date); setSelectedClient(l.client_name);
-        setEmployeeName(l.employee_name); setIsPlanned(l.is_planned);
-        setReason(l.reason || ''); setLeaveType(l.leave_type); setDayCount(l.day_count);
+    function openNew() {
+        resetForm();
         setDrawerOpen(true);
     }
-    function cancelEdit() { resetForm(); setDrawerOpen(false); }
+
+    function startEdit(l: LeaveRecord) {
+        setEditingId(l.id);
+        setCreationMode('single');
+        setDate(l.date);
+        setSelectedClient(l.client_name);
+        setEmployeeName(l.employee_name);
+        setIsPlanned(l.is_planned);
+        setReason(l.reason || '');
+        setLeaveType(l.leave_type);
+        setDayCount(l.day_count);
+        setDrawerOpen(true);
+    }
+
+    function cancelEdit() {
+        resetForm();
+        setDrawerOpen(false);
+    }
+
+    // Dynamic list of dates calculated for range creation
+    const calculatedRangeDates = useMemo(() => {
+        if (creationMode !== 'range') return [];
+        return getDatesInRange(startDate, endDate, skipWeekends);
+    }, [creationMode, startDate, endDate, skipWeekends]);
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
@@ -240,19 +313,60 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
         setSaving(true);
         try {
-            const payload = { date, client_name: selectedClient, employee_name: employeeName, is_planned: isPlanned, reason: reason || null, approver: currentUser.name, leave_type: leaveType, day_count: dayCount };
-            if (editingId && !editingId.startsWith('virtual-')) {
-                await updateLeave(editingId, payload);
-                success('Record updated', `${employeeName}'s leave on ${date} has been saved.`);
+            if (creationMode === 'range' && !editingId) {
+                if (calculatedRangeDates.length === 0) {
+                    toastError('Invalid date range', 'No valid working dates were selected.');
+                    setSaving(false);
+                    return;
+                }
+
+                const payloads = calculatedRangeDates.map(d => ({
+                    date: d,
+                    client_name: selectedClient,
+                    employee_name: employeeName,
+                    is_planned: isPlanned,
+                    reason: reason || null,
+                    approver: currentUser.name,
+                    leave_type: leaveType,
+                    day_count: dayCount
+                }));
+
+                await bulkAddLeaves(payloads);
+                success(
+                    'Multi-day leave recorded',
+                    `${employeeName} · ${calculatedRangeDates.length} days (${fmtDate(calculatedRangeDates[0])} to ${fmtDate(calculatedRangeDates[calculatedRangeDates.length - 1])})`
+                );
             } else {
-                await addLeave(payload);
-                success('Leave recorded', `${employeeName} · ${leaveType} · ${date}`);
+                const payload = {
+                    date,
+                    client_name: selectedClient,
+                    employee_name: employeeName,
+                    is_planned: isPlanned,
+                    reason: reason || null,
+                    approver: currentUser.name,
+                    leave_type: leaveType,
+                    day_count: dayCount
+                };
+
+                if (editingId && !editingId.startsWith('virtual-')) {
+                    await updateLeave(editingId, payload);
+                    success('Record updated', `${employeeName}'s leave on ${fmtDate(date)} has been saved.`);
+                } else {
+                    await addLeave(payload);
+                    success('Leave recorded', `${employeeName} · ${leaveType} · ${fmtDate(date)}`);
+                }
             }
+
             if (currentPage !== 1) setCurrentPage(1);
             else await loadLeavesPage(true, 1);
-            resetForm(); setDrawerOpen(false);
-        } catch (err) { console.error(err); toastError('Could not save leave', 'Check the `leaves` table in Supabase and try again.'); }
-        finally { setSaving(false); }
+            resetForm();
+            setDrawerOpen(false);
+        } catch (err) {
+            console.error(err);
+            toastError('Could not save leave', 'Check the database connection and try again.');
+        } finally {
+            setSaving(false);
+        }
     }
 
     async function handleDelete(id: string) {
@@ -268,12 +382,13 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
         const name = targetLeave?.employee_name ?? 'Record';
         if (editingId === id) cancelEdit();
         setDeleteId(null);
+        setSelectedIds(prev => prev.filter(x => x !== id));
         const nextTotal = Math.max(0, totalLeaves - 1);
         const nextPage = Math.min(currentPage, Math.max(1, Math.ceil(nextTotal / LEAVE_PAGE_SIZE)));
         const filters = {
             clientName: filterClient.length > 0 ? filterClient : undefined,
             employeeName: filterEmployee.length > 0 ? filterEmployee : undefined,
-            leaveType: filterLeaveType || undefined,
+            leaveType: filterLeaveType.length > 0 ? filterLeaveType : undefined,
             search: search || undefined,
             year: filterYear || undefined,
             month: filterMonth || undefined,
@@ -289,12 +404,56 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
         success(isSystem ? 'Leave dismissed' : 'Leave deleted', `${name}'s record has been removed.`);
     }
 
+    // Bulk action handlers
+    async function handleBulkSubmit(e: React.FormEvent) {
+        e.preventDefault();
+        if (selectedIds.length === 0) return;
+        setBulkSaving(true);
+        try {
+            const updates: Partial<LeaveRecord> = {};
+            if (updateLeaveType) updates.leave_type = bulkLeaveType;
+            if (updatePlanned) updates.is_planned = bulkIsPlanned;
+            if (updateDuration) updates.day_count = bulkDayCount;
+            if (updateReason) updates.reason = bulkReason.trim() || null;
+            updates.approver = currentUser.name;
+
+            await bulkUpdateLeaves(selectedIds, updates);
+            success('Bulk update completed', `Successfully updated ${selectedIds.length} leave record(s).`);
+            setBulkDrawerOpen(false);
+            setSelectedIds([]);
+            await loadLeavesPage(true);
+        } catch (err) {
+            console.error(err);
+            toastError('Bulk update failed', 'Could not apply updates to selected records.');
+        } finally {
+            setBulkSaving(false);
+        }
+    }
+
+    async function handleBulkDelete() {
+        if (selectedIds.length === 0) return;
+        setSaving(true);
+        try {
+            await bulkDeleteLeaves(selectedIds);
+            success('Bulk delete completed', `Deleted ${selectedIds.length} leave record(s).`);
+            setBulkDeleteConfirm(false);
+            setSelectedIds([]);
+            await loadLeavesPage(true);
+        } catch (err) {
+            console.error(err);
+            toastError('Bulk delete failed', 'Could not delete the selected records.');
+        } finally {
+            setSaving(false);
+        }
+    }
+
     async function declineSmartLeave(l: SmartLeaveRecord) {
         setSaving(true);
         try {
             await updateLeave(l.id, { leave_type: 'Dismissed', reason: 'Dismissed by Admin' });
             setSmartLeaves((current) => current.filter((leave) => leave.id !== l.id));
             setLeaves((current) => current.filter((leave) => leave.id !== l.id));
+            setSelectedIds((prev) => prev.filter(x => x !== l.id));
             setTotalLeaves((current) => Math.max(0, current - 1));
             setSummary(await getLeaveSummary({
                 clientName: filterClient.length > 0 ? filterClient : undefined,
@@ -394,9 +553,33 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
     const pageStart = totalLeaves === 0 ? 0 : ((currentPage - 1) * LEAVE_PAGE_SIZE) + 1;
     const pageEnd = totalLeaves === 0 ? 0 : pageStart + leaves.length - 1;
 
+    // Selection helpers
+    const allVisibleIds = useMemo(() => visibleLeaves.map(l => l.id), [visibleLeaves]);
+    const isAllVisibleSelected = allVisibleIds.length > 0 && allVisibleIds.every(id => selectedIds.includes(id));
+    const isSomeVisibleSelected = allVisibleIds.some(id => selectedIds.includes(id)) && !isAllVisibleSelected;
+
+    const toggleSelect = (id: string) => {
+        setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    };
+
+    const toggleSelectAll = () => {
+        if (isAllVisibleSelected) {
+            setSelectedIds(prev => prev.filter(id => !allVisibleIds.includes(id)));
+        } else {
+            setSelectedIds(prev => Array.from(new Set([...prev, ...allVisibleIds])));
+        }
+    };
+
+    const clearSelection = () => setSelectedIds([]);
+
+    // Summary of selected records for bulk edit drawer
+    const selectedRecords = useMemo(() => {
+        return visibleLeaves.filter(l => selectedIds.includes(l.id));
+    }, [visibleLeaves, selectedIds]);
+
     return (
-        <div className="flex flex-col gap-6">
-            {/* Delete Confirmation Dialog */}
+        <div className="flex flex-col gap-6 relative">
+            {/* Single Delete Confirmation Dialog */}
             <ConfirmDialog
                 open={!!deleteId}
                 title="Delete this leave record?"
@@ -406,10 +589,20 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                 onCancel={() => setDeleteId(null)}
             />
 
+            {/* Bulk Delete Confirmation Dialog */}
+            <ConfirmDialog
+                open={bulkDeleteConfirm}
+                title={`Delete ${selectedIds.length} leave records?`}
+                message={`Are you sure you want to permanently delete ${selectedIds.length} selected records? This action cannot be undone.`}
+                confirmLabel={`Delete ${selectedIds.length} Records`}
+                onConfirm={handleBulkDelete}
+                onCancel={() => setBulkDeleteConfirm(false)}
+            />
+
             {/* ── Header ──────────────────────────────────────────────────── */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                    <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.15)]">
                         <FileSpreadsheet size={18} className="text-emerald-400" />
                     </div>
                     <div>
@@ -418,14 +611,12 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
-                    <div className="w-px h-6 bg-white/10 mx-1" />
-
                     <button onClick={handleExport} disabled={visibleLeaves.length === 0}
                         className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-slate-300 text-xs font-semibold hover:bg-white/[0.08] hover:text-white transition-all disabled:opacity-30 disabled:pointer-events-none">
                         <Download size={14} /> Export CSV
                     </button>
                     <button onClick={openNew}
-                        className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-emerald-500 text-black text-xs font-bold tracking-wide hover:bg-emerald-400 transition-all shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_2px_12px_rgba(16,185,129,0.2)]">
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-emerald-500 text-black text-xs font-bold tracking-wide hover:bg-emerald-400 transition-all shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_2px_12px_rgba(16,185,129,0.25)] hover:scale-[1.02] active:scale-[0.98]">
                         <Plus size={15} /> New Record
                     </button>
                 </div>
@@ -532,13 +723,13 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                 <button onClick={() => setFilterEmployee(filterEmployee.filter(x => x !== emp))} className="hover:text-white transition-colors"><X size={10} /></button>
                             </span>
                         ))}
-                        {filterLeaveType && (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[10px] font-black text-amber-400 uppercase tracking-wider">
-                                {filterLeaveType}
-                                <button onClick={() => setFilterLeaveType([])} className="hover:text-white transition-colors"><X size={10} /></button>
+                        {filterLeaveType.map(lt => (
+                            <span key={lt} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[10px] font-black text-amber-400 uppercase tracking-wider">
+                                {lt}
+                                <button onClick={() => setFilterLeaveType(filterLeaveType.filter(x => x !== lt))} className="hover:text-white transition-colors"><X size={10} /></button>
                             </span>
-                        )}
-                        {(filterClient.length > 0 || filterEmployee.length > 0 || filterLeaveType || search) && (
+                        ))}
+                        {(filterClient.length > 0 || filterEmployee.length > 0 || filterLeaveType.length > 0 || search || filterYear) && (
                             <button onClick={() => { setFilterClient([]); setFilterEmployee([]); setFilterLeaveType([]); setSearch(''); setFilterYear(''); setFilterMonth(''); }}
                                 className="flex items-center gap-1 text-[10px] font-bold text-rose-400 hover:text-rose-300 transition-colors px-2 py-1 rounded-lg hover:bg-rose-500/10">
                                 <X size={10} /> Reset All
@@ -555,9 +746,27 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
             {/* ── Table ───────────────────────────────────────────────────── */}
             <div className="panel-3d overflow-hidden rounded-[2rem] p-4">
                 <div className="overflow-x-auto pb-4">
-                    <div className="min-w-[1050px] flex flex-col gap-3">
+                    <div className="min-w-[1100px] flex flex-col gap-3">
                         {/* Headers */}
-                        <div className="grid grid-cols-[100px_minmax(150px,2fr)_minmax(130px,1fr)_minmax(160px,1.5fr)_90px_90px_minmax(140px,1.5fr)_100px_90px] gap-4 px-5 py-3 rounded-xl bg-white/[0.03] border border-white/[0.05] shadow-[inset_0_1px_0_rgba(255,255,255,0.02)] items-center">
+                        <div className="grid grid-cols-[40px_100px_minmax(150px,2fr)_minmax(130px,1fr)_minmax(160px,1.5fr)_90px_90px_minmax(140px,1.5fr)_100px_90px] gap-3 px-5 py-3 rounded-xl bg-white/[0.03] border border-white/[0.05] shadow-[inset_0_1px_0_rgba(255,255,255,0.02)] items-center">
+                            {/* Master Checkbox */}
+                            <div className="flex items-center justify-center">
+                                <button
+                                    type="button"
+                                    onClick={toggleSelectAll}
+                                    className="p-1 rounded-md text-slate-500 hover:text-white transition-colors focus:outline-none"
+                                    title={isAllVisibleSelected ? "Deselect all on page" : "Select all on page"}
+                                >
+                                    {isAllVisibleSelected ? (
+                                        <CheckSquare size={16} className="text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                                    ) : isSomeVisibleSelected ? (
+                                        <MinusSquare size={16} className="text-indigo-400" />
+                                    ) : (
+                                        <Square size={16} className="text-slate-600 hover:text-slate-400" />
+                                    )}
+                                </button>
+                            </div>
+
                             {['Date', 'Employee', 'Client', 'Leave Type', 'Duration', 'Planned', 'Reason', 'Logged by'].map(h => (
                                 <button key={h} onClick={() => {
                                     if (sortConfig.key === h) setSortConfig({ key: h, dir: sortConfig.dir === 'asc' ? 'desc' : 'asc' });
@@ -573,7 +782,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                             <div className="text-[10px] font-black tracking-[0.15em] uppercase text-slate-500 text-right pr-2">Actions</div>
                         </div>
 
-                        {/* Body Slots */}
+                        {/* Body Slots: System Alerts */}
                         {currentPage === 1 && filteredSmartLeaves.length > 0 && !loading && (
                             <div className="mb-2 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4">
                                 <div className="mb-3 flex items-center justify-between gap-3">
@@ -586,40 +795,62 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                     </span>
                                 </div>
                                 <div className="space-y-3">
-                                    {filteredSmartLeaves.map((l) => (
-                                        <div key={l.id} className="grid grid-cols-[100px_minmax(150px,2fr)_minmax(130px,1fr)_minmax(160px,1.5fr)_90px_90px_minmax(140px,1.5fr)_100px_90px] gap-4 px-5 py-3.5 items-center rounded-2xl border border-amber-500/15 bg-black/20">
-                                            <div className="font-mono text-[11px] font-bold text-slate-400/80 uppercase tracking-widest">{fmtDate(l.date)}</div>
-                                            <div className="flex items-center gap-3 min-w-0">
-                                                <span className="w-8 h-8 rounded-xl bg-[linear-gradient(145deg,rgba(255,255,255,0.05),rgba(255,255,255,0.01))] border border-white/10 text-[11px] font-black text-white flex items-center justify-center flex-shrink-0">{l.employee_name[0]}</span>
-                                                <span className="text-[13px] font-bold text-white truncate">{l.employee_name}</span>
+                                    {filteredSmartLeaves.map((l) => {
+                                        const isSelected = selectedIds.includes(l.id);
+                                        return (
+                                            <div key={l.id} className={`grid grid-cols-[40px_100px_minmax(150px,2fr)_minmax(130px,1fr)_minmax(160px,1.5fr)_90px_90px_minmax(140px,1.5fr)_100px_90px] gap-3 px-5 py-3.5 items-center rounded-2xl border transition-all duration-200
+                                                ${isSelected ? 'border-amber-500/50 bg-amber-500/10 shadow-[0_0_15px_rgba(245,158,11,0.15)] ring-1 ring-amber-500/30' : 'border-amber-500/15 bg-black/20 hover:bg-black/30'}`}>
+                                                
+                                                {/* Checkbox */}
+                                                <div className="flex items-center justify-center">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => toggleSelect(l.id)}
+                                                        className="p-1 rounded-md transition-colors"
+                                                    >
+                                                        {isSelected ? (
+                                                            <CheckSquare size={16} className="text-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.6)]" />
+                                                        ) : (
+                                                            <Square size={16} className="text-slate-600 hover:text-slate-400" />
+                                                        )}
+                                                    </button>
+                                                </div>
+
+                                                <div className="font-mono text-[11px] font-bold text-slate-400/80 uppercase tracking-widest">{fmtDate(l.date)}</div>
+                                                <div className="flex items-center gap-3 min-w-0">
+                                                    <span className="w-8 h-8 rounded-xl bg-[linear-gradient(145deg,rgba(255,255,255,0.05),rgba(255,255,255,0.01))] border border-white/10 text-[11px] font-black text-white flex items-center justify-center flex-shrink-0">{l.employee_name[0]}</span>
+                                                    <span className="text-[13px] font-bold text-white truncate">{l.employee_name}</span>
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <span className="inline-block max-w-full truncate text-[9px] font-black uppercase tracking-widest text-slate-400 bg-black/40 border border-white/5 px-2.5 py-1.5 rounded-lg">{l.client_name}</span>
+                                                </div>
+                                                <div><TypeBadge type={l.leave_type} isSmart /></div>
+                                                <div className={`text-[11px] font-black tracking-wider uppercase ${l.day_count === 1 ? 'text-blue-400' : 'text-amber-400'}`}>{l.day_count === 1 ? 'Full' : 'Half'}</div>
+                                                <div>
+                                                    <span className="inline-flex items-center gap-1 text-amber-500/90 text-[10px] uppercase tracking-widest font-black bg-amber-500/10 px-2 py-1 rounded-md border border-amber-500/20"><AlertCircle size={10} /> Auto</span>
+                                                </div>
+                                                <div className="min-w-0 text-slate-500 text-[11px] font-semibold truncate" title={l.reason || ''}>
+                                                    <span className="text-amber-500/70 text-[9px] font-black uppercase tracking-widest">{(l.reason || '').replace(/System Auto-Generated:\s*/i, '').replace(/No punch-in recorded/i, 'No Punch In').replace(/Half-Day/i, 'Less Hours')}</span>
+                                                </div>
+                                                <div className="truncate text-slate-500 text-[11px] font-bold"><span className="text-indigo-400/70 italic">System Gen</span></div>
+                                                <div className="flex items-center justify-end gap-1.5 w-full">
+                                                    <button onClick={() => startEdit(l)} title="Approve & Save"
+                                                        className="flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30 text-emerald-400 hover:from-emerald-500 hover:to-emerald-400 hover:text-emerald-950 transition-all">
+                                                        <CheckCircle size={14} />
+                                                    </button>
+                                                    <button onClick={() => void declineSmartLeave(l)} title="Decline"
+                                                        className="flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-br from-rose-500/20 to-rose-600/10 border border-rose-500/30 text-rose-400 hover:from-rose-500 hover:to-rose-400 hover:text-rose-950 transition-all">
+                                                        <X size={14} />
+                                                    </button>
+                                                </div>
                                             </div>
-                                            <div className="min-w-0">
-                                                <span className="inline-block max-w-full truncate text-[9px] font-black uppercase tracking-widest text-slate-400 bg-black/40 border border-white/5 px-2.5 py-1.5 rounded-lg">{l.client_name}</span>
-                                            </div>
-                                            <div><TypeBadge type={l.leave_type} isSmart /></div>
-                                            <div className={`text-[11px] font-black tracking-wider uppercase ${l.day_count === 1 ? 'text-blue-400' : 'text-amber-400'}`}>{l.day_count === 1 ? 'Full' : 'Half'}</div>
-                                            <div>
-                                                <span className="inline-flex items-center gap-1 text-amber-500/90 text-[10px] uppercase tracking-widest font-black bg-amber-500/10 px-2 py-1 rounded-md border border-amber-500/20"><AlertCircle size={10} /> Auto</span>
-                                            </div>
-                                            <div className="min-w-0 text-slate-500 text-[11px] font-semibold truncate" title={l.reason || ''}>
-                                                <span className="text-amber-500/70 text-[9px] font-black uppercase tracking-widest">{(l.reason || '').replace(/System Auto-Generated:\s*/i, '').replace(/No punch-in recorded/i, 'No Punch In').replace(/Half-Day/i, 'Less Hours')}</span>
-                                            </div>
-                                            <div className="truncate text-slate-500 text-[11px] font-bold"><span className="text-indigo-400/70 italic">System Gen</span></div>
-                                            <div className="flex items-center justify-end gap-1.5 w-full">
-                                                <button onClick={() => startEdit(l)} title="Approve & Save"
-                                                    className="flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30 text-emerald-400 hover:from-emerald-500 hover:to-emerald-400 hover:text-emerald-950 transition-all">
-                                                    <CheckCircle size={14} />
-                                                </button>
-                                                <button onClick={() => void declineSmartLeave(l)} title="Decline"
-                                                    className="flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-br from-rose-500/20 to-rose-600/10 border border-rose-500/30 text-rose-400 hover:from-rose-500 hover:to-rose-400 hover:text-rose-950 transition-all">
-                                                    <X size={14} />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </div>
                         )}
+
+                        {/* Standard Records */}
                         {loading ? (
                             <div className="py-20 flex flex-col items-center justify-center gap-3">
                                 <div className="w-6 h-6 border-2 border-slate-800 border-t-indigo-500 rounded-full animate-spin shadow-[0_0_15px_rgba(99,102,241,0.4)]" />
@@ -643,74 +874,94 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                             </div>
                         ) : (
                             <AnimatePresence initial={false}>
-                                {leaves.map((l) => (
-                                    <motion.div key={l.id}
-                                        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
-                                        transition={{ duration: 0.2 }}
-                                        className={`grid grid-cols-[100px_minmax(150px,2fr)_minmax(130px,1fr)_minmax(160px,1.5fr)_90px_90px_minmax(140px,1.5fr)_100px_90px] gap-4 px-5 py-3.5 items-center rounded-2xl transition-all duration-300 group cursor-default
-                                            ${editingId === l.id ? 'bg-[linear-gradient(120deg,rgba(245,158,11,0.08),rgba(0,0,0,0.4))] border border-amber-500/30 shadow-[0_0_20px_rgba(245,158,11,0.1)] ring-1 ring-amber-500/20' : 'bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] hover:border-white/10 hover:shadow-xl hover:scale-[1.005]'}`}>
-                                        
-                                        <div className="font-mono text-[11px] font-bold text-slate-400/80 uppercase tracking-widest">{fmtDate(l.date)}</div>
-                                        
-                                        <div className="flex items-center gap-3 min-w-0">
-                                            <span className="w-8 h-8 rounded-xl bg-[linear-gradient(145deg,rgba(255,255,255,0.05),rgba(255,255,255,0.01))] border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] text-[11px] font-black text-white flex items-center justify-center flex-shrink-0 drop-shadow-md">
-                                                {l.employee_name[0]}
-                                            </span>
-                                            <span className="text-[13px] font-bold text-white truncate drop-shadow-sm">{l.employee_name}</span>
-                                        </div>
-
-                                        <div className="min-w-0">
-                                            <span className="inline-block max-w-full truncate text-[9px] font-black uppercase tracking-widest text-slate-400 bg-black/40 border border-white/5 px-2.5 py-1.5 rounded-lg shadow-inner">{l.client_name}</span>
-                                        </div>
-
-                                        <div><TypeBadge type={l.leave_type} isSmart={(l as any).is_smart} /></div>
-
-                                        <div className={`text-[11px] font-black tracking-wider uppercase ${l.day_count === 1 ? 'text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.5)]' : 'text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]'}`}>
-                                            {l.day_count === 1 ? 'Full' : 'Half'}
-                                        </div>
-
-                                        <div>
-                                            {(l as any).is_smart ? (
-                                                <span className="inline-flex items-center gap-1 text-amber-500/90 text-[10px] uppercase tracking-widest font-black bg-amber-500/10 px-2 py-1 rounded-md border border-amber-500/20"><AlertCircle size={10} /> Auto</span>
-                                            ) : l.is_planned
-                                                ? <span className="inline-flex items-center gap-1 text-emerald-400/90 text-[10px] uppercase tracking-widest font-black bg-emerald-500/10 px-2 py-1 rounded-md border border-emerald-500/20"><CheckCircle size={10} /> Yes</span>
-                                                : <span className="inline-flex items-center gap-1 text-rose-400/90 text-[10px] uppercase tracking-widest font-black bg-rose-500/10 px-2 py-1 rounded-md border border-rose-500/20"><AlertCircle size={10} /> No</span>}
-                                        </div>
-
-                                        <div className="min-w-0 text-slate-500 text-[11px] font-semibold truncate" title={l.reason || ''}>
-                                            {(l as any).is_smart ? <span className="text-amber-500/70 text-[9px] font-black uppercase tracking-widest">{(l.reason || '').replace(/System Auto-Generated:\s*/i, '').replace(/No punch-in recorded/i, 'No Punch In').replace(/Half-Day/i, 'Less Hours')}</span> : (l.reason || <span className="text-slate-700 font-bold">—</span>)}
-                                        </div>
-
-                                        <div className="truncate text-slate-500 text-[11px] font-bold">{(l as any).is_smart ? <span className="text-indigo-400/70 italic drop-shadow-[0_0_5px_rgba(129,140,248,0.3)]">System Gen</span> : l.approver}</div>
-
-                                        <div className="flex items-center justify-end gap-1.5 w-full">
-                                            {(l as any).is_smart && (
-                                                <>
-                                                    <button onClick={() => startEdit(l)} title="Approve & Save"
-                                                        className="flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30 text-emerald-400 hover:from-emerald-500 hover:to-emerald-400 hover:text-emerald-950 transition-all shadow-[0_0_10px_rgba(16,185,129,0.1)] hover:shadow-[0_0_15px_rgba(16,185,129,0.4)] hover:scale-105 active:scale-95">
-                                                        <CheckCircle size={14} className="drop-shadow-sm" />
-                                                    </button>
-                                                    <button onClick={() => declineSmartLeave(l)} title="Decline"
-                                                        className="flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-br from-rose-500/20 to-rose-600/10 border border-rose-500/30 text-rose-400 hover:from-rose-500 hover:to-rose-400 hover:text-rose-950 transition-all shadow-[0_0_10px_rgba(225,29,72,0.1)] hover:shadow-[0_0_15px_rgba(225,29,72,0.4)] hover:scale-105 active:scale-95">
-                                                        <X size={14} className="drop-shadow-sm" />
-                                                    </button>
-                                                </>
-                                            )}
-                                            {!(l as any).is_smart && (
-                                                <button onClick={() => startEdit(l)} title="Edit"
-                                                    className="flex items-center justify-center w-8 h-8 rounded-xl bg-white/[0.03] border border-white/10 text-slate-400 hover:bg-amber-500/20 hover:border-amber-500/40 hover:text-amber-400 transition-all shadow-sm hover:shadow-[0_0_15px_rgba(245,158,11,0.2)] hover:scale-105 active:scale-95">
-                                                    <Edit2 size={13} />
+                                {leaves.map((l) => {
+                                    const isSelected = selectedIds.includes(l.id);
+                                    return (
+                                        <motion.div key={l.id}
+                                            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+                                            transition={{ duration: 0.2 }}
+                                            className={`grid grid-cols-[40px_100px_minmax(150px,2fr)_minmax(130px,1fr)_minmax(160px,1.5fr)_90px_90px_minmax(140px,1.5fr)_100px_90px] gap-3 px-5 py-3.5 items-center rounded-2xl transition-all duration-300 group cursor-default
+                                                ${editingId === l.id ? 'bg-[linear-gradient(120deg,rgba(245,158,11,0.08),rgba(0,0,0,0.4))] border border-amber-500/30 shadow-[0_0_20px_rgba(245,158,11,0.1)] ring-1 ring-amber-500/20' 
+                                                : isSelected ? 'bg-[linear-gradient(120deg,rgba(99,102,241,0.08),rgba(16,185,129,0.05))] border border-indigo-500/40 shadow-[0_0_20px_rgba(99,102,241,0.15)] ring-1 ring-indigo-500/20' 
+                                                : 'bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] hover:border-white/10 hover:shadow-xl hover:scale-[1.003]'}`}>
+                                            
+                                            {/* Checkbox */}
+                                            <div className="flex items-center justify-center">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => toggleSelect(l.id)}
+                                                    className="p-1 rounded-md transition-colors"
+                                                >
+                                                    {isSelected ? (
+                                                        <CheckSquare size={16} className="text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                                                    ) : (
+                                                        <Square size={16} className="text-slate-600 hover:text-slate-400" />
+                                                    )}
                                                 </button>
-                                            )}
-                                            {!(l as any).is_smart && (
-                                                <button onClick={() => setDeleteId(l.id)} title="Delete"
-                                                    className="flex items-center justify-center w-8 h-8 rounded-xl bg-white/[0.03] border border-white/10 text-slate-400 hover:bg-rose-500/20 hover:border-rose-500/40 hover:text-rose-400 transition-all shadow-sm hover:shadow-[0_0_15px_rgba(225,29,72,0.2)] hover:scale-105 active:scale-95">
-                                                    <Trash2 size={13} />
-                                                </button>
-                                            )}
-                                        </div>
-                                    </motion.div>
-                                ))}
+                                            </div>
+
+                                            <div className="font-mono text-[11px] font-bold text-slate-400/80 uppercase tracking-widest">{fmtDate(l.date)}</div>
+                                            
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <span className="w-8 h-8 rounded-xl bg-[linear-gradient(145deg,rgba(255,255,255,0.05),rgba(255,255,255,0.01))] border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] text-[11px] font-black text-white flex items-center justify-center flex-shrink-0 drop-shadow-md">
+                                                    {l.employee_name[0]}
+                                                </span>
+                                                <span className="text-[13px] font-bold text-white truncate drop-shadow-sm">{l.employee_name}</span>
+                                            </div>
+
+                                            <div className="min-w-0">
+                                                <span className="inline-block max-w-full truncate text-[9px] font-black uppercase tracking-widest text-slate-400 bg-black/40 border border-white/5 px-2.5 py-1.5 rounded-lg shadow-inner">{l.client_name}</span>
+                                            </div>
+
+                                            <div><TypeBadge type={l.leave_type} isSmart={(l as any).is_smart} /></div>
+
+                                            <div className={`text-[11px] font-black tracking-wider uppercase ${l.day_count === 1 ? 'text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.5)]' : 'text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]'}`}>
+                                                {l.day_count === 1 ? 'Full' : 'Half'}
+                                            </div>
+
+                                            <div>
+                                                {(l as any).is_smart ? (
+                                                    <span className="inline-flex items-center gap-1 text-amber-500/90 text-[10px] uppercase tracking-widest font-black bg-amber-500/10 px-2 py-1 rounded-md border border-amber-500/20"><AlertCircle size={10} /> Auto</span>
+                                                ) : l.is_planned
+                                                    ? <span className="inline-flex items-center gap-1 text-emerald-400/90 text-[10px] uppercase tracking-widest font-black bg-emerald-500/10 px-2 py-1 rounded-md border border-emerald-500/20"><CheckCircle size={10} /> Yes</span>
+                                                    : <span className="inline-flex items-center gap-1 text-rose-400/90 text-[10px] uppercase tracking-widest font-black bg-rose-500/10 px-2 py-1 rounded-md border border-rose-500/20"><AlertCircle size={10} /> No</span>}
+                                            </div>
+
+                                            <div className="min-w-0 text-slate-500 text-[11px] font-semibold truncate" title={l.reason || ''}>
+                                                {(l as any).is_smart ? <span className="text-amber-500/70 text-[9px] font-black uppercase tracking-widest">{(l.reason || '').replace(/System Auto-Generated:\s*/i, '').replace(/No punch-in recorded/i, 'No Punch In').replace(/Half-Day/i, 'Less Hours')}</span> : (l.reason || <span className="text-slate-700 font-bold">—</span>)}
+                                            </div>
+
+                                            <div className="truncate text-slate-500 text-[11px] font-bold">{(l as any).is_smart ? <span className="text-indigo-400/70 italic drop-shadow-[0_0_5px_rgba(129,140,248,0.3)]">System Gen</span> : l.approver}</div>
+
+                                            <div className="flex items-center justify-end gap-1.5 w-full">
+                                                {(l as any).is_smart && (
+                                                    <>
+                                                        <button onClick={() => startEdit(l)} title="Approve & Save"
+                                                            className="flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30 text-emerald-400 hover:from-emerald-500 hover:to-emerald-400 hover:text-emerald-950 transition-all shadow-[0_0_10px_rgba(16,185,129,0.1)] hover:shadow-[0_0_15px_rgba(16,185,129,0.4)] hover:scale-105 active:scale-95">
+                                                            <CheckCircle size={14} className="drop-shadow-sm" />
+                                                        </button>
+                                                        <button onClick={() => declineSmartLeave(l)} title="Decline"
+                                                            className="flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-br from-rose-500/20 to-rose-600/10 border border-rose-500/30 text-rose-400 hover:from-rose-500 hover:to-rose-400 hover:text-rose-950 transition-all shadow-[0_0_10px_rgba(225,29,72,0.1)] hover:shadow-[0_0_15px_rgba(225,29,72,0.4)] hover:scale-105 active:scale-95">
+                                                            <X size={14} className="drop-shadow-sm" />
+                                                        </button>
+                                                    </>
+                                                )}
+                                                {!(l as any).is_smart && (
+                                                    <button onClick={() => startEdit(l)} title="Edit"
+                                                        className="flex items-center justify-center w-8 h-8 rounded-xl bg-white/[0.03] border border-white/10 text-slate-400 hover:bg-amber-500/20 hover:border-amber-500/40 hover:text-amber-400 transition-all shadow-sm hover:shadow-[0_0_15px_rgba(245,158,11,0.2)] hover:scale-105 active:scale-95">
+                                                        <Edit2 size={13} />
+                                                    </button>
+                                                )}
+                                                {!(l as any).is_smart && (
+                                                    <button onClick={() => setDeleteId(l.id)} title="Delete"
+                                                        className="flex items-center justify-center w-8 h-8 rounded-xl bg-white/[0.03] border border-white/10 text-slate-400 hover:bg-rose-500/20 hover:border-rose-500/40 hover:text-rose-400 transition-all shadow-sm hover:shadow-[0_0_15px_rgba(225,29,72,0.2)] hover:scale-105 active:scale-95">
+                                                        <Trash2 size={13} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </motion.div>
+                                    );
+                                })}
                             </AnimatePresence>
                         )}
                     </div>
@@ -760,25 +1011,70 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                 )}
             </div>
 
-            {/* ── Form Drawer (Slide-in from right) ───────────────────────── */}
+            {/* ── Floating Futuristic Bulk Action Dock (HUD) ────────────────── */}
+            <AnimatePresence>
+                {selectedIds.length > 0 && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 50, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 40, scale: 0.95 }}
+                        transition={{ type: 'spring', stiffness: 450, damping: 30 }}
+                        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3.5 px-5 py-3 rounded-2xl bg-[#0b0b14]/90 backdrop-blur-2xl border border-indigo-500/30 shadow-[0_15px_50px_rgba(0,0,0,0.9),0_0_30px_rgba(99,102,241,0.25)] ring-1 ring-white/10"
+                    >
+                        <div className="flex items-center gap-2.5 pr-3.5 border-r border-white/10">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.8)]" />
+                            <span className="text-xs font-black text-white tracking-wide">
+                                {selectedIds.length} <span className="text-slate-400 font-medium">{selectedIds.length === 1 ? 'record' : 'records'} selected</span>
+                            </span>
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={() => setBulkDrawerOpen(true)}
+                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 text-white text-xs font-black shadow-[0_0_20px_rgba(99,102,241,0.4)] hover:brightness-110 active:scale-95 transition-all"
+                        >
+                            <Sliders size={13} /> Bulk Edit
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setBulkDeleteConfirm(true)}
+                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-400 hover:bg-rose-500/25 hover:text-rose-300 text-xs font-bold active:scale-95 transition-all"
+                        >
+                            <Trash2 size={13} /> Delete
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={clearSelection}
+                            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                            title="Clear selection"
+                        >
+                            <X size={14} />
+                        </button>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* ── Single Record / Date Range Form Drawer ──────────────────── */}
             <AnimatePresence>
                 {drawerOpen && (
                     <>
                         {/* Backdrop */}
                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                            className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+                            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
                             onClick={cancelEdit} />
                         {/* Drawer */}
                         <motion.div
                             initial={{ x: '100%', opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: '100%', opacity: 0 }}
                             transition={{ ease: [0.16, 1, 0.3, 1], duration: 0.4 }}
-                            className="fixed right-0 top-0 bottom-0 z-50 w-[440px] bg-[#0C0C14] border-l border-white/[0.08] shadow-[0_0_80px_rgba(0,0,0,0.8)] flex flex-col">
+                            className="fixed right-0 top-0 bottom-0 z-50 w-[460px] bg-[#0C0C14] border-l border-white/[0.08] shadow-[0_0_80px_rgba(0,0,0,0.85)] flex flex-col">
 
                             {/* Drawer Header */}
                             <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06]">
                                 <div>
                                     <p className={`font-black text-sm ${editingId ? 'text-amber-400' : 'text-white'}`}>
-                                        {editingId ? 'Edit Record' : 'New Leave Record'}
+                                        {editingId ? 'Edit Leave Record' : 'Record New Leave'}
                                     </p>
                                     <p className="text-[10px] text-slate-600 mt-0.5 font-medium tracking-wider uppercase">
                                         {editingId ? 'Update existing entry' : 'Add to leave tracker'}
@@ -791,9 +1087,61 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
                             {/* Drawer Body */}
                             <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-                                <Field label="Date">
-                                    <input type="date" value={date} onChange={e => setDate(e.target.value)} required className={inp} />
-                                </Field>
+                                {/* Mode Selector (Single Day vs Date Range) — Only when creating new */}
+                                {!editingId && (
+                                    <div className="p-1 rounded-xl bg-white/[0.03] border border-white/[0.06] flex gap-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => setCreationMode('single')}
+                                            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5
+                                                ${creationMode === 'single' ? 'bg-white/10 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+                                        >
+                                            Single Day
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setCreationMode('range')}
+                                            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5
+                                                ${creationMode === 'range' ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+                                        >
+                                            <CalendarRange size={13} /> Date Range
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* Date Fields */}
+                                {creationMode === 'single' || editingId ? (
+                                    <Field label="Date">
+                                        <input type="date" value={date} onChange={e => setDate(e.target.value)} required className={inp} />
+                                    </Field>
+                                ) : (
+                                    <div className="space-y-3 p-3.5 rounded-xl bg-indigo-500/[0.04] border border-indigo-500/20">
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <Field label="Start Date">
+                                                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} required className={inp} />
+                                            </Field>
+                                            <Field label="End Date">
+                                                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} required className={inp} />
+                                            </Field>
+                                        </div>
+
+                                        <div className="flex items-center justify-between pt-1">
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={skipWeekends}
+                                                    onChange={e => setSkipWeekends(e.target.checked)}
+                                                    className="w-4 h-4 rounded border-white/10 bg-white/5 text-indigo-500 focus:ring-0 cursor-pointer"
+                                                />
+                                                <span className="text-xs text-slate-400 font-medium">Skip Weekends (Sat/Sun)</span>
+                                            </label>
+
+                                            <span className="inline-flex items-center gap-1 text-[11px] font-black text-indigo-400 bg-indigo-500/15 px-2.5 py-1 rounded-lg border border-indigo-500/25">
+                                                <Sparkles size={11} /> {calculatedRangeDates.length} working days
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
 
                                 <Field label="Client">
                                     <SelectWrap>
@@ -813,7 +1161,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                     </SelectWrap>
                                     {employeeName && (
                                         <p className="text-[10px] text-slate-600 mt-1.5">
-                                            Total leaves: <span className="text-emerald-400 font-bold">
+                                            Current logged leaves: <span className="text-emerald-400 font-bold">
                                                 {leaves.filter(l => l.employee_name === employeeName).reduce((s, l) => s + Number(l.day_count), 0)} days
                                             </span>
                                         </p>
@@ -825,11 +1173,8 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                         <select value={leaveType} onChange={e => {
                                             const val = e.target.value;
                                             setLeaveType(val);
-                                            // Automatically set day count defaults
                                             if (val.startsWith('HD-')) {
                                                 setDayCount(0.5);
-                                            } else if (val === 'Paid Leave') {
-                                                setDayCount(1);
                                             } else {
                                                 setDayCount(1);
                                             }
@@ -851,7 +1196,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                         </div>
                                     </div>
                                     <div>
-                                        <label className={lbl}>Duration</label>
+                                        <label className={lbl}>Duration (per day)</label>
                                         {leaveType === 'Paid Leave' ? (
                                             <input 
                                                 type="number" 
@@ -874,7 +1219,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
                                 <Field label="Reason (optional)">
                                     <input type="text" value={reason} onChange={e => setReason(e.target.value)}
-                                        placeholder="e.g. Fever, personal work…" className={inp} />
+                                        placeholder="e.g. Fever, personal work, vacation…" className={inp} />
                                 </Field>
 
                                 <div className="pt-2 flex items-center gap-1.5">
@@ -891,10 +1236,185 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                         ${editingId ? 'bg-amber-500 text-black hover:bg-amber-400' : 'bg-emerald-500 text-black hover:bg-emerald-400'}`}>
                                     {saving
                                         ? <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                                        : editingId ? <><Edit2 size={16} /> Update</> : <><Plus size={16} /> Save Record</>}
+                                        : editingId ? <><Edit2 size={16} /> Update</> 
+                                        : creationMode === 'range' ? <><CalendarRange size={16} /> Save {calculatedRangeDates.length} Days</>
+                                        : <><Plus size={16} /> Save Record</>}
                                 </motion.button>
                                 <button type="button" onClick={cancelEdit}
                                     className="px-5 py-2.5 rounded-lg border border-white/[0.08] text-slate-400 text-sm font-bold hover:text-white hover:border-white/15 transition-all">
+                                    Cancel
+                                </button>
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
+
+            {/* ── Bulk Edit Drawer ────────────────────────────────────────── */}
+            <AnimatePresence>
+                {bulkDrawerOpen && (
+                    <>
+                        {/* Backdrop */}
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+                            onClick={() => setBulkDrawerOpen(false)} />
+                        
+                        {/* Drawer */}
+                        <motion.div
+                            initial={{ x: '100%', opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: '100%', opacity: 0 }}
+                            transition={{ ease: [0.16, 1, 0.3, 1], duration: 0.4 }}
+                            className="fixed right-0 top-0 bottom-0 z-50 w-[460px] bg-[#0C0C14] border-l border-white/[0.08] shadow-[0_0_80px_rgba(0,0,0,0.85)] flex flex-col">
+
+                            {/* Drawer Header */}
+                            <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06]">
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <p className="font-black text-sm text-indigo-400">Bulk Edit Records</p>
+                                        <span className="px-2 py-0.5 rounded-md bg-indigo-500/20 text-[10px] font-black text-indigo-300 border border-indigo-500/30">
+                                            {selectedIds.length} records
+                                        </span>
+                                    </div>
+                                    <p className="text-[10px] text-slate-500 mt-0.5 font-medium tracking-wider uppercase">
+                                        Batch update selected leaves
+                                    </p>
+                                </div>
+                                <button onClick={() => setBulkDrawerOpen(false)} className="p-1.5 rounded-lg text-slate-600 hover:text-white hover:bg-white/5 transition-all">
+                                    <X size={16} />
+                                </button>
+                            </div>
+
+                            {/* Drawer Body */}
+                            <form onSubmit={handleBulkSubmit} className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+                                {/* Selected items snippet preview */}
+                                <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-2">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Selected Target Entries</p>
+                                    <div className="max-h-28 overflow-y-auto space-y-1.5 pr-1">
+                                        {selectedRecords.map(r => (
+                                            <div key={r.id} className="flex items-center justify-between text-xs py-1 px-2 rounded-lg bg-black/40 border border-white/5">
+                                                <span className="font-semibold text-white truncate max-w-[180px]">{r.employee_name}</span>
+                                                <span className="text-[10px] font-mono text-slate-400">{fmtDate(r.date)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Field 1: Leave Type */}
+                                <div className="space-y-2 p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+                                    <div className="flex items-center justify-between">
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={updateLeaveType}
+                                                onChange={e => setUpdateLeaveType(e.target.checked)}
+                                                className="w-4 h-4 rounded border-white/10 bg-white/5 text-indigo-500 focus:ring-0 cursor-pointer"
+                                            />
+                                            <span className="text-xs font-bold text-slate-300">Update Leave Type</span>
+                                        </label>
+                                    </div>
+
+                                    {updateLeaveType && (
+                                        <SelectWrap>
+                                            <select value={bulkLeaveType} onChange={e => setBulkLeaveType(e.target.value)} className={sel}>
+                                                {ALL_LEAVE_TYPES.map(t => <option key={t} value={t} className="bg-[#0d0d1a]">{t}</option>)}
+                                            </select>
+                                        </SelectWrap>
+                                    )}
+                                </div>
+
+                                {/* Field 2: Planned Status */}
+                                <div className="space-y-2 p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+                                    <div className="flex items-center justify-between">
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={updatePlanned}
+                                                onChange={e => setUpdatePlanned(e.target.checked)}
+                                                className="w-4 h-4 rounded border-white/10 bg-white/5 text-indigo-500 focus:ring-0 cursor-pointer"
+                                            />
+                                            <span className="text-xs font-bold text-slate-300">Update Planned Status</span>
+                                        </label>
+                                    </div>
+
+                                    {updatePlanned && (
+                                        <div className="flex rounded-lg overflow-hidden border border-white/[0.08] bg-white/[0.02]">
+                                            <button type="button" onClick={() => setBulkIsPlanned(true)}
+                                                className={`flex-1 py-2 text-xs font-black tracking-wide transition-all duration-150 ${bulkIsPlanned ? 'bg-emerald-500/20 text-emerald-400' : 'text-slate-600 hover:text-slate-400'}`}>Yes</button>
+                                            <button type="button" onClick={() => setBulkIsPlanned(false)}
+                                                className={`flex-1 py-2 text-xs font-black tracking-wide transition-all duration-150 ${!bulkIsPlanned ? 'bg-rose-500/15 text-rose-400' : 'text-slate-600 hover:text-slate-400'}`}>No</button>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Field 3: Duration */}
+                                <div className="space-y-2 p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+                                    <div className="flex items-center justify-between">
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={updateDuration}
+                                                onChange={e => setUpdateDuration(e.target.checked)}
+                                                className="w-4 h-4 rounded border-white/10 bg-white/5 text-indigo-500 focus:ring-0 cursor-pointer"
+                                            />
+                                            <span className="text-xs font-bold text-slate-300">Update Duration</span>
+                                        </label>
+                                    </div>
+
+                                    {updateDuration && (
+                                        <div className="flex rounded-lg overflow-hidden border border-white/[0.08] bg-white/[0.02]">
+                                            <button type="button" onClick={() => setBulkDayCount(1)}
+                                                className={`flex-1 py-2 text-xs font-black tracking-wide transition-all duration-150 ${bulkDayCount === 1 ? 'bg-blue-500/20 text-blue-400' : 'text-slate-600 hover:text-slate-400'}`}>Full Day (1.0)</button>
+                                            <button type="button" onClick={() => setBulkDayCount(0.5)}
+                                                className={`flex-1 py-2 text-xs font-black tracking-wide transition-all duration-150 ${bulkDayCount === 0.5 ? 'bg-amber-500/20 text-amber-400' : 'text-slate-600 hover:text-slate-400'}`}>Half Day (0.5)</button>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Field 4: Reason */}
+                                <div className="space-y-2 p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+                                    <div className="flex items-center justify-between">
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={updateReason}
+                                                onChange={e => setUpdateReason(e.target.checked)}
+                                                className="w-4 h-4 rounded border-white/10 bg-white/5 text-indigo-500 focus:ring-0 cursor-pointer"
+                                            />
+                                            <span className="text-xs font-bold text-slate-300">Update Reason</span>
+                                        </label>
+                                    </div>
+
+                                    {updateReason && (
+                                        <input
+                                            type="text"
+                                            value={bulkReason}
+                                            onChange={e => setBulkReason(e.target.value)}
+                                            placeholder="e.g. Approved leave, emergency, etc."
+                                            className={inp}
+                                        />
+                                    )}
+                                </div>
+                            </form>
+
+                            {/* Drawer Footer */}
+                            <div className="px-6 py-5 border-t border-white/[0.06] flex gap-3">
+                                <motion.button
+                                    type="button"
+                                    onClick={handleBulkSubmit as any}
+                                    disabled={bulkSaving || (!updateLeaveType && !updatePlanned && !updateDuration && !updateReason)}
+                                    whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
+                                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-gradient-to-r from-indigo-500 to-violet-600 text-white text-sm font-bold tracking-wide transition-all disabled:opacity-40 shadow-[0_0_20px_rgba(99,102,241,0.3)]"
+                                >
+                                    {bulkSaving ? (
+                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    ) : (
+                                        <><Check size={16} /> Apply to {selectedIds.length} Records</>
+                                    )}
+                                </motion.button>
+                                <button
+                                    type="button"
+                                    onClick={() => setBulkDrawerOpen(false)}
+                                    className="px-5 py-2.5 rounded-lg border border-white/[0.08] text-slate-400 text-sm font-bold hover:text-white hover:border-white/15 transition-all"
+                                >
                                     Cancel
                                 </button>
                             </div>

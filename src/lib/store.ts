@@ -518,6 +518,28 @@ export async function updateLeave(id: string, updates: Partial<LeaveRecord>): Pr
     return data as LeaveRecord;
 }
 
+export async function bulkUpdateLeaves(ids: string[], updates: Partial<LeaveRecord>): Promise<void> {
+    if (!ids.length) return;
+    const { error } = await supabase.from('leaves').update(updates).in('id', ids);
+    assertSupabaseOk(error, 'Failed to bulk update leaves');
+    clearLeaveCache();
+}
+
+export async function bulkDeleteLeaves(ids: string[]): Promise<void> {
+    if (!ids.length) return;
+    const { error } = await supabase.from('leaves').delete().in('id', ids);
+    assertSupabaseOk(error, 'Failed to bulk delete leaves');
+    clearLeaveCache();
+}
+
+export async function bulkAddLeaves(records: Omit<LeaveRecord, 'id' | 'created_at'>[]): Promise<void> {
+    if (!records.length) return;
+    for (const record of records) {
+        await addLeave(record);
+    }
+    clearLeaveCache();
+}
+
 export interface SmartLeaveRecord extends LeaveRecord {
     is_smart?: boolean;
 }
