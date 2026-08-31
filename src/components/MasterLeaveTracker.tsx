@@ -91,14 +91,25 @@ function TypeBadge({ type, isSmart }: { type: string, isSmart?: boolean }) {
     );
 }
 
-function StatCard({ label, value, sub, color, accent, active }: { label: string; value: string | number; sub?: string; color: string; accent: string; active?: boolean; }) {
+function StatCard({ label, value, sub, color, accent, active, onClick }: { label: string; value: string | number; sub?: string; color: string; accent: string; active?: boolean; onClick?: () => void }) {
     return (
-        <div className={`relative flex flex-col rounded-2xl bg-[#0e111f]/90 border border-white/[0.08] px-5 py-4 overflow-hidden transition-all duration-200 group ${active ? 'border-indigo-500/40 ring-1 ring-indigo-500/20' : 'hover:border-white/15'}`}>
-            <div className={`absolute top-0 left-0 right-0 h-[2px] ${accent} ${active ? 'opacity-100' : 'opacity-70'}`} />
+        <button
+            type="button"
+            onClick={onClick}
+            className={`relative flex flex-col text-left rounded-2xl bg-[#0e111f]/90 border px-5 py-4 overflow-hidden transition-all duration-200 group cursor-pointer ${
+                active 
+                    ? 'border-indigo-500/50 bg-indigo-500/[0.08] shadow-[0_0_20px_rgba(99,102,241,0.15)] ring-1 ring-indigo-500/30' 
+                    : 'border-white/[0.08] hover:border-white/20 hover:bg-[#121628]'
+            }`}
+        >
+            <div className={`absolute top-0 left-0 right-0 h-[2px] ${accent} ${active ? 'opacity-100' : 'opacity-70 group-hover:opacity-100 transition-opacity'}`} />
             <p className={`text-2xl font-bold tabular-nums tracking-tight leading-none mt-1 ${color}`}>{value}</p>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mt-2">{label}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mt-2 flex items-center justify-between">
+                <span>{label}</span>
+                {active && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />}
+            </p>
             {sub && <p className="text-[10px] text-slate-500 mt-0.5">{sub}</p>}
-        </div>
+        </button>
     );
 }
 
@@ -581,8 +592,6 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
     }, [allUsers, filterClient]);
 
     const totalPages = Math.max(1, Math.ceil(totalLeaves / LEAVE_PAGE_SIZE));
-    const pageStart = totalLeaves === 0 ? 0 : ((currentPage - 1) * LEAVE_PAGE_SIZE) + 1;
-    const pageEnd = totalLeaves === 0 ? 0 : pageStart + leaves.length - 1;
 
     // Selection helpers
     const allVisibleIds = useMemo(() => visibleLeaves.map(l => l.id), [visibleLeaves]);
@@ -638,32 +647,70 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                     </div>
                     <div>
                         <h1 className="text-lg font-bold text-white tracking-tight">Leave Management</h1>
-                        <p className="text-xs text-slate-500 mt-0.5 font-medium tracking-wide">Attendance, history, and active leaves</p>
+                        <p className="text-xs text-slate-400 mt-0.5 font-normal tracking-wide">Enterprise workforce attendance, historical balances, and leave approvals</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
                     <button onClick={handleExport} disabled={visibleLeaves.length === 0}
-                        className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-slate-300 text-xs font-semibold hover:bg-white/[0.08] hover:text-white transition-all disabled:opacity-30 disabled:pointer-events-none">
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.08] text-slate-300 text-xs font-semibold hover:bg-white/[0.08] hover:text-white transition-all disabled:opacity-30 disabled:pointer-events-none">
                         <Download size={14} /> Export CSV
                     </button>
                     <button onClick={openNew}
-                        className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-emerald-500 text-black text-xs font-bold tracking-wide hover:bg-emerald-400 transition-all shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_2px_12px_rgba(16,185,129,0.25)] hover:scale-[1.02] active:scale-[0.98]">
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold tracking-wide transition-all shadow-[0_0_20px_rgba(99,102,241,0.35)] hover:scale-[1.01] active:scale-[0.99]">
                         <Plus size={15} /> New Record
                     </button>
                 </div>
             </div>
 
-            {/* ── Stats Row — KPI tiles ───────────────────────────────────── */}
+            {/* ── Stats Row — Interactive KPI tiles ───────────────────────── */}
             <div className="grid grid-cols-5 gap-3">
-                <StatCard label="Total Leaves" value={totalDays.toFixed(1)} color="text-emerald-400" accent="bg-emerald-500" sub="days taken" />
-                <StatCard label="Sick Leaves" value={sickCount.toFixed(1)} color="text-violet-400" accent="bg-violet-500" sub="health issues" />
-                <StatCard label="Casual Leaves" value={casualCount.toFixed(1)} color="text-blue-400" accent="bg-blue-500" sub="personal & vacation" />
-                <StatCard label="LWP Days" value={lwpCount.toFixed(1)} color={lwpCount > 0 ? 'text-red-500' : 'text-slate-500'} accent={lwpCount > 0 ? 'bg-red-900' : 'bg-slate-800'} sub="leave without pay" />
-                <StatCard label="Unplanned" value={unplanned} color={unplanned > 0 ? 'text-amber-400' : 'text-slate-500'} accent={unplanned > 0 ? 'bg-amber-500' : 'bg-slate-800'} sub="records missing notice" />
+                <StatCard 
+                    label="Total Leaves" 
+                    value={totalDays.toFixed(1)} 
+                    color="text-emerald-400" 
+                    accent="bg-emerald-500" 
+                    sub="days taken" 
+                    active={filterLeaveType.length === 0}
+                    onClick={() => setFilterLeaveType([])}
+                />
+                <StatCard 
+                    label="Sick Leaves" 
+                    value={sickCount.toFixed(1)} 
+                    color="text-violet-400" 
+                    accent="bg-violet-500" 
+                    sub="health & medical" 
+                    active={filterLeaveType.includes('Sick Leave')}
+                    onClick={() => setFilterLeaveType(prev => prev.includes('Sick Leave') ? [] : ['Sick Leave', 'HD-Sick'])}
+                />
+                <StatCard 
+                    label="Casual Leaves" 
+                    value={casualCount.toFixed(1)} 
+                    color="text-sky-400" 
+                    accent="bg-sky-500" 
+                    sub="personal & vacation" 
+                    active={filterLeaveType.includes('Casual Leave')}
+                    onClick={() => setFilterLeaveType(prev => prev.includes('Casual Leave') ? [] : ['Casual Leave', 'HD-Casual'])}
+                />
+                <StatCard 
+                    label="LWP Days" 
+                    value={lwpCount.toFixed(1)} 
+                    color={lwpCount > 0 ? 'text-rose-400' : 'text-slate-500'} 
+                    accent={lwpCount > 0 ? 'bg-rose-500' : 'bg-slate-800'} 
+                    sub="unpaid leaves" 
+                    active={filterLeaveType.includes('LWP')}
+                    onClick={() => setFilterLeaveType(prev => prev.includes('LWP') ? [] : ['LWP', 'HD-LWP', 'LWP-Doc not Received'])}
+                />
+                <StatCard 
+                    label="Unplanned" 
+                    value={unplanned} 
+                    color={unplanned > 0 ? 'text-amber-400' : 'text-slate-500'} 
+                    accent={unplanned > 0 ? 'bg-amber-500' : 'bg-slate-800'} 
+                    sub="missing notice" 
+                />
             </div>
 
-            {/* ── Unified Filter Bar ─────────────────────────────────────── */}
-            <div className="panel-3d rounded-2xl shadow-lg z-20 relative">
+            {/* ── Unified Command & Filter Bar ────────────────────────────── */}
+            <div className="rounded-2xl bg-[#0e111f]/90 border border-white/[0.08] shadow-lg z-20 relative">
                 <div className="flex items-center gap-3 p-3 flex-wrap">
                     {/* Year Selector */}
                     <CustomSelect
@@ -723,51 +770,64 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
                     <div className="w-px h-6 bg-white/10 flex-shrink-0" />
 
-                    {/* Search */}
-                    <div className="relative flex-1 min-w-[180px]">
-                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-                        <input type="text" placeholder="Search…" value={search} onChange={e => setSearch(e.target.value)}
-                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-3 pl-9 pr-3 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-white/20 transition-all font-semibold" />
-                        {search && <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"><X size={12} /></button>}
+                    {/* Search Input with Clear Button */}
+                    <div className="relative flex-1 min-w-[200px]">
+                        <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                        <input 
+                            type="text" 
+                            placeholder="Search records, recruiter, client…" 
+                            value={search} 
+                            onChange={e => setSearch(e.target.value)}
+                            className="w-full bg-[#131726] border border-white/10 rounded-xl py-2.5 pl-9 pr-9 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500/80 focus:ring-1 focus:ring-indigo-500/30 transition-all font-medium" 
+                        />
+                        {search && (
+                            <button 
+                                type="button"
+                                onClick={() => setSearch('')} 
+                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-slate-400 hover:text-white transition-colors"
+                            >
+                                <X size={13} />
+                            </button>
+                        )}
                     </div>
                 </div>
 
                 {/* Active Filters + Match Count */}
                 {hasFilter && (
-                <div className="flex items-center justify-between px-3 pb-2.5 pt-0">
-                    <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center justify-between px-3.5 pb-3 pt-0 border-t border-white/[0.04]">
+                    <div className="flex items-center gap-2 flex-wrap pt-2.5">
                         {filterYear && (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-black text-indigo-400 uppercase tracking-wider">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-xs font-semibold text-indigo-400">
                                 {filterYear}{filterMonth ? ` · ${new Date(2000, Number(filterMonth) - 1, 1).toLocaleDateString('en-US', { month: 'short' })}` : ''}
-                                <button onClick={() => { setFilterYear(''); setFilterMonth(''); }} className="hover:text-white transition-colors"><X size={10} /></button>
+                                <button onClick={() => { setFilterYear(''); setFilterMonth(''); }} className="hover:text-white transition-colors"><X size={11} /></button>
                             </span>
                         )}
                         {filterClient.map(c => (
-                            <span key={c} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-500/10 border border-violet-500/20 text-[10px] font-black text-violet-400 uppercase tracking-wider">
+                            <span key={c} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-500/10 border border-violet-500/20 text-xs font-semibold text-violet-400">
                                 {c}
-                                <button onClick={() => { setFilterClient(filterClient.filter(x => x !== c)); setFilterEmployee([]); }} className="hover:text-white transition-colors"><X size={10} /></button>
+                                <button onClick={() => { setFilterClient(filterClient.filter(x => x !== c)); setFilterEmployee([]); }} className="hover:text-white transition-colors"><X size={11} /></button>
                             </span>
                         ))}
                         {filterEmployee.map(emp => (
-                            <span key={emp} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-black text-emerald-400 uppercase tracking-wider">
+                            <span key={emp} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs font-semibold text-emerald-400">
                                 {emp}
-                                <button onClick={() => setFilterEmployee(filterEmployee.filter(x => x !== emp))} className="hover:text-white transition-colors"><X size={10} /></button>
+                                <button onClick={() => setFilterEmployee(filterEmployee.filter(x => x !== emp))} className="hover:text-white transition-colors"><X size={11} /></button>
                             </span>
                         ))}
                         {filterLeaveType.map(lt => (
-                            <span key={lt} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[10px] font-black text-amber-400 uppercase tracking-wider">
+                            <span key={lt} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs font-semibold text-amber-400">
                                 {lt}
-                                <button onClick={() => setFilterLeaveType(filterLeaveType.filter(x => x !== lt))} className="hover:text-white transition-colors"><X size={10} /></button>
+                                <button onClick={() => setFilterLeaveType(filterLeaveType.filter(x => x !== lt))} className="hover:text-white transition-colors"><X size={11} /></button>
                             </span>
                         ))}
                         {(filterClient.length > 0 || filterEmployee.length > 0 || filterLeaveType.length > 0 || search || filterYear) && (
                             <button onClick={() => { setFilterClient([]); setFilterEmployee([]); setFilterLeaveType([]); setSearch(''); setFilterYear(''); setFilterMonth(''); }}
-                                className="flex items-center gap-1 text-[10px] font-bold text-rose-400 hover:text-rose-300 transition-colors px-2 py-1 rounded-lg hover:bg-rose-500/10">
-                                <X size={10} /> Reset All
+                                className="flex items-center gap-1 text-xs font-semibold text-rose-400 hover:text-rose-300 transition-colors px-2 py-1 rounded-lg hover:bg-rose-500/10">
+                                <X size={11} /> Reset All
                             </button>
                         )}
                     </div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 flex-shrink-0 ml-3">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex-shrink-0 ml-3 pt-2.5">
                         {visibleLeaves.length} record{visibleLeaves.length !== 1 ? 's' : ''}
                     </span>
                 </div>
@@ -901,9 +961,27 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
                         {/* Standard Records */}
                         {loading ? (
-                            <div className="py-20 flex flex-col items-center justify-center gap-3">
-                                <div className="w-7 h-7 border-2 border-white/10 border-t-indigo-500 rounded-full animate-spin shadow-[0_0_15px_rgba(99,102,241,0.5)]" />
-                                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Loading leave records…</p>
+                            <div className="space-y-2 py-1">
+                                {[1, 2, 3, 4, 5, 6].map((idx) => (
+                                    <div key={idx} className="grid grid-cols-[40px_105px_minmax(180px,2fr)_minmax(130px,1.2fr)_minmax(160px,1.4fr)_95px_95px_minmax(180px,2fr)_110px_70px] gap-3 px-5 py-3.5 items-center rounded-xl bg-white/[0.02] border border-white/[0.04] animate-pulse">
+                                        <div className="w-4 h-4 rounded bg-white/10 mx-auto" />
+                                        <div className="h-4 w-16 rounded bg-white/10" />
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="w-7 h-7 rounded-lg bg-white/10" />
+                                            <div className="h-4 w-28 rounded bg-white/10" />
+                                        </div>
+                                        <div className="h-4 w-20 rounded bg-white/10" />
+                                        <div className="h-5 w-24 rounded-lg bg-white/10" />
+                                        <div className="h-5 w-16 rounded-md bg-white/10" />
+                                        <div className="h-5 w-14 rounded-md bg-white/10" />
+                                        <div className="h-4 w-32 rounded bg-white/10" />
+                                        <div className="h-4 w-16 rounded bg-white/10" />
+                                        <div className="flex items-center justify-end gap-1.5">
+                                            <div className="w-7 h-7 rounded-lg bg-white/10" />
+                                            <div className="w-7 h-7 rounded-lg bg-white/10" />
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         ) : leaves.length === 0 && filteredSmartLeaves.length === 0 ? (
                             <div className="py-24 flex flex-col items-center justify-center gap-3.5">
