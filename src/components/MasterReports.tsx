@@ -88,35 +88,35 @@ function processLogsIntoRow(
 
 function ViolBadge({ breakViol, breakViolMs, brbViol, brbViolMs, lateIn, lateInMs, earlyOut, earlyOutMs, autoLogout }: { breakViol: boolean; breakViolMs: number; brbViol: boolean; brbViolMs: number; lateIn: boolean; lateInMs: number; earlyOut: boolean; earlyOutMs: number; autoLogout: boolean; }) {
     if (!breakViol && !brbViol && !lateIn && !earlyOut && !autoLogout) return (
-        <span className="inline-flex items-center gap-1 text-emerald-400 text-[10px] font-extrabold bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.5 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.15)]">
-            <CheckCircle size={10} /> Clean
+        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full">
+            <CheckCircle size={11} /> Clean
         </span>
     );
     return (
-        <div className="flex flex-wrap gap-1 items-center">
+        <div className="flex flex-wrap gap-1.5 items-center">
             {breakViol && (
-                <span className="inline-flex items-center gap-1 text-orange-400 text-[10px] font-extrabold bg-orange-500/10 border border-orange-500/20 px-2 py-0.5 rounded-full shadow-[0_0_8px_rgba(249,115,22,0.15)]">
-                    <AlertTriangle size={9} />Break {breakViolMs > 0 ? `(${Math.round(breakViolMs / 60000)}m)` : ''}
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded-full">
+                    <AlertTriangle size={10} /> Break {breakViolMs > 0 ? `(${Math.round(breakViolMs / 60000)}m)` : ''}
                 </span>
             )}
             {brbViol && (
-                <span className="inline-flex items-center gap-1 text-sky-400 text-[10px] font-extrabold bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-full shadow-[0_0_8px_rgba(14,165,233,0.15)]">
-                    <AlertTriangle size={9} />BRB {brbViolMs > 0 ? `(${Math.round(brbViolMs / 60000)}m)` : ''}
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-sky-300 bg-sky-500/10 border border-sky-500/20 px-2.5 py-0.5 rounded-full">
+                    <AlertTriangle size={10} /> BRB {brbViolMs > 0 ? `(${Math.round(brbViolMs / 60000)}m)` : ''}
                 </span>
             )}
             {lateIn && (
-                <span className="inline-flex items-center gap-1 text-amber-400 text-[10px] font-extrabold bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full shadow-[0_0_8px_rgba(245,158,11,0.15)]">
-                    <AlertTriangle size={9} />Late In {lateInMs > 0 ? `(${Math.round(lateInMs / 60000)}m)` : ''}
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded-full">
+                    <AlertTriangle size={10} /> Late In {lateInMs > 0 ? `(${Math.round(lateInMs / 60000)}m)` : ''}
                 </span>
             )}
             {earlyOut && (
-                <span className="inline-flex items-center gap-1 text-purple-400 text-[10px] font-extrabold bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-full shadow-[0_0_8px_rgba(168,85,247,0.15)]">
-                    <AlertTriangle size={9} />Early Out {earlyOutMs > 0 ? `(${Math.round(earlyOutMs / 60000)}m)` : ''}
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2.5 py-0.5 rounded-full">
+                    <AlertTriangle size={10} /> Early Out {earlyOutMs > 0 ? `(${Math.round(earlyOutMs / 60000)}m)` : ''}
                 </span>
             )}
             {autoLogout && (
-                <span className="inline-flex items-center gap-1 text-rose-400 text-[10px] font-extrabold bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-full shadow-[0_0_8px_rgba(244,63,94,0.15)]">
-                    <AlertTriangle size={9} />Auto Out
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2.5 py-0.5 rounded-full">
+                    <AlertTriangle size={10} /> Auto Out
                 </span>
             )}
         </div>
@@ -141,95 +141,76 @@ function summarize(rows: DayRow[]): Summary {
 }
 
 function ReportTable({ rows, showDate, showName, onEdit }: { rows: DayRow[]; showDate: boolean; showName: boolean; onEdit: (r: DayRow) => void; }) {
-    if (!rows.length) return <p className="text-center text-slate-500 font-medium text-sm py-16 bg-black/20 rounded-[2rem] border border-white/5">No data for this period.</p>;
+    if (!rows.length) return <p className="text-center text-zinc-500 font-medium text-sm py-16 bg-[#0d101d] rounded-2xl border border-white/5">No data for this period.</p>;
     
     const gridCols = [
-        showName ? 'minmax(160px, 1.6fr)' : null,
-        showDate ? '90px' : null,
+        showName ? 'minmax(180px, 1.8fr)' : null,
+        showDate ? '95px' : null,
         showDate ? '80px' : null,
-        '80px', '80px', '85px', '70px', '85px', '70px', '85px', '95px', 'minmax(140px, 1.6fr)', '40px'
+        '85px', '85px', '95px', '65px', '85px', '65px', '85px', '90px', 'minmax(140px, 1.6fr)', '40px'
     ].filter(Boolean).join(' ');
 
     return (
-        <div className="w-full overflow-auto max-h-[60vh] rounded-[22px] border border-white/[0.08] bg-[#0c0d15]/50 backdrop-blur-md shadow-2xl scrollbar-thin p-3">
-            <div className="min-w-[1140px] flex flex-col gap-1.5 relative">
+        <div className="w-full overflow-auto max-h-[62vh] rounded-2xl border border-white/10 bg-[#0d101d]/90 backdrop-blur-xl shadow-2xl p-2.5 scrollbar-thin">
+            <div className="min-w-[1160px] flex flex-col gap-1.5 relative">
                 {/* Sticky Header */}
-                <div className="sticky top-0 z-30 grid gap-3 px-6 py-3 rounded-xl bg-[#0b0c14]/95 border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.5)] items-center backdrop-blur-md select-none" style={{ gridTemplateColumns: gridCols }}>
-                    {showName && <div className="text-[10px] font-black tracking-[0.2em] uppercase text-white">Recruiter</div>}
-                    {showDate && <div className="text-[10px] font-black tracking-[0.2em] uppercase text-slate-500">Date</div>}
-                    {showDate && <div className="text-[10px] font-black tracking-[0.2em] uppercase text-slate-500">Day</div>}
-                    <div className="text-[10px] font-black tracking-[0.2em] uppercase text-emerald-400">Arrival</div>
-                    <div className="text-[10px] font-black tracking-[0.2em] uppercase text-rose-400">Departure</div>
-                    <div className="text-[10px] font-black tracking-[0.2em] uppercase text-indigo-400">Net Active</div>
-                    <div className="text-[10px] font-black tracking-[0.2em] uppercase text-amber-400">Breaks</div>
-                    <div className="text-[10px] font-black tracking-[0.2em] uppercase text-amber-400">Break Total</div>
-                    <div className="text-[10px] font-black tracking-[0.2em] uppercase text-sky-400">BRBs</div>
-                    <div className="text-[10px] font-black tracking-[0.2em] uppercase text-sky-400">BRB Total</div>
-                    <div className="text-[10px] font-black tracking-[0.2em] uppercase text-purple-400">Idle Time</div>
-                    <div className="text-[10px] font-black tracking-[0.2em] uppercase text-rose-400">Compliance</div>
-                    <div className="text-[10px] font-black tracking-[0.2em] uppercase text-slate-500 text-right opacity-0">Actions</div>
+                <div className="sticky top-0 z-30 grid gap-3 px-5 py-3 rounded-xl bg-[#121629] border border-white/10 shadow-lg items-center backdrop-blur-md select-none" style={{ gridTemplateColumns: gridCols }}>
+                    {showName && <div className="text-[10px] font-mono font-bold tracking-widest uppercase text-zinc-300">Recruiter</div>}
+                    {showDate && <div className="text-[10px] font-mono font-bold tracking-widest uppercase text-zinc-400">Date</div>}
+                    {showDate && <div className="text-[10px] font-mono font-bold tracking-widest uppercase text-zinc-400">Day</div>}
+                    <div className="text-[10px] font-mono font-bold tracking-widest uppercase text-zinc-300">Arrival</div>
+                    <div className="text-[10px] font-mono font-bold tracking-widest uppercase text-zinc-300">Departure</div>
+                    <div className="text-[10px] font-mono font-bold tracking-widest uppercase text-emerald-400">Net Active</div>
+                    <div className="text-[10px] font-mono font-bold tracking-widest uppercase text-zinc-400">Breaks</div>
+                    <div className="text-[10px] font-mono font-bold tracking-widest uppercase text-zinc-400">Break Total</div>
+                    <div className="text-[10px] font-mono font-bold tracking-widest uppercase text-zinc-400">BRBs</div>
+                    <div className="text-[10px] font-mono font-bold tracking-widest uppercase text-zinc-400">BRB Total</div>
+                    <div className="text-[10px] font-mono font-bold tracking-widest uppercase text-zinc-400">Idle Time</div>
+                    <div className="text-[10px] font-mono font-bold tracking-widest uppercase text-zinc-300">Compliance</div>
+                    <div className="text-[10px] font-mono font-bold tracking-widest uppercase text-zinc-500 text-right opacity-0">Actions</div>
                 </div>
 
                 {/* Rows */}
                 {rows.map((r, i) => {
-                    const anyViol = r.breakViol || r.brbViol || r.lateIn || r.earlyOut;
                     return (
                         <div key={`${r.userId}-${r.date}-${i}`} 
-                            className={`grid gap-3 px-6 py-2.5 items-center rounded-xl transition-all duration-300 border backdrop-blur-md hover:scale-[1.002] group 
-                                ${anyViol 
-                                    ? 'bg-gradient-to-r from-rose-500/[0.05] via-rose-500/[0.01] to-transparent border-rose-500/25 border-l-4 border-l-rose-500 shadow-[0_4px_20px_rgba(244,63,94,0.08)]' 
-                                    : 'bg-white/[0.005] border-white/[0.03] hover:bg-white/[0.018] hover:border-white/[0.07] hover:shadow-[0_8px_24px_rgba(0,0,0,0.3)]'}`}
+                            className="grid gap-3 px-5 py-3 items-center rounded-xl transition-all duration-150 border border-white/[0.04] bg-[#121524]/60 hover:bg-[#181c30] hover:border-indigo-500/30 group"
                             style={{ gridTemplateColumns: gridCols }}>
                             
                             {showName && (
                                 <div className="flex items-center gap-2.5 min-w-0">
-                                    <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-600 to-purple-700 border border-indigo-400/30 text-xs font-black text-white shadow-md flex items-center justify-center flex-shrink-0">
+                                    <div className="w-8 h-8 rounded-lg bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 text-xs font-bold flex items-center justify-center flex-shrink-0 shadow-sm">
                                         {r.name[0]?.toUpperCase()}
                                     </div>
-                                    <div className="font-black text-[13px] text-white tracking-tight truncate drop-shadow-sm group-hover:text-indigo-200 transition-colors">
+                                    <div className="font-semibold text-sm text-zinc-100 tracking-tight truncate group-hover:text-indigo-200 transition-colors">
                                         {r.name}
                                     </div>
                                 </div>
                             )}
-                            {showDate && <div className="text-[11px] font-mono text-slate-300 font-bold uppercase tracking-widest">{r.date}</div>}
-                            {showDate && <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{dayName(r.date)}</div>}
+                            {showDate && <div className="text-xs font-mono text-zinc-300 font-medium">{r.date}</div>}
+                            {showDate && <div className="text-xs font-medium text-zinc-400">{dayName(r.date)}</div>}
                             
-                            <div>
-                                {r.punchIn ? (
-                                    <span className="inline-block text-[11px] text-emerald-400 font-mono font-bold tracking-tight bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md shadow-[0_0_8px_rgba(16,185,129,0.1)]">
-                                        {formatTime(r.punchIn)}
-                                    </span>
-                                ) : (
-                                    <span className="text-slate-600 font-sans text-xs">—</span>
-                                )}
-                            </div>
-                            
-                            <div>
+                            <div className="text-xs font-mono text-zinc-300 font-medium">{r.punchIn ? formatTime(r.punchIn) : <span className="text-zinc-600 font-sans">—</span>}</div>
+                            <div className="text-xs font-mono text-zinc-300 font-medium">
                                 {r.punchOut ? (
-                                    <span className={`inline-block text-[11px] font-mono font-bold tracking-tight px-2 py-0.5 rounded-md border ${r.autoLogout ? 'text-rose-400 bg-rose-500/10 border-rose-500/20 shadow-[0_0_8px_rgba(244,63,94,0.1)]' : 'text-rose-300 bg-rose-500/10 border border-rose-500/20'}`}>
-                                        {formatTime(r.punchOut)}
-                                    </span>
+                                    <span className={r.autoLogout ? 'text-rose-400 font-semibold' : 'text-zinc-300'}>{formatTime(r.punchOut)}</span>
                                 ) : r.punchIn ? (
-                                    <span className="text-sky-400 animate-pulse font-extrabold text-[10px] uppercase tracking-widest bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/30 shadow-[0_0_8px_rgba(14,165,233,0.2)]">Active</span>
+                                    <span className="text-sky-400 font-bold text-[11px] uppercase tracking-wider bg-sky-500/10 px-2 py-0.5 rounded-md border border-sky-500/20">Active</span>
                                 ) : (
-                                    <span className="text-slate-600 font-sans text-xs">—</span>
+                                    <span className="text-zinc-600 font-sans">—</span>
                                 )}
                             </div>
                             
-                            <div className="text-[13px] text-indigo-300 font-mono font-black tracking-tight">{r.workedMs > 0 ? formatDuration(r.workedMs) : <span className="text-slate-600 font-sans">—</span>}</div>
+                            <div className="text-xs font-mono text-emerald-400 font-semibold">{r.workedMs > 0 ? formatDuration(r.workedMs) : <span className="text-zinc-600 font-sans">—</span>}</div>
                             
-                            <div className="text-[12px] text-amber-400 font-black">{r.breakCount > 0 ? r.breakCount : <span className="text-slate-600">—</span>}</div>
-                            <div className="text-[11px] text-amber-300 font-mono font-bold tracking-tight bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md inline-block">{r.breakMs > 0 ? formatDuration(r.breakMs) : <span className="text-slate-600 font-sans">—</span>}</div>
+                            <div className="text-xs font-mono text-zinc-300">{r.breakCount > 0 ? r.breakCount : <span className="text-zinc-600">—</span>}</div>
+                            <div className="text-xs font-mono text-zinc-300">{r.breakMs > 0 ? formatDuration(r.breakMs) : <span className="text-zinc-600 font-sans">—</span>}</div>
                             
-                            <div className="text-[12px] text-sky-400 font-black">{r.brbCount > 0 ? r.brbCount : <span className="text-slate-600">—</span>}</div>
-                            <div className="text-[11px] text-sky-300 font-mono font-bold tracking-tight bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-md inline-block">{r.brbMs > 0 ? formatDuration(r.brbMs) : <span className="text-slate-600 font-sans">—</span>}</div>
+                            <div className="text-xs font-mono text-zinc-300">{r.brbCount > 0 ? r.brbCount : <span className="text-zinc-600">—</span>}</div>
+                            <div className="text-xs font-mono text-zinc-300">{r.brbMs > 0 ? formatDuration(r.brbMs) : <span className="text-zinc-600 font-sans">—</span>}</div>
                             
-                            <div className="text-[13px] font-mono font-black tracking-tight">
-                                {(r.breakMs + r.brbMs) > 0 ? (
-                                    <span className={`${(r.breakMs + r.brbMs) > 85 * 60 * 1000 ? 'text-rose-400 drop-shadow-[0_0_8px_rgba(225,29,72,0.5)]' : (r.breakMs + r.brbMs) > 60 * 60 * 1000 ? 'text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]' : 'text-purple-300'}`}>
-                                        {formatDuration(r.breakMs + r.brbMs)}
-                                    </span>
-                                ) : <span className="text-slate-600 font-sans">—</span>}
+                            <div className="text-xs font-mono text-zinc-400">
+                                {(r.breakMs + r.brbMs) > 0 ? formatDuration(r.breakMs + r.brbMs) : <span className="text-zinc-600 font-sans">—</span>}
                             </div>
                             
                             <div className="min-w-0"><ViolBadge breakViol={r.breakViol} breakViolMs={r.breakViolMs} brbViol={r.brbViol} brbViolMs={r.brbViolMs} lateIn={r.lateIn} lateInMs={r.lateInMs} earlyOut={r.earlyOut} earlyOutMs={r.earlyOutMs} autoLogout={r.autoLogout} /></div>
@@ -238,7 +219,7 @@ function ReportTable({ rows, showDate, showName, onEdit }: { rows: DayRow[]; sho
                                 <button
                                     onClick={() => onEdit(r)}
                                     title="Edit Historical Logs"
-                                    className="p-1.5 text-slate-400 hover:text-indigo-200 hover:bg-indigo-500/20 rounded-lg transition-all border border-transparent hover:border-indigo-500/30 opacity-0 group-hover:opacity-100"
+                                    className="p-1.5 text-zinc-400 hover:text-white hover:bg-white/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"
                                 >
                                     <Pencil size={14} />
                                 </button>
