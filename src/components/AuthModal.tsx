@@ -6,7 +6,7 @@ import {
   LockKeyhole, UserRound, Eye, EyeOff,
   ChevronDown, Loader2, Briefcase, ShieldCheck, Zap,
 } from 'lucide-react';
-import { getUserByNameAndClient, upsertUser, setCurrentUser } from '@/lib/store';
+import { getUserByNameAndClient, upsertUser, setCurrentUser, getClients } from '@/lib/store';
 import { generateUUID } from '@/lib/timeUtils';
 
 function SpotlightWrapper({ children }: { children: React.ReactNode }) {
@@ -28,6 +28,11 @@ function SpotlightWrapper({ children }: { children: React.ReactNode }) {
   );
 }
 
+const DEFAULT_CLIENT_OPTIONS = [
+  'Bench', 'Brooksource', 'FPG', 'Guardian Healthstaff',
+  'Hiretalent', 'HPP Staffing', 'Manpower Canada', 'Synergis',
+];
+
 export default function AuthModal({ onLogin }: { onLogin: (user: any) => void }) {
   const [mounted, setMounted]           = useState(false);
   const [name, setName]                 = useState('');
@@ -38,11 +43,7 @@ export default function AuthModal({ onLogin }: { onLogin: (user: any) => void })
   const [error, setError]               = useState<string | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [buttonOffset, setButtonOffset] = useState({ x: 0, y: 0 });
-
-  const clientOptions = [
-    'Bench', 'Brooksource', 'FPG', 'Guardian Healthstaff',
-    'Hiretalent', 'HPP Staffing', 'Manpower Canada', 'Synergis',
-  ];
+  const [clientOptions, setClientOptions] = useState<string[]>(DEFAULT_CLIENT_OPTIONS);
 
   const isCaptainName  = name.trim().toLowerCase() === 'captain';
   const requiresClient = !isCaptainName;
@@ -59,7 +60,23 @@ export default function AuthModal({ onLogin }: { onLogin: (user: any) => void })
     setButtonOffset({ x: 0, y: 0 });
   };
 
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    setMounted(true);
+    async function loadFreshClients() {
+      try {
+        const dbClients = await getClients(true);
+        if (dbClients && dbClients.length > 0) {
+          const names = Array.from(new Set(dbClients.map(c => c.name.trim()))).sort();
+          if (names.length > 0) {
+            setClientOptions(names);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to load dynamic clients for auth modal:', err);
+      }
+    }
+    void loadFreshClients();
+  }, []);
   useEffect(() => { if (isCaptainName) setClient(''); }, [isCaptainName]);
 
   const handleLogin = async () => {
