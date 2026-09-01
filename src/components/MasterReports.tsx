@@ -87,14 +87,38 @@ function processLogsIntoRow(
 }
 
 function ViolBadge({ breakViol, breakViolMs, brbViol, brbViolMs, lateIn, lateInMs, earlyOut, earlyOutMs, autoLogout }: { breakViol: boolean; breakViolMs: number; brbViol: boolean; brbViolMs: number; lateIn: boolean; lateInMs: number; earlyOut: boolean; earlyOutMs: number; autoLogout: boolean; }) {
-    if (!breakViol && !brbViol && !lateIn && !earlyOut && !autoLogout) return <span className="text-emerald-400"><CheckCircle size={13} /></span>;
+    if (!breakViol && !brbViol && !lateIn && !earlyOut && !autoLogout) return (
+        <span className="inline-flex items-center gap-1 text-emerald-400 text-[10px] font-extrabold bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.5 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.15)]">
+            <CheckCircle size={10} /> Clean
+        </span>
+    );
     return (
-        <div className="flex flex-col gap-0.5">
-            {breakViol && <span className="flex items-center gap-1 text-orange-400 text-[10px] font-bold"><AlertTriangle size={9} />Break {breakViolMs > 0 ? `(${Math.round(breakViolMs / 60000)}m)` : ''}</span>}
-            {brbViol && <span className="flex items-center gap-1 text-sky-400 text-[10px] font-bold"><AlertTriangle size={9} />BRB {brbViolMs > 0 ? `(${Math.round(brbViolMs / 60000)}m)` : ''}</span>}
-            {lateIn && <span className="flex items-center gap-1 text-amber-400 text-[10px] font-bold"><AlertTriangle size={9} />Late In {lateInMs > 0 ? `(${Math.round(lateInMs / 60000)}m)` : ''}</span>}
-            {earlyOut && <span className="flex items-center gap-1 text-purple-400 text-[10px] font-bold"><AlertTriangle size={9} />Early Out {earlyOutMs > 0 ? `(${Math.round(earlyOutMs / 60000)}m)` : ''}</span>}
-            {autoLogout && <span className="flex items-center gap-1 text-red-500 text-[10px] font-bold"><AlertTriangle size={9} />Auto Out</span>}
+        <div className="flex flex-wrap gap-1 items-center">
+            {breakViol && (
+                <span className="inline-flex items-center gap-1 text-orange-400 text-[10px] font-extrabold bg-orange-500/10 border border-orange-500/20 px-2 py-0.5 rounded-full shadow-[0_0_8px_rgba(249,115,22,0.15)]">
+                    <AlertTriangle size={9} />Break {breakViolMs > 0 ? `(${Math.round(breakViolMs / 60000)}m)` : ''}
+                </span>
+            )}
+            {brbViol && (
+                <span className="inline-flex items-center gap-1 text-sky-400 text-[10px] font-extrabold bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-full shadow-[0_0_8px_rgba(14,165,233,0.15)]">
+                    <AlertTriangle size={9} />BRB {brbViolMs > 0 ? `(${Math.round(brbViolMs / 60000)}m)` : ''}
+                </span>
+            )}
+            {lateIn && (
+                <span className="inline-flex items-center gap-1 text-amber-400 text-[10px] font-extrabold bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full shadow-[0_0_8px_rgba(245,158,11,0.15)]">
+                    <AlertTriangle size={9} />Late In {lateInMs > 0 ? `(${Math.round(lateInMs / 60000)}m)` : ''}
+                </span>
+            )}
+            {earlyOut && (
+                <span className="inline-flex items-center gap-1 text-purple-400 text-[10px] font-extrabold bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-full shadow-[0_0_8px_rgba(168,85,247,0.15)]">
+                    <AlertTriangle size={9} />Early Out {earlyOutMs > 0 ? `(${Math.round(earlyOutMs / 60000)}m)` : ''}
+                </span>
+            )}
+            {autoLogout && (
+                <span className="inline-flex items-center gap-1 text-rose-400 text-[10px] font-extrabold bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-full shadow-[0_0_8px_rgba(244,63,94,0.15)]">
+                    <AlertTriangle size={9} />Auto Out
+                </span>
+            )}
         </div>
     );
 }
@@ -120,25 +144,25 @@ function ReportTable({ rows, showDate, showName, onEdit }: { rows: DayRow[]; sho
     if (!rows.length) return <p className="text-center text-slate-500 font-medium text-sm py-16 bg-black/20 rounded-[2rem] border border-white/5">No data for this period.</p>;
     
     const gridCols = [
-        showName ? 'minmax(150px, 1.5fr)' : null,
+        showName ? 'minmax(160px, 1.6fr)' : null,
         showDate ? '90px' : null,
         showDate ? '80px' : null,
-        '70px', '70px', '80px', '70px', '80px', '70px', '80px', '100px', 'minmax(120px, 1.5fr)', '40px'
+        '80px', '80px', '85px', '70px', '85px', '70px', '85px', '95px', 'minmax(140px, 1.6fr)', '40px'
     ].filter(Boolean).join(' ');
 
     return (
-        <div className="w-full overflow-auto max-h-[58vh] rounded-[22px] border border-white/[0.06] bg-[#0c0d15]/30 backdrop-blur-md scrollbar-thin">
-            <div className="min-w-[1100px] p-3 flex flex-col gap-1.5 relative">
+        <div className="w-full overflow-auto max-h-[60vh] rounded-[22px] border border-white/[0.08] bg-[#0c0d15]/50 backdrop-blur-md shadow-2xl scrollbar-thin p-3">
+            <div className="min-w-[1140px] flex flex-col gap-1.5 relative">
                 {/* Sticky Header */}
-                <div className="sticky top-0 z-30 grid gap-4 px-6 py-2.5 rounded-xl bg-[#0b0c14]/95 border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.5)] items-center backdrop-blur-md select-none" style={{ gridTemplateColumns: gridCols }}>
-                    {showName && <div className="text-[10px] font-black tracking-[0.2em] uppercase text-slate-500">Recruiter</div>}
+                <div className="sticky top-0 z-30 grid gap-3 px-6 py-3 rounded-xl bg-[#0b0c14]/95 border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.5)] items-center backdrop-blur-md select-none" style={{ gridTemplateColumns: gridCols }}>
+                    {showName && <div className="text-[10px] font-black tracking-[0.2em] uppercase text-white">Recruiter</div>}
                     {showDate && <div className="text-[10px] font-black tracking-[0.2em] uppercase text-slate-500">Date</div>}
                     {showDate && <div className="text-[10px] font-black tracking-[0.2em] uppercase text-slate-500">Day</div>}
-                    <div className="text-[10px] font-black tracking-[0.2em] uppercase text-emerald-500/70">Arrival</div>
-                    <div className="text-[10px] font-black tracking-[0.2em] uppercase text-rose-500/70">Departure</div>
+                    <div className="text-[10px] font-black tracking-[0.2em] uppercase text-emerald-400">Arrival</div>
+                    <div className="text-[10px] font-black tracking-[0.2em] uppercase text-rose-400">Departure</div>
                     <div className="text-[10px] font-black tracking-[0.2em] uppercase text-indigo-400">Net Active</div>
-                    <div className="text-[10px] font-black tracking-[0.2em] uppercase text-orange-400">Breaks</div>
-                    <div className="text-[10px] font-black tracking-[0.2em] uppercase text-orange-400">Break Total</div>
+                    <div className="text-[10px] font-black tracking-[0.2em] uppercase text-amber-400">Breaks</div>
+                    <div className="text-[10px] font-black tracking-[0.2em] uppercase text-amber-400">Break Total</div>
                     <div className="text-[10px] font-black tracking-[0.2em] uppercase text-sky-400">BRBs</div>
                     <div className="text-[10px] font-black tracking-[0.2em] uppercase text-sky-400">BRB Total</div>
                     <div className="text-[10px] font-black tracking-[0.2em] uppercase text-purple-400">Idle Time</div>
@@ -151,38 +175,58 @@ function ReportTable({ rows, showDate, showName, onEdit }: { rows: DayRow[]; sho
                     const anyViol = r.breakViol || r.brbViol || r.lateIn || r.earlyOut;
                     return (
                         <div key={`${r.userId}-${r.date}-${i}`} 
-                            className={`grid gap-4 px-6 py-2 items-center rounded-xl transition-all duration-300 border backdrop-blur-md hover:scale-[1.005] group 
+                            className={`grid gap-3 px-6 py-2.5 items-center rounded-xl transition-all duration-300 border backdrop-blur-md hover:scale-[1.002] group 
                                 ${anyViol 
-                                    ? 'bg-gradient-to-r from-red-500/[0.03] to-transparent border-red-500/20 border-l-4 border-l-rose-500 shadow-[0_4px_16px_rgba(244,63,94,0.05)]' 
-                                    : 'bg-white/[0.005] border-white/[0.03] hover:bg-white/[0.015] hover:border-white/[0.06] hover:shadow-[0_8px_20px_rgba(0,0,0,0.25)]'}`}
+                                    ? 'bg-gradient-to-r from-rose-500/[0.05] via-rose-500/[0.01] to-transparent border-rose-500/25 border-l-4 border-l-rose-500 shadow-[0_4px_20px_rgba(244,63,94,0.08)]' 
+                                    : 'bg-white/[0.005] border-white/[0.03] hover:bg-white/[0.018] hover:border-white/[0.07] hover:shadow-[0_8px_24px_rgba(0,0,0,0.3)]'}`}
                             style={{ gridTemplateColumns: gridCols }}>
                             
-                            {showName && <div className="font-black text-[13px] text-white tracking-tight truncate drop-shadow-sm">{r.name}</div>}
-                            {showDate && <div className="text-[11px] font-mono text-slate-400/80 font-bold uppercase tracking-widest">{r.date}</div>}
+                            {showName && (
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                    <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-600 to-purple-700 border border-indigo-400/30 text-xs font-black text-white shadow-md flex items-center justify-center flex-shrink-0">
+                                        {r.name[0]?.toUpperCase()}
+                                    </div>
+                                    <div className="font-black text-[13px] text-white tracking-tight truncate drop-shadow-sm group-hover:text-indigo-200 transition-colors">
+                                        {r.name}
+                                    </div>
+                                </div>
+                            )}
+                            {showDate && <div className="text-[11px] font-mono text-slate-300 font-bold uppercase tracking-widest">{r.date}</div>}
                             {showDate && <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{dayName(r.date)}</div>}
                             
-                            <div className="text-[12px] text-emerald-400 font-mono font-bold tracking-tight">{r.punchIn ? formatTime(r.punchIn) : <span className="text-slate-600 font-sans">—</span>}</div>
-                            <div className="text-[12px] font-mono font-bold tracking-tight">
-                                {r.punchOut ? (
-                                    <span className={r.autoLogout ? 'text-red-400' : 'text-rose-400'}>{formatTime(r.punchOut)}</span>
-                                ) : r.punchIn ? (
-                                    <span className="text-sky-400 animate-pulse font-extrabold text-[10px] uppercase tracking-widest bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/30">Active</span>
+                            <div>
+                                {r.punchIn ? (
+                                    <span className="inline-block text-[11px] text-emerald-400 font-mono font-bold tracking-tight bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md shadow-[0_0_8px_rgba(16,185,129,0.1)]">
+                                        {formatTime(r.punchIn)}
+                                    </span>
                                 ) : (
-                                    <span className="text-slate-600 font-sans">—</span>
+                                    <span className="text-slate-600 font-sans text-xs">—</span>
                                 )}
                             </div>
                             
-                            <div className="text-[13px] text-indigo-400 font-mono font-black tracking-tight">{r.workedMs > 0 ? formatDuration(r.workedMs) : <span className="text-slate-600 font-sans">—</span>}</div>
+                            <div>
+                                {r.punchOut ? (
+                                    <span className={`inline-block text-[11px] font-mono font-bold tracking-tight px-2 py-0.5 rounded-md border ${r.autoLogout ? 'text-rose-400 bg-rose-500/10 border-rose-500/20 shadow-[0_0_8px_rgba(244,63,94,0.1)]' : 'text-rose-300 bg-rose-500/10 border border-rose-500/20'}`}>
+                                        {formatTime(r.punchOut)}
+                                    </span>
+                                ) : r.punchIn ? (
+                                    <span className="text-sky-400 animate-pulse font-extrabold text-[10px] uppercase tracking-widest bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/30 shadow-[0_0_8px_rgba(14,165,233,0.2)]">Active</span>
+                                ) : (
+                                    <span className="text-slate-600 font-sans text-xs">—</span>
+                                )}
+                            </div>
                             
-                            <div className="text-[12px] text-orange-400 font-black">{r.breakCount > 0 ? r.breakCount : <span className="text-slate-600">—</span>}</div>
-                            <div className="text-[12px] text-orange-400 font-mono font-bold tracking-tight">{r.breakMs > 0 ? formatDuration(r.breakMs) : <span className="text-slate-600 font-sans">—</span>}</div>
+                            <div className="text-[13px] text-indigo-300 font-mono font-black tracking-tight">{r.workedMs > 0 ? formatDuration(r.workedMs) : <span className="text-slate-600 font-sans">—</span>}</div>
+                            
+                            <div className="text-[12px] text-amber-400 font-black">{r.breakCount > 0 ? r.breakCount : <span className="text-slate-600">—</span>}</div>
+                            <div className="text-[11px] text-amber-300 font-mono font-bold tracking-tight bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md inline-block">{r.breakMs > 0 ? formatDuration(r.breakMs) : <span className="text-slate-600 font-sans">—</span>}</div>
                             
                             <div className="text-[12px] text-sky-400 font-black">{r.brbCount > 0 ? r.brbCount : <span className="text-slate-600">—</span>}</div>
-                            <div className="text-[12px] text-sky-400 font-mono font-bold tracking-tight">{r.brbMs > 0 ? formatDuration(r.brbMs) : <span className="text-slate-600 font-sans">—</span>}</div>
+                            <div className="text-[11px] text-sky-300 font-mono font-bold tracking-tight bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-md inline-block">{r.brbMs > 0 ? formatDuration(r.brbMs) : <span className="text-slate-600 font-sans">—</span>}</div>
                             
                             <div className="text-[13px] font-mono font-black tracking-tight">
                                 {(r.breakMs + r.brbMs) > 0 ? (
-                                    <span className={`${(r.breakMs + r.brbMs) > 85 * 60 * 1000 ? 'text-rose-400 drop-shadow-[0_0_8px_rgba(225,29,72,0.5)]' : (r.breakMs + r.brbMs) > 60 * 60 * 1000 ? 'text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]' : 'text-purple-400'}`}>
+                                    <span className={`${(r.breakMs + r.brbMs) > 85 * 60 * 1000 ? 'text-rose-400 drop-shadow-[0_0_8px_rgba(225,29,72,0.5)]' : (r.breakMs + r.brbMs) > 60 * 60 * 1000 ? 'text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]' : 'text-purple-300'}`}>
                                         {formatDuration(r.breakMs + r.brbMs)}
                                     </span>
                                 ) : <span className="text-slate-600 font-sans">—</span>}
@@ -194,7 +238,7 @@ function ReportTable({ rows, showDate, showName, onEdit }: { rows: DayRow[]; sho
                                 <button
                                     onClick={() => onEdit(r)}
                                     title="Edit Historical Logs"
-                                    className="p-1.5 text-slate-500 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                                    className="p-1.5 text-slate-400 hover:text-indigo-200 hover:bg-indigo-500/20 rounded-lg transition-all border border-transparent hover:border-indigo-500/30 opacity-0 group-hover:opacity-100"
                                 >
                                     <Pencil size={14} />
                                 </button>
@@ -533,62 +577,64 @@ export default function MasterReports() {
             )}
 
             {/* ── Filter bar — unified style (Aligned 6-Column cockpit controls) ─────────────────────────────── */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 items-end">
-                <CustomSelect
-                    multi
-                    options={allRecruiters.map(name => ({ value: name, label: name }))}
-                    value={selectedRecruiters}
-                    onChange={setSelectedRecruiters}
-                    placeholder="Select Recruiters"
-                    searchable
-                />
+            <div className="rounded-2xl bg-[#0c0d15]/80 border border-white/[0.08] p-3 shadow-2xl backdrop-blur-xl">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 items-end">
+                    <CustomSelect
+                        multi
+                        options={allRecruiters.map(name => ({ value: name, label: name }))}
+                        value={selectedRecruiters}
+                        onChange={setSelectedRecruiters}
+                        placeholder="Select Recruiters"
+                        searchable
+                    />
 
-                <CustomSelect
-                    multi
-                    options={clients.map(c => ({ value: c.name, label: c.name }))}
-                    value={selectedClients}
-                    onChange={setSelectedClients}
-                    placeholder="Select Clients"
-                    searchable
-                />
+                    <CustomSelect
+                        multi
+                        options={clients.map(c => ({ value: c.name, label: c.name }))}
+                        value={selectedClients}
+                        onChange={setSelectedClients}
+                        placeholder="Select Clients"
+                        searchable
+                    />
 
-                <CustomSelect
-                    options={[
-                        { value: 'Active', label: 'Active Now' },
-                        { value: 'Not Active', label: 'Offline' }
-                    ]}
-                    value={statusDropFilter}
-                    onChange={setStatusDropFilter}
-                    placeholder="Engagement Status"
-                />
+                    <CustomSelect
+                        options={[
+                            { value: 'Active', label: 'Active Now' },
+                            { value: 'Not Active', label: 'Offline' }
+                        ]}
+                        value={statusDropFilter}
+                        onChange={setStatusDropFilter}
+                        placeholder="Engagement Status"
+                    />
 
-                <CustomSelect
-                    options={[
-                        { value: 'Late In', label: 'Late Login' },
-                        { value: 'Early Out', label: 'Early Logout' },
-                        { value: 'Break Exceed', label: 'Break Violation' },
-                        { value: 'BRB Exceed', label: 'BRB Violation' },
-                        { value: 'Auto Out', label: 'Auto Logout' }
-                    ]}
-                    value={violDropFilter}
-                    onChange={setViolDropFilter}
-                    placeholder="Violation Protocol"
-                />
+                    <CustomSelect
+                        options={[
+                            { value: 'Late In', label: 'Late Login' },
+                            { value: 'Early Out', label: 'Early Logout' },
+                            { value: 'Break Exceed', label: 'Break Violation' },
+                            { value: 'BRB Exceed', label: 'BRB Violation' },
+                            { value: 'Auto Out', label: 'Auto Logout' }
+                        ]}
+                        value={violDropFilter}
+                        onChange={setViolDropFilter}
+                        placeholder="Violation Protocol"
+                    />
 
-                <DateRangePicker
-                    value={dateRange}
-                    onChange={setDateRange}
-                />
+                    <DateRangePicker
+                        value={dateRange}
+                        onChange={setDateRange}
+                    />
 
-                <motion.button 
-                    onClick={handleCSV} 
-                    whileHover={{ scale: 1.02 }} 
-                    whileTap={{ scale: 0.98 }} 
-                    disabled={filteredRows.length === 0}
-                    className="flex items-center justify-center gap-2 h-[36px] w-full rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-[10px] font-black tracking-[0.2em] uppercase hover:brightness-110 transition-all shadow-[0_4px_12px_rgba(99,102,241,0.2)] disabled:opacity-20 disabled:pointer-events-none"
-                >
-                    <Zap size={13} fill="currentColor" className="text-white" /> Export CSV
-                </motion.button>
+                    <motion.button 
+                        onClick={handleCSV} 
+                        whileHover={{ scale: 1.02 }} 
+                        whileTap={{ scale: 0.98 }} 
+                        disabled={filteredRows.length === 0}
+                        className="flex items-center justify-center gap-2 h-[36px] w-full rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-[10px] font-black tracking-[0.2em] uppercase hover:brightness-110 transition-all shadow-[0_4px_12px_rgba(99,102,241,0.25)] disabled:opacity-20 disabled:pointer-events-none"
+                    >
+                        <Zap size={13} fill="currentColor" className="text-white" /> Export CSV
+                    </motion.button>
+                </div>
             </div>
 
             {/* ── Active Chips & Match Count ── */}
