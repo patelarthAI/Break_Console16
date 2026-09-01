@@ -312,7 +312,10 @@ export async function getLeaves(clientName?: string, force = false): Promise<Lea
         if (clientName) query = query.eq('client_name', clientName);
         const { data, error } = await query;
         assertSupabaseOk(error, 'Failed to load leaves');
-        return data ?? [];
+        return (data ?? []).map((row) => ({
+            ...row,
+            employee_name: toTitleCase(row.employee_name),
+        })) as LeaveRecord[];
     }, force);
 }
 
@@ -415,7 +418,10 @@ export async function getLeavesPage(options?: LeavePageOptions): Promise<Paginat
         assertSupabaseOk(error, 'Failed to load leave records');
 
         return {
-            items: (data ?? []) as LeaveRecord[],
+            items: (data ?? []).map((row) => ({
+                ...row,
+                employee_name: toTitleCase(row.employee_name),
+            })) as LeaveRecord[],
             total: count ?? 0,
             page: safePage,
             pageSize: safePageSize,
@@ -473,7 +479,7 @@ export async function addLeave(leave: Omit<LeaveRecord, 'id' | 'created_at'>): P
     const normalizedLeave = {
         ...leave,
         client_name: leave.client_name.trim(),
-        employee_name: leave.employee_name.trim(),
+        employee_name: toTitleCase(leave.employee_name),
     };
 
     const { data: existingRows, error: lookupError } = await supabase
@@ -524,7 +530,11 @@ export async function deleteLeave(id: string): Promise<void> {
 }
 
 export async function updateLeave(id: string, updates: Partial<LeaveRecord>): Promise<LeaveRecord> {
-    const { data, error } = await supabase.from('leaves').update(updates).eq('id', id).select().single();
+    const payload: Partial<LeaveRecord> = { ...updates };
+    if (payload.employee_name) payload.employee_name = toTitleCase(payload.employee_name);
+    if (payload.client_name) payload.client_name = payload.client_name.trim();
+
+    const { data, error } = await supabase.from('leaves').update(payload).eq('id', id).select().single();
     assertSupabaseOk(error, 'Failed to update leave');
     clearLeaveCache();
     return data as LeaveRecord;

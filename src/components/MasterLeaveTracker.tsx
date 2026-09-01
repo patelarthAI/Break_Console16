@@ -20,6 +20,7 @@ import { dateStr, exportExcel } from '@/lib/timeUtils';
 import { useToast } from '@/components/Toast';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import CustomSelect from '@/components/ui/CustomSelect';
+import { toTitleCase } from '@/lib/utils';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -1045,7 +1046,8 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                 <AnimatePresence initial={false}>
                                     {visibleLeaves.map((l) => {
                                         const isSelected = selectedIds.includes(l.id);
-                                        const initials = l.employee_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+                                        const formattedName = toTitleCase(l.employee_name);
+                                        const initials = formattedName.split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2).toUpperCase();
 
                                         return (
                                             <motion.div 
@@ -1086,7 +1088,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                                         {initials}
                                                     </div>
                                                     <span className="text-sm font-semibold text-zinc-100 truncate group-hover:text-indigo-200 transition-colors">
-                                                        {l.employee_name}
+                                                        {formattedName}
                                                     </span>
                                                 </div>
 
