@@ -966,11 +966,11 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
             </div>
 
             {/* ── Enterprise Data Grid Container ──────────────────────────── */}
-            <div className="rounded-2xl bg-[#0c0e17]/90 backdrop-blur-xl border border-white/[0.08] shadow-2xl overflow-hidden pb-28">
+            <div className="w-full rounded-[22px] border border-white/[0.06] bg-[#0c0d15]/40 backdrop-blur-md shadow-2xl p-3 pb-28">
                 <div className="overflow-x-auto pb-2">
-                    <div className="min-w-[1220px]">
+                    <div className="min-w-[1220px] flex flex-col gap-1.5 relative">
                         {/* Table Header Row */}
-                        <div className="grid grid-cols-[44px_105px_minmax(160px,1.6fr)_minmax(110px,1fr)_minmax(130px,1.1fr)_80px_80px_100px_minmax(160px,1.5fr)_95px_65px] gap-3 px-5 py-3.5 bg-[#101322] border-b border-white/[0.08] items-center">
+                        <div className="sticky top-0 z-30 grid grid-cols-[44px_105px_minmax(160px,1.6fr)_minmax(110px,1fr)_minmax(130px,1.1fr)_80px_80px_100px_minmax(160px,1.5fr)_95px_65px] gap-3 px-6 py-2.5 rounded-xl bg-[#0b0c14]/95 border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.5)] items-center backdrop-blur-md select-none">
                             {/* Master Selection Checkbox */}
                             <div className="flex items-center justify-center">
                                 <button
@@ -989,45 +989,52 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                 </button>
                             </div>
 
-                            {['Date', 'Employee', 'Client', 'Leave Type', 'Duration', 'Planned', 'Backup Provided', 'Reason', 'Logged by'].map(h => {
-                                const labelDisplay = h === 'Backup Provided' ? 'Backup' : h;
-                                return (
-                                    <button 
-                                        key={h} 
-                                        type="button"
-                                        onClick={() => {
-                                            if (sortConfig.key === h) setSortConfig({ key: h, dir: sortConfig.dir === 'asc' ? 'desc' : 'asc' });
-                                            else setSortConfig({ key: h, dir: 'asc' });
-                                        }} 
-                                        className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-400 hover:text-white transition-colors outline-none cursor-pointer group text-left"
-                                    >
-                                        {labelDisplay}
-                                        <span className="flex flex-col opacity-0 group-hover:opacity-70 transition-opacity" style={{ opacity: sortConfig.key === h ? 1 : undefined }}>
-                                            <ChevronUp size={10} className={`-mb-1 transition-colors ${sortConfig.key === h && sortConfig.dir === 'asc' ? 'text-indigo-400' : ''}`} />
-                                            <ChevronDown size={10} className={`transition-colors ${sortConfig.key === h && sortConfig.dir === 'desc' ? 'text-indigo-400' : ''}`} />
-                                        </span>
-                                    </button>
-                                );
-                            })}
-                            <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 text-right pr-2">Actions</div>
+                            {[
+                                { key: 'Date', label: 'Date', color: 'text-slate-500' },
+                                { key: 'Employee', label: 'Employee', color: 'text-white' },
+                                { key: 'Client', label: 'Client', color: 'text-indigo-400' },
+                                { key: 'Leave Type', label: 'Leave Type', color: 'text-sky-400' },
+                                { key: 'Duration', label: 'Duration', color: 'text-amber-400' },
+                                { key: 'Planned', label: 'Planned', color: 'text-emerald-400' },
+                                { key: 'Backup Provided', label: 'Backup', color: 'text-purple-400' },
+                                { key: 'Reason', label: 'Reason', color: 'text-slate-400' },
+                                { key: 'Logged by', label: 'Logged By', color: 'text-slate-500' },
+                            ].map(({ key, label, color }) => (
+                                <button 
+                                    key={key} 
+                                    type="button"
+                                    onClick={() => {
+                                        if (sortConfig.key === key) setSortConfig({ key, dir: sortConfig.dir === 'asc' ? 'desc' : 'asc' });
+                                        else setSortConfig({ key, dir: 'asc' });
+                                    }} 
+                                    className={`flex items-center gap-1.5 text-[10px] font-black tracking-[0.2em] uppercase ${color} hover:text-white transition-colors outline-none cursor-pointer group text-left`}
+                                >
+                                    {label}
+                                    <span className="flex flex-col opacity-0 group-hover:opacity-70 transition-opacity" style={{ opacity: sortConfig.key === key ? 1 : undefined }}>
+                                        <ChevronUp size={10} className={`-mb-1 transition-colors ${sortConfig.key === key && sortConfig.dir === 'asc' ? 'text-indigo-400' : ''}`} />
+                                        <ChevronDown size={10} className={`transition-colors ${sortConfig.key === key && sortConfig.dir === 'desc' ? 'text-indigo-400' : ''}`} />
+                                    </span>
+                                </button>
+                            ))}
+                            <div className="text-[10px] font-black tracking-[0.2em] uppercase text-slate-500 text-right pr-2">Actions</div>
                         </div>
 
                         {/* Loading Skeleton Shimmer */}
                         {loading ? (
-                            <div className="divide-y divide-white/[0.04]">
+                            <div className="flex flex-col gap-1.5">
                                 {[1, 2, 3, 4, 5, 6, 7].map((idx) => (
-                                    <div key={idx} className="grid grid-cols-[44px_105px_minmax(160px,1.6fr)_minmax(110px,1fr)_minmax(130px,1.1fr)_80px_80px_100px_minmax(160px,1.5fr)_95px_65px] gap-3 px-5 py-3.5 items-center animate-pulse">
+                                    <div key={idx} className="grid grid-cols-[44px_105px_minmax(160px,1.6fr)_minmax(110px,1fr)_minmax(130px,1.1fr)_80px_80px_100px_minmax(160px,1.5fr)_95px_65px] gap-3 px-6 py-3 items-center rounded-xl bg-white/[0.005] border border-white/[0.03] animate-pulse">
                                         <div className="w-4 h-4 rounded bg-white/10 mx-auto" />
                                         <div className="h-4 w-20 rounded bg-white/10" />
                                         <div className="flex items-center gap-2.5">
-                                            <div className="w-7 h-7 rounded-lg bg-white/10" />
+                                            <div className="w-8 h-8 rounded-xl bg-white/10" />
                                             <div className="h-4 w-28 rounded bg-white/10" />
                                         </div>
                                         <div className="h-4 w-20 rounded bg-white/10" />
-                                        <div className="h-5 w-24 rounded-md bg-white/10" />
-                                        <div className="h-5 w-16 rounded-md bg-white/10" />
-                                        <div className="h-5 w-14 rounded-md bg-white/10" />
-                                        <div className="h-5 w-14 rounded-md bg-white/10" />
+                                        <div className="h-5 w-24 rounded-full bg-white/10" />
+                                        <div className="h-5 w-16 rounded-full bg-white/10" />
+                                        <div className="h-5 w-14 rounded-full bg-white/10" />
+                                        <div className="h-5 w-14 rounded-full bg-white/10" />
                                         <div className="h-4 w-32 rounded bg-white/10" />
                                         <div className="h-4 w-16 rounded bg-white/10" />
                                         <div className="flex items-center justify-end gap-1.5">
@@ -1057,24 +1064,29 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                 )}
                             </div>
                         ) : (
-                            <div className="divide-y divide-white/[0.04]">
+                            <div className="flex flex-col gap-1.5">
                                 <AnimatePresence initial={false}>
                                     {visibleLeaves.map((l) => {
                                         const isSelected = selectedIds.includes(l.id);
                                         const formattedName = toTitleCase(l.employee_name);
                                         const initials = formattedName.split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2).toUpperCase();
+                                        const isUnplanned = !l.is_planned;
 
                                         return (
                                             <motion.div 
                                                 key={l.id}
-                                                initial={{ opacity: 0 }} 
-                                                animate={{ opacity: 1 }} 
+                                                initial={{ opacity: 0, y: 4 }} 
+                                                animate={{ opacity: 1, y: 0 }} 
                                                 exit={{ opacity: 0 }}
-                                                transition={{ duration: 0.12 }}
-                                                className={`grid grid-cols-[44px_105px_minmax(160px,1.6fr)_minmax(110px,1fr)_minmax(130px,1.1fr)_80px_80px_100px_minmax(160px,1.5fr)_95px_65px] gap-3 px-5 py-3.5 items-center transition-all duration-150 group cursor-default
-                                                    ${editingId === l.id ? 'bg-amber-500/[0.08] ring-1 ring-amber-500/20' 
-                                                    : isSelected ? 'bg-indigo-500/[0.12] ring-1 ring-indigo-500/30' 
-                                                    : 'hover:bg-[#141829]'}`}
+                                                transition={{ duration: 0.15 }}
+                                                className={`grid grid-cols-[44px_105px_minmax(160px,1.6fr)_minmax(110px,1fr)_minmax(130px,1.1fr)_80px_80px_100px_minmax(160px,1.5fr)_95px_65px] gap-3 px-6 py-2.5 items-center rounded-xl transition-all duration-300 border backdrop-blur-md hover:scale-[1.002] group cursor-default
+                                                    ${editingId === l.id 
+                                                        ? 'bg-amber-500/[0.12] border-amber-500/40 border-l-4 border-l-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.15)]' 
+                                                        : isSelected 
+                                                        ? 'bg-gradient-to-r from-indigo-500/[0.14] to-indigo-500/[0.02] border-indigo-500/40 border-l-4 border-l-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.18)]' 
+                                                        : isUnplanned
+                                                        ? 'bg-gradient-to-r from-rose-500/[0.03] to-transparent border-rose-500/20 border-l-4 border-l-rose-500 shadow-[0_4px_16px_rgba(244,63,94,0.05)] hover:bg-rose-500/[0.06]'
+                                                        : 'bg-white/[0.005] border-white/[0.03] hover:bg-white/[0.015] hover:border-white/[0.06] hover:shadow-[0_8px_20px_rgba(0,0,0,0.25)]'}`}
                                             >
                                                 {/* Checkbox */}
                                                 <div className="flex items-center justify-center">
@@ -1093,23 +1105,23 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
                                                 {/* Date */}
                                                 <div>
-                                                    <p className="text-xs font-semibold text-zinc-200 tracking-tight">{fmtDate(l.date)}</p>
-                                                    <p className="text-[10px] text-zinc-500 font-medium">{getWeekday(l.date)}</p>
+                                                    <p className="text-[11px] font-mono font-bold text-slate-300 uppercase tracking-widest">{fmtDate(l.date)}</p>
+                                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{getWeekday(l.date)}</p>
                                                 </div>
                                                 
                                                 {/* Employee */}
                                                 <div className="flex items-center gap-2.5 min-w-0">
-                                                    <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 text-indigo-300 text-xs font-bold flex items-center justify-center flex-shrink-0">
+                                                    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-800 border border-indigo-400/30 text-xs font-black text-white shadow-lg flex items-center justify-center flex-shrink-0">
                                                         {initials}
                                                     </div>
-                                                    <span className="text-sm font-semibold text-zinc-100 truncate group-hover:text-indigo-200 transition-colors">
+                                                    <span className="font-black text-[13px] text-white tracking-tight truncate drop-shadow-sm group-hover:text-indigo-200 transition-colors">
                                                         {formattedName}
                                                     </span>
                                                 </div>
 
                                                 {/* Client */}
                                                 <div className="min-w-0">
-                                                    <span className="inline-block max-w-full truncate text-[11px] font-medium text-zinc-300 bg-white/[0.04] border border-white/10 px-2.5 py-1 rounded-md">
+                                                    <span className="inline-block max-w-full truncate text-[11px] font-extrabold text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-0.5 rounded-full shadow-[0_0_8px_rgba(99,102,241,0.1)]">
                                                         {l.client_name}
                                                     </span>
                                                 </div>
@@ -1119,7 +1131,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
                                                 {/* Duration */}
                                                 <div>
-                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold border ${l.day_count === 1 ? 'bg-sky-500/10 text-sky-300 border-sky-500/25' : 'bg-amber-500/10 text-amber-300 border-amber-500/25'}`}>
+                                                    <span className="text-[12px] font-mono font-black text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded-full shadow-[0_0_8px_rgba(245,158,11,0.1)]">
                                                         {l.day_count === 1 ? '1.0 Day' : '0.5 Day'}
                                                     </span>
                                                 </div>
@@ -1127,15 +1139,15 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                                 {/* Planned */}
                                                 <div>
                                                     {(l as any).is_smart ? (
-                                                        <span className="inline-flex items-center gap-1 text-amber-300 text-xs font-semibold bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/25">
+                                                        <span className="inline-flex items-center gap-1 text-amber-300 text-xs font-extrabold bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/25 shadow-[0_0_8px_rgba(245,158,11,0.15)]">
                                                             <AlertCircle size={11} /> Auto
                                                         </span>
                                                     ) : l.is_planned ? (
-                                                        <span className="inline-flex items-center gap-1 text-emerald-400 text-xs font-semibold bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/25">
+                                                        <span className="inline-flex items-center gap-1 text-emerald-400 text-xs font-extrabold bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/25 shadow-[0_0_8px_rgba(16,185,129,0.2)]">
                                                             <CheckCircle size={11} /> Yes
                                                         </span>
                                                     ) : (
-                                                        <span className="inline-flex items-center gap-1 text-rose-400 text-xs font-semibold bg-rose-500/10 px-2 py-0.5 rounded-md border border-rose-500/25">
+                                                        <span className="inline-flex items-center gap-1 text-rose-400 text-xs font-extrabold bg-rose-500/10 px-2.5 py-0.5 rounded-full border border-rose-500/25 shadow-[0_0_8px_rgba(244,63,94,0.2)]">
                                                             <AlertCircle size={11} /> No
                                                         </span>
                                                     )}
@@ -1144,32 +1156,32 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                                 {/* Backup Provided */}
                                                 <div>
                                                     {l.backup_provided ? (
-                                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_8px_rgba(16,185,129,0.15)]">
-                                                            <CheckCircle size={12} /> Yes
+                                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 shadow-[0_0_8px_rgba(16,185,129,0.2)]">
+                                                            <CheckCircle size={11} /> Yes
                                                         </span>
                                                     ) : (
-                                                        <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-medium text-zinc-400 bg-white/[0.04] border border-white/10">
+                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold text-slate-500 bg-white/[0.03] border border-white/10">
                                                             No
                                                         </span>
                                                     )}
                                                 </div>
 
                                                 {/* Reason */}
-                                                <div className="min-w-0 text-zinc-300 text-xs truncate" title={l.reason || ''}>
-                                                    {l.reason ? <span className="text-zinc-200">{toTitleCase(l.reason)}</span> : <span className="text-zinc-600 font-bold">—</span>}
+                                                <div className="min-w-0 text-slate-300 text-xs font-medium truncate" title={l.reason || ''}>
+                                                    {l.reason ? <span className="text-slate-200">{toTitleCase(l.reason)}</span> : <span className="text-slate-600 font-sans">—</span>}
                                                 </div>
 
                                                 {/* Logged by */}
-                                                <div className="truncate text-zinc-400 text-xs font-medium">
+                                                <div className="truncate text-slate-400 text-xs font-semibold font-mono">
                                                     {(l as any).is_smart ? (
-                                                        <span className="text-indigo-400/80 italic font-semibold">System Gen</span>
+                                                        <span className="text-indigo-400/80 italic font-bold">System Gen</span>
                                                     ) : (
                                                         <span>{l.approver || '—'}</span>
                                                     )}
                                                 </div>
 
                                                 {/* Actions */}
-                                                <div className="flex items-center justify-end gap-1.5 w-full">
+                                                <div className="flex items-center justify-end gap-1.5 w-full opacity-0 group-hover:opacity-100 transition-opacity">
                                                     {(l as any).is_smart && (
                                                         <>
                                                             <button 
