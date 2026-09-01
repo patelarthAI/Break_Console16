@@ -501,20 +501,21 @@ export async function getLeaveSummary(options?: LeavePageOptions): Promise<Leave
 
 export async function addLeave(leave: Omit<LeaveRecord, 'id' | 'created_at'>): Promise<LeaveRecord> {
     const isBackup = leave.backup_provided ?? false;
-    const normalizedLeave = {
-        ...leave,
+    const { backup_provided, ...restLeave } = leave;
+    const dbPayload = {
+        ...restLeave,
         client_name: leave.client_name.trim(),
         employee_name: toTitleCase(leave.employee_name),
-        backup_provided: isBackup,
         reason: formatReasonWithBackup(leave.reason, isBackup),
     };
+    delete (dbPayload as any).backup_provided;
 
     const { data: existingRows, error: lookupError } = await supabase
         .from('leaves')
         .select('*')
-        .eq('date', normalizedLeave.date)
-        .eq('client_name', normalizedLeave.client_name)
-        .eq('employee_name', normalizedLeave.employee_name)
+        .eq('date', dbPayload.date)
+        .eq('client_name', dbPayload.client_name)
+        .eq('employee_name', dbPayload.employee_name)
         .order('created_at', { ascending: false });
     assertSupabaseOk(lookupError, 'Failed to check existing leave');
 
@@ -535,19 +536,29 @@ export async function addLeave(leave: Omit<LeaveRecord, 'id' | 'created_at'>): P
     if (canonical) {
         const { data, error } = await supabase
             .from('leaves')
-            .update(normalizedLeave)
+            .update(dbPayload)
             .eq('id', canonical.id)
             .select()
             .single();
         assertSupabaseOk(error, 'Failed to update leave');
         clearLeaveCache();
-        return data as LeaveRecord;
+        return {
+            ...data,
+            employee_name: toTitleCase(data.employee_name),
+            backup_provided: parseBackupProvided(data),
+            reason: cleanReasonText(data.reason),
+        } as LeaveRecord;
     }
 
-    const { data, error } = await supabase.from('leaves').insert([normalizedLeave]).select().single();
+    const { data, error } = await supabase.from('leaves').insert([dbPayload]).select().single();
     assertSupabaseOk(error, 'Failed to create leave');
     clearLeaveCache();
-    return data as LeaveRecord;
+    return {
+        ...data,
+        employee_name: toTitleCase(data.employee_name),
+        backup_provided: parseBackupProvided(data),
+        reason: cleanReasonText(data.reason),
+    } as LeaveRecord;
 }
 
 export async function deleteLeave(id: string): Promise<void> {
@@ -560,16 +571,22 @@ export async function updateLeave(id: string, updates: Partial<LeaveRecord>): Pr
     const payload: Partial<LeaveRecord> = { ...updates };
     if (payload.employee_name) payload.employee_name = toTitleCase(payload.employee_name);
     if (payload.client_name) payload.client_name = payload.client_name.trim();
+
     if ('backup_provided' in updates || 'reason' in updates) {
         const isBackup = updates.backup_provided ?? false;
-        payload.backup_provided = isBackup;
         payload.reason = formatReasonWithBackup(updates.reason ?? payload.reason, isBackup);
     }
+    delete (payload as any).backup_provided;
 
     const { data, error } = await supabase.from('leaves').update(payload).eq('id', id).select().single();
     assertSupabaseOk(error, 'Failed to update leave');
     clearLeaveCache();
-    return data as LeaveRecord;
+    return {
+        ...data,
+        employee_name: toTitleCase(data.employee_name),
+        backup_provided: parseBackupProvided(data),
+        reason: cleanReasonText(data.reason),
+    } as LeaveRecord;
 }
 
 export async function bulkUpdateLeaves(ids: string[], updates: Partial<LeaveRecord>): Promise<void> {
@@ -577,11 +594,12 @@ export async function bulkUpdateLeaves(ids: string[], updates: Partial<LeaveReco
     const payload: Partial<LeaveRecord> = { ...updates };
     if (payload.employee_name) payload.employee_name = toTitleCase(payload.employee_name);
     if (payload.client_name) payload.client_name = payload.client_name.trim();
+
     if ('backup_provided' in updates || 'reason' in updates) {
         const isBackup = updates.backup_provided ?? false;
-        payload.backup_provided = isBackup;
         payload.reason = formatReasonWithBackup(updates.reason ?? payload.reason, isBackup);
     }
+    delete (payload as any).backup_provided;
 
     const { error } = await supabase.from('leaves').update(payload).in('id', ids);
     assertSupabaseOk(error, 'Failed to bulk update leaves');
