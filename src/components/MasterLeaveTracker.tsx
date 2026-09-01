@@ -970,7 +970,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                 <div className="overflow-x-auto pb-2">
                     <div className="min-w-[1220px]">
                         {/* Table Header Row */}
-                        <div className="grid grid-cols-[44px_120px_minmax(180px,2fr)_minmax(130px,1.2fr)_minmax(160px,1.4fr)_100px_100px_minmax(180px,2fr)_110px_70px] gap-3 px-5 py-3.5 bg-[#101322] border-b border-white/[0.08] items-center">
+                        <div className="grid grid-cols-[44px_105px_minmax(160px,1.6fr)_minmax(110px,1fr)_minmax(130px,1.1fr)_80px_80px_100px_minmax(160px,1.5fr)_95px_65px] gap-3 px-5 py-3.5 bg-[#101322] border-b border-white/[0.08] items-center">
                             {/* Master Selection Checkbox */}
                             <div className="flex items-center justify-center">
                                 <button
@@ -989,23 +989,26 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                 </button>
                             </div>
 
-                            {['Date', 'Employee', 'Client', 'Leave Type', 'Duration', 'Planned', 'Backup Provided', 'Reason', 'Logged by'].map(h => (
-                                <button 
-                                    key={h} 
-                                    type="button"
-                                    onClick={() => {
-                                        if (sortConfig.key === h) setSortConfig({ key: h, dir: sortConfig.dir === 'asc' ? 'desc' : 'asc' });
-                                        else setSortConfig({ key: h, dir: 'asc' });
-                                    }} 
-                                    className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-400 hover:text-white transition-colors outline-none cursor-pointer group text-left"
-                                >
-                                    {h}
-                                    <span className="flex flex-col opacity-0 group-hover:opacity-70 transition-opacity" style={{ opacity: sortConfig.key === h ? 1 : undefined }}>
-                                        <ChevronUp size={10} className={`-mb-1 transition-colors ${sortConfig.key === h && sortConfig.dir === 'asc' ? 'text-indigo-400' : ''}`} />
-                                        <ChevronDown size={10} className={`transition-colors ${sortConfig.key === h && sortConfig.dir === 'desc' ? 'text-indigo-400' : ''}`} />
-                                    </span>
-                                </button>
-                            ))}
+                            {['Date', 'Employee', 'Client', 'Leave Type', 'Duration', 'Planned', 'Backup Provided', 'Reason', 'Logged by'].map(h => {
+                                const labelDisplay = h === 'Backup Provided' ? 'Backup' : h;
+                                return (
+                                    <button 
+                                        key={h} 
+                                        type="button"
+                                        onClick={() => {
+                                            if (sortConfig.key === h) setSortConfig({ key: h, dir: sortConfig.dir === 'asc' ? 'desc' : 'asc' });
+                                            else setSortConfig({ key: h, dir: 'asc' });
+                                        }} 
+                                        className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-400 hover:text-white transition-colors outline-none cursor-pointer group text-left"
+                                    >
+                                        {labelDisplay}
+                                        <span className="flex flex-col opacity-0 group-hover:opacity-70 transition-opacity" style={{ opacity: sortConfig.key === h ? 1 : undefined }}>
+                                            <ChevronUp size={10} className={`-mb-1 transition-colors ${sortConfig.key === h && sortConfig.dir === 'asc' ? 'text-indigo-400' : ''}`} />
+                                            <ChevronDown size={10} className={`transition-colors ${sortConfig.key === h && sortConfig.dir === 'desc' ? 'text-indigo-400' : ''}`} />
+                                        </span>
+                                    </button>
+                                );
+                            })}
                             <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 text-right pr-2">Actions</div>
                         </div>
 
@@ -1013,7 +1016,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                         {loading ? (
                             <div className="divide-y divide-white/[0.04]">
                                 {[1, 2, 3, 4, 5, 6, 7].map((idx) => (
-                                    <div key={idx} className="grid grid-cols-[44px_110px_minmax(160px,1.6fr)_minmax(120px,1fr)_minmax(130px,1.1fr)_85px_85px_110px_minmax(160px,1.5fr)_100px_70px] gap-3 px-5 py-3.5 items-center animate-pulse">
+                                    <div key={idx} className="grid grid-cols-[44px_105px_minmax(160px,1.6fr)_minmax(110px,1fr)_minmax(130px,1.1fr)_80px_80px_100px_minmax(160px,1.5fr)_95px_65px] gap-3 px-5 py-3.5 items-center animate-pulse">
                                         <div className="w-4 h-4 rounded bg-white/10 mx-auto" />
                                         <div className="h-4 w-20 rounded bg-white/10" />
                                         <div className="flex items-center gap-2.5">
@@ -1068,7 +1071,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                                 animate={{ opacity: 1 }} 
                                                 exit={{ opacity: 0 }}
                                                 transition={{ duration: 0.12 }}
-                                                className={`grid grid-cols-[44px_110px_minmax(160px,1.6fr)_minmax(120px,1fr)_minmax(130px,1.1fr)_85px_85px_110px_minmax(160px,1.5fr)_100px_70px] gap-3 px-5 py-3.5 items-center transition-all duration-150 group cursor-default
+                                                className={`grid grid-cols-[44px_105px_minmax(160px,1.6fr)_minmax(110px,1fr)_minmax(130px,1.1fr)_80px_80px_100px_minmax(160px,1.5fr)_95px_65px] gap-3 px-5 py-3.5 items-center transition-all duration-150 group cursor-default
                                                     ${editingId === l.id ? 'bg-amber-500/[0.08] ring-1 ring-amber-500/20' 
                                                     : isSelected ? 'bg-indigo-500/[0.12] ring-1 ring-indigo-500/30' 
                                                     : 'hover:bg-[#141829]'}`}
@@ -1153,7 +1156,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
                                                 {/* Reason */}
                                                 <div className="min-w-0 text-zinc-300 text-xs truncate" title={l.reason || ''}>
-                                                    {l.reason ? <span className="text-zinc-200">{l.reason}</span> : <span className="text-zinc-600 font-bold">—</span>}
+                                                    {l.reason ? <span className="text-zinc-200">{toTitleCase(l.reason)}</span> : <span className="text-zinc-600 font-bold">—</span>}
                                                 </div>
 
                                                 {/* Logged by */}
