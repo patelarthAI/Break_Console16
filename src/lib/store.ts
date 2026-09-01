@@ -250,8 +250,21 @@ function withSyntheticAutoLogout(logs: TimeLog[], user: User, date: string): Tim
 }
 
 export async function addClient(name: string): Promise<ClientRow> {
-    const { data, error } = await supabase.from('clients').insert({ name: name.trim() }).select().single();
-    if (error) throw error;
+    const trimmed = name.trim();
+    if (!trimmed) throw new Error('Client name cannot be empty');
+
+    const { data: existing, error: checkError } = await supabase
+        .from('clients')
+        .select('id, name')
+        .ilike('name', trimmed);
+
+    assertSupabaseOk(checkError, 'Failed to check existing clients');
+    if (existing && existing.length > 0) {
+        throw new Error(`A client named "${existing[0].name}" already exists.`);
+    }
+
+    const { data, error } = await supabase.from('clients').insert({ name: trimmed }).select().single();
+    assertSupabaseOk(error, 'Failed to add client');
     clearClientCache();
     return data as ClientRow;
 }

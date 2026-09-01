@@ -67,28 +67,50 @@ export default function AdminSettings({ user }: SettingsProps) {
 
   useEffect(() => { void loadData(); }, []);
 
+  const [addingClient, setAddingClient] = useState(false);
+
   const handleAddClient = async (e: FormEvent) => {
     e.preventDefault();
-    if (!newClient.trim()) return;
+    const val = newClient.trim();
+    if (!val) return;
+
+    if (clients.some(c => c.name.toLowerCase().trim() === val.toLowerCase())) {
+      toastError('Client already exists', `"${val}" is already in your client roster.`);
+      return;
+    }
+
+    setAddingClient(true);
     try {
-      await addClient(newClient.trim());
+      await addClient(val);
       setNewClient('');
-      success('Client added');
-      void loadData();
-    } catch { toastError('Failed to add client'); }
+      success('Client added', `Successfully added "${val}".`);
+      await loadData();
+    } catch (err: any) {
+      toastError('Could not add client', err?.message || 'Check database connection or permissions.');
+    } finally {
+      setAddingClient(false);
+    }
   };
 
   const handleRename = async (id: string, oldName: string) => {
-    if (!renameValue.trim() || renameValue === oldName) {
+    const val = renameValue.trim();
+    if (!val || val.toLowerCase() === oldName.toLowerCase()) {
+      setRenamingId(null);
+      return;
+    }
+    if (clients.some(c => c.id !== id && c.name.toLowerCase().trim() === val.toLowerCase())) {
+      toastError('Client already exists', `A client named "${val}" already exists.`);
       setRenamingId(null);
       return;
     }
     try {
-      await renameClient(id, oldName, renameValue.trim());
+      await renameClient(id, oldName, val);
       setRenamingId(null);
-      success('Client renamed');
-      void loadData();
-    } catch { toastError('Failed to rename'); }
+      success('Client renamed', `Updated "${oldName}" to "${val}".`);
+      await loadData();
+    } catch (err: any) {
+      toastError('Failed to rename client', err?.message || 'Check database permissions.');
+    }
   };
 
   const handleDeleteClient = async (id: string) => {
@@ -96,8 +118,10 @@ export default function AdminSettings({ user }: SettingsProps) {
       await deleteClient(id);
       success('Client deleted');
       setConfirmState(null);
-      void loadData();
-    } catch { toastError('Failed to delete client'); }
+      await loadData();
+    } catch (err: any) {
+      toastError('Failed to delete client', err?.message || 'Check database constraints.');
+    }
   };
 
   const handleSaveUser = async (e: FormEvent) => {
@@ -255,8 +279,19 @@ export default function AdminSettings({ user }: SettingsProps) {
             <span className="px-2 py-0.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-bold">{clients.length} clients</span>
           </div>
           <form onSubmit={handleAddClient} className="flex gap-2">
-            <input className="input-field flex-1" placeholder="New client name..." value={newClient} onChange={(e) => setNewClient(e.target.value)} />
-            <button type="submit" className="btn btn-primary"><Plus size={14} /> Add</button>
+            <input 
+              className="bg-[#121626] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500/80 focus:ring-1 focus:ring-indigo-500/30 flex-1 font-medium" 
+              placeholder="Enter new client name (e.g. Acme Corp)…" 
+              value={newClient} 
+              onChange={(e) => setNewClient(e.target.value)} 
+            />
+            <button 
+              type="submit" 
+              disabled={addingClient || !newClient.trim()} 
+              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white text-xs font-bold transition-all shadow-[0_0_16px_rgba(99,102,241,0.3)] disabled:opacity-40 flex items-center gap-1.5 flex-shrink-0"
+            >
+              {addingClient ? <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><Plus size={14} /> Add Client</>}
+            </button>
           </form>
           <div className="space-y-1.5">
             {clients.map((c) => (
