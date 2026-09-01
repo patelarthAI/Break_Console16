@@ -193,6 +193,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
         lwpDays: 0,
         uniqueEmployees: 0,
         uniqueClients: 0,
+        backupProvidedCount: 0,
     });
     const [currentPage, setCurrentPage] = useState(1);
     const [clients, setClients] = useState<ClientRow[]>([]);
@@ -221,6 +222,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
     const [selectedClient, setSelectedClient] = useState('');
     const [employeeName, setEmployeeName] = useState('');
     const [isPlanned, setIsPlanned] = useState(true);
+    const [backupProvided, setBackupProvided] = useState(false);
     const [reason, setReason] = useState('');
     const [leaveType, setLeaveType] = useState('Sick Leave');
     const [dayCount, setDayCount] = useState<number>(1);
@@ -228,10 +230,12 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
     // Bulk Edit Form fields
     const [bulkLeaveType, setBulkLeaveType] = useState('Casual Leave');
     const [bulkIsPlanned, setBulkIsPlanned] = useState(true);
+    const [bulkBackupProvided, setBulkBackupProvided] = useState(false);
     const [bulkDayCount, setBulkDayCount] = useState<number>(1);
     const [bulkReason, setBulkReason] = useState('');
     const [updateLeaveType, setUpdateLeaveType] = useState(true);
     const [updatePlanned, setUpdatePlanned] = useState(false);
+    const [updateBackupProvided, setUpdateBackupProvided] = useState(false);
     const [updateDuration, setUpdateDuration] = useState(false);
     const [updateReason, setUpdateReason] = useState(false);
     const [bulkSaving, setBulkSaving] = useState(false);
@@ -415,6 +419,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
         setSelectedClient('');
         setEmployeeName('');
         setIsPlanned(true);
+        setBackupProvided(false);
         setReason('');
         setLeaveType('Sick Leave');
         setDayCount(1);
@@ -451,6 +456,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
         setSelectedClient(l.client_name);
         setEmployeeName(l.employee_name);
         setIsPlanned(l.is_planned);
+        setBackupProvided(Boolean(l.backup_provided));
         setReason(l.reason || '');
         setLeaveType(l.leave_type);
         setDayCount(l.day_count);
@@ -485,6 +491,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                     client_name: selectedClient,
                     employee_name: employeeName,
                     is_planned: isPlanned,
+                    backup_provided: backupProvided,
                     reason: reason || null,
                     approver: currentUser.name,
                     leave_type: leaveType,
@@ -502,6 +509,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                     client_name: selectedClient,
                     employee_name: employeeName,
                     is_planned: isPlanned,
+                    backup_provided: backupProvided,
                     reason: reason || null,
                     approver: currentUser.name,
                     leave_type: leaveType,
@@ -572,6 +580,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
             const updates: Partial<LeaveRecord> = {};
             if (updateLeaveType) updates.leave_type = bulkLeaveType;
             if (updatePlanned) updates.is_planned = bulkIsPlanned;
+            if (updateBackupProvided) updates.backup_provided = bulkBackupProvided;
             if (updateDuration) updates.day_count = bulkDayCount;
             if (updateReason) updates.reason = bulkReason.trim() || null;
             updates.approver = currentUser.name;
@@ -654,6 +663,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                 case 'Leave Type': aVal = a.leave_type; bVal = b.leave_type; break;
                 case 'Duration': aVal = a.day_count; bVal = b.day_count; break;
                 case 'Planned': aVal = a.is_planned ? 1 : 0; bVal = b.is_planned ? 1 : 0; break;
+                case 'Backup Provided': aVal = a.backup_provided ? 1 : 0; bVal = b.backup_provided ? 1 : 0; break;
                 case 'Reason': aVal = a.reason || ''; bVal = b.reason || ''; break;
                 case 'Logged by': aVal = a.is_smart ? 'System Gen' : (a.approver || ''); bVal = b.is_smart ? 'System Gen' : (b.approver || ''); break;
                 default: break;
@@ -677,16 +687,17 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
     const uniqueEmpls = summary.uniqueEmployees;
 
     function handleExport() {
-        const header = ['Date', 'Client', 'Name', 'Planned', 'Reason', 'Approver', 'Leave Type', 'Count'];
+        const header = ['Date', 'Client', 'Name', 'Leave Type', 'Duration', 'Planned', 'Backup Provided', 'Reason', 'Approver'];
         const data = visibleLeaves.map(l => [
             fmtDate(l.date),
             l.client_name,
             l.employee_name,
-            l.is_planned ? 'Yes' : 'No',
-            l.reason || '',
-            l.approver || '',
             l.leave_type,
             l.day_count,
+            l.is_planned ? 'Yes' : 'No',
+            l.backup_provided ? 'Yes' : 'No',
+            l.reason || '',
+            l.approver || '',
         ]);
         exportExcel([header, ...data], 'leave-tracker');
     }
@@ -978,7 +989,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                 </button>
                             </div>
 
-                            {['Date', 'Employee', 'Client', 'Leave Type', 'Duration', 'Planned', 'Reason', 'Logged by'].map(h => (
+                            {['Date', 'Employee', 'Client', 'Leave Type', 'Duration', 'Planned', 'Backup Provided', 'Reason', 'Logged by'].map(h => (
                                 <button 
                                     key={h} 
                                     type="button"
@@ -1002,7 +1013,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                         {loading ? (
                             <div className="divide-y divide-white/[0.04]">
                                 {[1, 2, 3, 4, 5, 6, 7].map((idx) => (
-                                    <div key={idx} className="grid grid-cols-[44px_120px_minmax(180px,2fr)_minmax(130px,1.2fr)_minmax(160px,1.4fr)_100px_100px_minmax(180px,2fr)_110px_70px] gap-3 px-5 py-3.5 items-center animate-pulse">
+                                    <div key={idx} className="grid grid-cols-[44px_110px_minmax(160px,1.6fr)_minmax(120px,1fr)_minmax(130px,1.1fr)_85px_85px_110px_minmax(160px,1.5fr)_100px_70px] gap-3 px-5 py-3.5 items-center animate-pulse">
                                         <div className="w-4 h-4 rounded bg-white/10 mx-auto" />
                                         <div className="h-4 w-20 rounded bg-white/10" />
                                         <div className="flex items-center gap-2.5">
@@ -1012,6 +1023,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                         <div className="h-4 w-20 rounded bg-white/10" />
                                         <div className="h-5 w-24 rounded-md bg-white/10" />
                                         <div className="h-5 w-16 rounded-md bg-white/10" />
+                                        <div className="h-5 w-14 rounded-md bg-white/10" />
                                         <div className="h-5 w-14 rounded-md bg-white/10" />
                                         <div className="h-4 w-32 rounded bg-white/10" />
                                         <div className="h-4 w-16 rounded bg-white/10" />
@@ -1056,7 +1068,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                                 animate={{ opacity: 1 }} 
                                                 exit={{ opacity: 0 }}
                                                 transition={{ duration: 0.12 }}
-                                                className={`grid grid-cols-[44px_120px_minmax(180px,2fr)_minmax(130px,1.2fr)_minmax(160px,1.4fr)_100px_100px_minmax(180px,2fr)_110px_70px] gap-3 px-5 py-3.5 items-center transition-all duration-150 group cursor-default
+                                                className={`grid grid-cols-[44px_110px_minmax(160px,1.6fr)_minmax(120px,1fr)_minmax(130px,1.1fr)_85px_85px_110px_minmax(160px,1.5fr)_100px_70px] gap-3 px-5 py-3.5 items-center transition-all duration-150 group cursor-default
                                                     ${editingId === l.id ? 'bg-amber-500/[0.08] ring-1 ring-amber-500/20' 
                                                     : isSelected ? 'bg-indigo-500/[0.12] ring-1 ring-indigo-500/30' 
                                                     : 'hover:bg-[#141829]'}`}
@@ -1122,6 +1134,19 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                                     ) : (
                                                         <span className="inline-flex items-center gap-1 text-rose-400 text-xs font-semibold bg-rose-500/10 px-2 py-0.5 rounded-md border border-rose-500/25">
                                                             <AlertCircle size={11} /> No
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                {/* Backup Provided */}
+                                                <div>
+                                                    {l.backup_provided ? (
+                                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_8px_rgba(16,185,129,0.15)]">
+                                                            <CheckCircle size={12} /> Yes
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-medium text-zinc-400 bg-white/[0.04] border border-white/10">
+                                                            No
                                                         </span>
                                                     )}
                                                 </div>
@@ -1431,7 +1456,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                     </SelectWrap>
                                 </Field>
 
-                                {/* Planned + Duration Segmented Controls */}
+                                {/* Planned + Backup Provided Controls */}
                                 <div className="grid grid-cols-2 gap-3.5">
                                     <div>
                                         <label className={lbl}>Planned?</label>
@@ -1453,36 +1478,55 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                         </div>
                                     </div>
                                     <div>
-                                        <label className={lbl}>Duration (per day)</label>
-                                        {leaveType === 'Paid Leave' ? (
-                                            <input 
-                                                type="number" 
-                                                min="0"
-                                                step="0.5"
-                                                value={dayCount} 
-                                                onChange={e => setDayCount(Number(e.target.value))}
-                                                className={inp}
-                                            />
-                                        ) : (
-                                            <div className="flex rounded-xl overflow-hidden border border-white/10 bg-[#121626] p-1">
-                                                <button 
-                                                    type="button" 
-                                                    onClick={() => setDayCount(1)}
-                                                    className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${dayCount === 1 ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'text-zinc-500 hover:text-zinc-300'}`}
-                                                >
-                                                    Full (1.0)
-                                                </button>
-                                                <button 
-                                                    type="button" 
-                                                    onClick={() => setDayCount(0.5)}
-                                                    className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${dayCount === 0.5 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'text-zinc-500 hover:text-zinc-300'}`}
-                                                >
-                                                    Half (0.5)
-                                                </button>
-                                            </div>
-                                        )}
+                                        <label className={lbl}>Backup Provided?</label>
+                                        <div className="flex rounded-xl overflow-hidden border border-white/10 bg-[#121626] p-1">
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setBackupProvided(true)}
+                                                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${backupProvided ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                            >
+                                                Yes
+                                            </button>
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setBackupProvided(false)}
+                                                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${!backupProvided ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                            >
+                                                No
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
+
+                                <Field label="Duration (per day)">
+                                    {leaveType === 'Paid Leave' ? (
+                                        <input 
+                                            type="number" 
+                                            min="0"
+                                            step="0.5"
+                                            value={dayCount} 
+                                            onChange={e => setDayCount(Number(e.target.value))}
+                                            className={inp}
+                                        />
+                                    ) : (
+                                        <div className="flex rounded-xl overflow-hidden border border-white/10 bg-[#121626] p-1">
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setDayCount(1)}
+                                                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${dayCount === 1 ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                            >
+                                                Full (1.0)
+                                            </button>
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setDayCount(0.5)}
+                                                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${dayCount === 0.5 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                            >
+                                                Half (0.5)
+                                            </button>
+                                        </div>
+                                    )}
+                                </Field>
 
                                 <Field label="Reason (optional)">
                                     <input 
@@ -1628,6 +1672,38 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                                 type="button" 
                                                 onClick={() => setBulkIsPlanned(false)}
                                                 className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${!bulkIsPlanned ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                            >
+                                                No
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Field: Backup Provided Status */}
+                                <div className="space-y-2 p-3.5 rounded-xl bg-[#121626] border border-white/10">
+                                    <label className="flex items-center gap-2.5 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={updateBackupProvided}
+                                            onChange={e => setUpdateBackupProvided(e.target.checked)}
+                                            className="w-4 h-4 rounded border-white/10 bg-white/5 text-indigo-500 focus:ring-0 cursor-pointer"
+                                        />
+                                        <span className="text-xs font-semibold text-zinc-200">Update Backup Provided</span>
+                                    </label>
+
+                                    {updateBackupProvided && (
+                                        <div className="flex rounded-xl overflow-hidden border border-white/10 bg-black/30 p-1">
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setBulkBackupProvided(true)}
+                                                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${bulkBackupProvided ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                            >
+                                                Yes
+                                            </button>
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setBulkBackupProvided(false)}
+                                                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${!bulkBackupProvided ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'text-zinc-500 hover:text-zinc-300'}`}
                                             >
                                                 No
                                             </button>

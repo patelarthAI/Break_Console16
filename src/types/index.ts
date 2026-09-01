@@ -48,6 +48,7 @@ export interface LeaveRecord {
   client_name: string;
   employee_name: string;
   is_planned: boolean;
+  backup_provided?: boolean;
   reason: string | null;
   approver: string | null;
   leave_type: string;

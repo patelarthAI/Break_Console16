@@ -25,6 +25,7 @@ export interface LeaveSummary {
     lwpDays: number;
     uniqueEmployees: number;
     uniqueClients: number;
+    backupProvidedCount: number;
 }
 
 export interface LeavePageOptions {
@@ -171,17 +172,35 @@ function compareLeavePriority(left: LeaveRecord, right: LeaveRecord): number {
     return right.id.localeCompare(left.id);
 }
 
-// Server-sync replaces the old browser-only localStorage marker system.
-// The /api/cron/daily-sync endpoint handles auto-logout persistence + auto-leave generation.
+export function parseBackupProvided(row: any): boolean {
+    if (typeof row.backup_provided === 'boolean') return row.backup_provided;
+    if (typeof row.backup_provided === 'string') return row.backup_provided.toLowerCase() === 'true' || row.backup_provided.toLowerCase() === 'yes';
+    if (typeof row.reason === 'string' && /\[Backup:\s*Yes\]/i.test(row.reason)) return true;
+    return false;
+}
 
-function summarizeLeaves(records: Pick<LeaveRecord, 'day_count' | 'leave_type' | 'is_planned' | 'employee_name' | 'client_name'>[]): LeaveSummary {
+export function cleanReasonText(reason: string | null | undefined): string {
+    if (!reason) return '';
+    return reason.replace(/\[Backup:\s*(Yes|No)\]\s*/gi, '').trim();
+}
+
+export function formatReasonWithBackup(reason: string | null | undefined, backupProvided: boolean): string {
+    const clean = cleanReasonText(reason ?? '');
+    const tag = backupProvided ? '[Backup: Yes]' : '[Backup: No]';
+    return clean ? `${tag} ${clean}` : tag;
+}
+
+function summarizeLeaves(records: (Pick<LeaveRecord, 'day_count' | 'leave_type' | 'is_planned' | 'employee_name' | 'client_name'> & { backup_provided?: boolean; reason?: string | null })[]): LeaveSummary {
     return records.reduce<LeaveSummary>((summary, record) => {
         const dayCount = Number(record.day_count) || 0;
+        const isBackup = parseBackupProvided(record);
 
         summary.totalEntries += 1;
         summary.totalDays += dayCount;
         if (record.is_planned) summary.plannedEntries += 1;
         else summary.unplannedEntries += 1;
+        if (isBackup) summary.backupProvidedCount += 1;
+
         if (record.leave_type.startsWith('LWP')) summary.lwpDays += dayCount;
         if (record.leave_type.includes('Sick')) summary.sickDays += dayCount;
         if (record.leave_type.includes('Casual') || record.leave_type === 'Paid Leave' || record.leave_type.includes('Paternity')) {
@@ -197,6 +216,7 @@ function summarizeLeaves(records: Pick<LeaveRecord, 'day_count' | 'leave_type' |
         sickDays: 0,
         casualDays: 0,
         lwpDays: 0,
+        backupProvidedCount: 0,
         uniqueEmployees: new Set(records.map((record) => record.employee_name)).size,
         uniqueClients: new Set(records.map((record) => record.client_name)).size,
     });
@@ -315,6 +335,8 @@ export async function getLeaves(clientName?: string, force = false): Promise<Lea
         return (data ?? []).map((row) => ({
             ...row,
             employee_name: toTitleCase(row.employee_name),
+            backup_provided: parseBackupProvided(row),
+            reason: cleanReasonText(row.reason),
         })) as LeaveRecord[];
     }, force);
 }
@@ -421,6 +443,8 @@ export async function getLeavesPage(options?: LeavePageOptions): Promise<Paginat
             items: (data ?? []).map((row) => ({
                 ...row,
                 employee_name: toTitleCase(row.employee_name),
+                backup_provided: parseBackupProvided(row),
+                reason: cleanReasonText(row.reason),
             })) as LeaveRecord[],
             total: count ?? 0,
             page: safePage,
@@ -476,10 +500,13 @@ export async function getLeaveSummary(options?: LeavePageOptions): Promise<Leave
 }
 
 export async function addLeave(leave: Omit<LeaveRecord, 'id' | 'created_at'>): Promise<LeaveRecord> {
+    const isBackup = leave.backup_provided ?? false;
     const normalizedLeave = {
         ...leave,
         client_name: leave.client_name.trim(),
         employee_name: toTitleCase(leave.employee_name),
+        backup_provided: isBackup,
+        reason: formatReasonWithBackup(leave.reason, isBackup),
     };
 
     const { data: existingRows, error: lookupError } = await supabase
@@ -533,6 +560,11 @@ export async function updateLeave(id: string, updates: Partial<LeaveRecord>): Pr
     const payload: Partial<LeaveRecord> = { ...updates };
     if (payload.employee_name) payload.employee_name = toTitleCase(payload.employee_name);
     if (payload.client_name) payload.client_name = payload.client_name.trim();
+    if ('backup_provided' in updates || 'reason' in updates) {
+        const isBackup = updates.backup_provided ?? false;
+        payload.backup_provided = isBackup;
+        payload.reason = formatReasonWithBackup(updates.reason ?? payload.reason, isBackup);
+    }
 
     const { data, error } = await supabase.from('leaves').update(payload).eq('id', id).select().single();
     assertSupabaseOk(error, 'Failed to update leave');
@@ -542,7 +574,16 @@ export async function updateLeave(id: string, updates: Partial<LeaveRecord>): Pr
 
 export async function bulkUpdateLeaves(ids: string[], updates: Partial<LeaveRecord>): Promise<void> {
     if (!ids.length) return;
-    const { error } = await supabase.from('leaves').update(updates).in('id', ids);
+    const payload: Partial<LeaveRecord> = { ...updates };
+    if (payload.employee_name) payload.employee_name = toTitleCase(payload.employee_name);
+    if (payload.client_name) payload.client_name = payload.client_name.trim();
+    if ('backup_provided' in updates || 'reason' in updates) {
+        const isBackup = updates.backup_provided ?? false;
+        payload.backup_provided = isBackup;
+        payload.reason = formatReasonWithBackup(updates.reason ?? payload.reason, isBackup);
+    }
+
+    const { error } = await supabase.from('leaves').update(payload).in('id', ids);
     assertSupabaseOk(error, 'Failed to bulk update leaves');
     clearLeaveCache();
 }
