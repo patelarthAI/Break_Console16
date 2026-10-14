@@ -3,20 +3,28 @@ import { useState, useEffect, useRef } from 'react';
 
 export function useClock() {
     const [time, setTime] = useState<Date | null>(null);
-    const rafRef = useRef<number>(0);
 
     useEffect(() => {
         setTime(new Date());
-        let last = 0;
-        const tick = (ts: number) => {
-            if (ts - last >= 1000) {
-                last = ts;
+
+        const intervalId = setInterval(() => {
+            setTime(new Date());
+        }, 1000);
+
+        const handleSync = () => {
+            if (!document.hidden) {
                 setTime(new Date());
             }
-            rafRef.current = requestAnimationFrame(tick);
         };
-        rafRef.current = requestAnimationFrame(tick);
-        return () => cancelAnimationFrame(rafRef.current);
+
+        document.addEventListener('visibilitychange', handleSync);
+        window.addEventListener('focus', handleSync);
+
+        return () => {
+            clearInterval(intervalId);
+            document.removeEventListener('visibilitychange', handleSync);
+            window.removeEventListener('focus', handleSync);
+        };
     }, []);
 
     return time;

@@ -252,9 +252,13 @@ function withSyntheticAutoLogout(logs: TimeLog[], user: User, date: string): Tim
         return logs;
     }
 
+    const todayStr = getTodayKey();
+    const isPastDate = date < todayStr;
     const userNowMins = toZonedMinutes(getRealNow(), user.timezone);
     const shiftEndMins = parseShiftMins(user.shiftEnd);
-    if (userNowMins <= shiftEndMins + 90) return logs;
+
+    // If it is today and we have not exceeded shiftEnd + 90m yet, keep shift active
+    if (!isPastDate && userNowMins <= shiftEndMins + 90) return logs;
 
     const penaltyTimestamp = toZonedTimestamp(date, user.shiftEnd, user.timezone) - (10 * 60000);
     return [
@@ -1107,6 +1111,9 @@ function deriveStatus(logs: TimeLog[]): Omit<UserStatusRecord, 'user'> {
                 currentWorkSegStart = log.timestamp;
                 punchOut = undefined; breakStart = brbStart = undefined; break;
             case 'punch_out':
+                isAutoLogout = false;
+                status = 'punched_out'; punchOut = log.timestamp; breakStart = brbStart = undefined; workStart = undefined;
+                if (currentWorkSegStart) { workedMs += log.timestamp - currentWorkSegStart; currentWorkSegStart = undefined; } break;
             case 'auto_logout':
                 isAutoLogout = true;
                 status = 'punched_out'; punchOut = log.timestamp; breakStart = brbStart = undefined; workStart = undefined;
@@ -1176,13 +1183,17 @@ export async function getAllUsersStatus(clientName?: string, force = false): Pro
 
         const logsByUserDate = buildLogsByUserDate((todayData ?? []) as LogRow[]);
 
-        // Cross-midnight only matters when a user has activity today but no punch_in
-        // (their session began yesterday). Only then do we pay for the extra read —
-        // i.e. roughly the post-midnight window, not all day.
-        const needsYesterday = usersData.some((row: UserRow) => {
+        // Cross-midnight: check if we need yesterday's logs.
+        // Needs yesterday if:
+        // 1) Any user has activity today without punch_in (session began yesterday)
+        // 2) Or early morning (before 8 AM CST) when an overnight shift may be active with 0 logs yet today
+        const cstMins = toZonedMinutes(getRealNow(), 'America/Chicago');
+        const isEarlyHours = cstMins < 480;
+        const hasUnanchoredToday = usersData.some((row: UserRow) => {
             const tl = getLogsForUserDate(logsByUserDate, row.id, today);
             return tl.length > 0 && !tl.some(l => l.eventType === 'punch_in');
         });
+        const needsYesterday = isEarlyHours || hasUnanchoredToday;
 
         if (needsYesterday) {
             const { data: yestData, error: yestError } = await supabase
@@ -1212,6 +1223,13 @@ export async function getAllUsersStatus(clientName?: string, force = false): Pro
             if (todayLogs.length > 0 && !todayHasPunchIn && yestLogs.length > 0) {
                 sessionLogs = [...yestLogs, ...todayLogs].sort((a, b) => a.timestamp - b.timestamp);
                 sessionDate = yesterday;
+            } else if (todayLogs.length === 0 && yestLogs.length > 0) {
+                // If user has 0 logs today, check if yesterday's session is still active
+                const yestStatus = deriveStatus(yestLogs);
+                if (['working', 'on_break', 'on_brb'].includes(yestStatus.status)) {
+                    sessionLogs = yestLogs;
+                    sessionDate = yesterday;
+                }
             }
 
             const sessionWithAutoLogout = withSyntheticAutoLogout(sessionLogs, user, sessionDate);
@@ -1238,16 +1256,24 @@ export async function getSingleUserStatus(userId: string): Promise<UserStatusRec
     const todayLogs = await getLogs(userId, today);
     const todayHasPunchIn = todayLogs.some(l => l.eventType === 'punch_in');
 
-    // Cross-midnight continuation (mirror of getAllUsersStatus). Only pay for the
-    // prior-day read when today has activity but no punch_in (post-midnight window).
     let sessionLogs = todayLogs;
     let sessionDate = today;
+    const yesterday = getPastDaysZoned(1, true)[0] ?? today;
+
     if (todayLogs.length > 0 && !todayHasPunchIn) {
-        const yesterday = getPastDaysZoned(1, true)[0] ?? today;
         const yestLogs = await getLogs(userId, yesterday);
         if (yestLogs.length > 0) {
             sessionLogs = [...yestLogs, ...todayLogs].sort((a, b) => a.timestamp - b.timestamp);
             sessionDate = yesterday;
+        }
+    } else if (todayLogs.length === 0) {
+        const yestLogs = await getLogs(userId, yesterday);
+        if (yestLogs.length > 0) {
+            const yestStatus = deriveStatus(yestLogs);
+            if (['working', 'on_break', 'on_brb'].includes(yestStatus.status)) {
+                sessionLogs = yestLogs;
+                sessionDate = yesterday;
+            }
         }
     }
 

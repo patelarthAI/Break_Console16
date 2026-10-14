@@ -211,15 +211,17 @@ export default function Home() {
     setLogsLoading(true);
     try {
       let dayLogs = await getLogs(userId, getTodayKey());
-      // Cross-midnight: today has activity but no punch_in means the session
-      // began yesterday and crossed midnight. Stitch yesterday so worked/break
-      // totals and status resolve correctly (matches getAllUsersStatus).
-      if (dayLogs.length > 0 && !dayLogs.some(l => l.eventType === 'punch_in')) {
+      // Cross-midnight: if today has no punch_in, check if yesterday had an active or stitched session
+      if (!dayLogs.some(l => l.eventType === 'punch_in')) {
         const yesterdayKey = getPastDaysZoned(1, true)[0];
         if (yesterdayKey) {
           const yLogs = await getLogs(userId, yesterdayKey);
-          if (yLogs.length) {
-            dayLogs = [...yLogs, ...dayLogs].sort((a, b) => a.timestamp - b.timestamp);
+          if (yLogs.length > 0) {
+            const hasOpenYesterdayShift = yLogs.some(l => l.eventType === 'punch_in') &&
+              !yLogs.some(l => l.eventType === 'punch_out' || l.eventType === 'auto_logout');
+            if (dayLogs.length > 0 || hasOpenYesterdayShift) {
+              dayLogs = [...yLogs, ...dayLogs].sort((a, b) => a.timestamp - b.timestamp);
+            }
           }
         }
       }
@@ -303,6 +305,7 @@ export default function Home() {
     const map: Record<string, AppStatus> = { 
       punch_in: 'working', 
       punch_out: 'punched_out', 
+      auto_logout: 'punched_out',
       break_start: 'on_break', 
       break_end: 'working', 
       brb_start: 'on_brb', 
@@ -344,7 +347,7 @@ export default function Home() {
 
   const session = computeSession(logs);
   const nowMs = now?.getTime() ?? Date.now();
-  const workedMs = computeWorkedTime(session, nowMs);
+  const workedMs = computeWorkedTime(session, nowMs, getTodayKey(), user?.shiftEnd || '17:00', user?.timezone || 'America/Chicago');
   const totalBreakMs = computeTotalTime(session.breaks, nowMs);
   const totalBrbMs = computeTotalTime(session.brbs, nowMs);
   const brbCount = countBRBs(logs);

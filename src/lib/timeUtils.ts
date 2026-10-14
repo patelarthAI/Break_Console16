@@ -67,21 +67,28 @@ function cstMinutes(ts: number) {
  * dateStr: YYYY-MM-DD
  * timeStr: HH:MM
  */
-export function toZonedTimestamp(dateStr: string, timeStr: string, timezone: string): number {
-    // 1. Get midnight UTC for that date
-    const utcMidnight = new Date(dateStr + 'T00:00:00Z').getTime();
-    
-    // 2. Find what time it is in the target timezone at UTC midnight
-    const localMinsAtUtcMidnight = toZonedMinutes(utcMidnight, timezone);
-    
-    // 3. Calculate adjustment to get to midnight in the target timezone
-    // If local time is 18:00 (1080 mins), we need to add 6h (360 mins) to get to midnight
-    const adjustmentMins = (1440 - localMinsAtUtcMidnight) % 1440;
-    const zonedMidnight = utcMidnight + (adjustmentMins * 60000);
-    
-    // 4. Add the requested time
-    const targetMins = parseShiftMins(timeStr);
-    return zonedMidnight + (targetMins * 60000);
+export function toZonedTimestamp(dateStr: string, timeStr: string, timezone: string = 'America/Chicago'): number {
+    const [yr, mo, dy] = dateStr.split('-').map(Number);
+    const [h, m] = timeStr.split(':').map(Number);
+    const targetUtc = Date.UTC(yr, mo - 1, dy, h || 0, m || 0, 0);
+
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false
+    }).formatToParts(new Date(targetUtc));
+
+    const renderedY = parseInt(parts.find(p => p.type === 'year')!.value, 10);
+    const renderedM = parseInt(parts.find(p => p.type === 'month')!.value, 10);
+    const renderedD = parseInt(parts.find(p => p.type === 'day')!.value, 10);
+    let renderedH = parseInt(parts.find(p => p.type === 'hour')!.value, 10);
+    if (renderedH === 24) renderedH = 0;
+    const renderedMin = parseInt(parts.find(p => p.type === 'minute')!.value, 10);
+
+    const renderedUtc = Date.UTC(renderedY, renderedM - 1, renderedD, renderedH, renderedMin, 0);
+    const offsetDiff = targetUtc - renderedUtc;
+    return targetUtc + offsetDiff;
 }
 
 export function checkViolations(
@@ -304,8 +311,30 @@ export function computeSession(logs: TimeLog[]): DaySession {
     for (const log of logs) {
         switch (log.eventType) {
             case 'punch_in': session.punchIn = log.timestamp; break;
-            case 'punch_out': session.punchOut = log.timestamp; session.isAutoLogout = false; break;
-            case 'auto_logout': session.punchOut = log.timestamp; session.isAutoLogout = true; break;
+            case 'punch_out':
+                session.punchOut = log.timestamp;
+                session.isAutoLogout = false;
+                if (breakStart !== null) {
+                    session.breaks.push({ start: breakStart, end: log.timestamp });
+                    breakStart = null;
+                }
+                if (brbStart !== null) {
+                    session.brbs.push({ start: brbStart, end: log.timestamp });
+                    brbStart = null;
+                }
+                break;
+            case 'auto_logout':
+                session.punchOut = log.timestamp;
+                session.isAutoLogout = true;
+                if (breakStart !== null) {
+                    session.breaks.push({ start: breakStart, end: log.timestamp });
+                    breakStart = null;
+                }
+                if (brbStart !== null) {
+                    session.brbs.push({ start: brbStart, end: log.timestamp });
+                    brbStart = null;
+                }
+                break;
             case 'break_start': breakStart = log.timestamp; break;
             case 'break_end':
                 if (breakStart !== null) { session.breaks.push({ start: breakStart, end: log.timestamp }); breakStart = null; }
@@ -322,20 +351,20 @@ export function computeSession(logs: TimeLog[]): DaySession {
 }
 
 export function computeTotalTime(records: (BreakRecord | BRBRecord)[], now: number): number {
-    return records.reduce((acc, r) => acc + ((r.end ?? now) - r.start), 0);
+    return records.reduce((acc, r) => acc + Math.max(0, (r.end ?? now) - r.start), 0);
 }
 
-export function computeWorkedTime(session: DaySession, now: number, date?: string, shiftEnd = '17:00'): number {
+export function computeWorkedTime(session: DaySession, now: number, date?: string, shiftEnd = '17:00', timezone = 'America/Chicago'): number {
     if (!session.punchIn) return 0;
     
     let end = session.punchOut ?? now;
     
-    // If this is a past date and there's no punch out, cap it at shift end
+    // If this is a past date and there's no punch out, cap it at shift end in user/shift timezone
     if (date && !session.punchOut) {
         const todayStr = dateStr(new Date(now));
         if (date < todayStr) {
-            const shiftEndDate = new Date(date + 'T' + shiftEnd + ':00');
-            end = Math.min(end, shiftEndDate.getTime());
+            const shiftEndTs = toZonedTimestamp(date, shiftEnd, timezone);
+            end = Math.min(end, shiftEndTs);
         }
     }
     

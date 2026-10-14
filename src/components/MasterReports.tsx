@@ -76,7 +76,7 @@ function processLogsIntoRow(
         userId, name, clientName, date, 
         punchIn: session.punchIn, 
         punchOut: punchOut, 
-        workedMs: computeWorkedTime({ ...session, punchOut }, now, date, shiftEnd), 
+        workedMs: computeWorkedTime({ ...session, punchOut }, now, date, shiftEnd, timezone), 
         breakMs, brbMs, breakCount: countBreaks(logs), brbCount: countBRBs(logs), 
         breakViol: v.breakViol, breakViolMs: v.breakViolMs, 
         brbViol: v.brbViol, brbViolMs: v.brbViolMs, 
