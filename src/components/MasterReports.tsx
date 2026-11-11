@@ -1,7 +1,7 @@
 'use client';
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Briefcase, FileText, Calendar, ChevronLeft, ChevronRight, Download, AlertTriangle, CheckCircle, BarChart2, Users, X, ChevronDown, Filter, Zap, Globe, ShieldAlert, Search, Clock, Coffee, Clock3, LogOut } from 'lucide-react';
+import { Briefcase, FileText, Calendar, ChevronLeft, ChevronRight, Download, AlertTriangle, CheckCircle, BarChart2, Users, X, ChevronDown, Filter, Zap, Globe, ShieldAlert, Search, Clock, Coffee, Clock3, LogOut, GitCompare, Layers } from 'lucide-react';
 import { getAllUsers, getLogsForDate, getLogDatesForMonth, getClients, ClientRow, getLogsBatch, getCurrentUser } from '@/lib/store';
 import { TimeLog, User } from '@/types';
 import DailyLogEditor from './DailyLogEditor';
@@ -267,6 +267,67 @@ function UserSummaryCard({ name, rows }: { name: string; rows: DayRow[] }) {
     );
 }
 
+/* ── Comparison Card for compare mode ─────────────────────────── */
+function ComparisonCard({ name, clientName, rows }: { name: string; clientName: string; rows: DayRow[] }) {
+    const worked = rows.filter(r => r.workedMs > 0);
+    const s = summarize(worked);
+    const avgBreak = s.daysWorked > 0 ? s.totalBreak / s.daysWorked : 0;
+    const totalViol = s.breakViolDays + s.brbViolDays + s.lateInDays + s.earlyOutDays + s.autoLogoutDays;
+    const cleanDays = s.daysWorked - worked.filter(r => r.breakViol || r.brbViol || r.lateIn || r.earlyOut || r.autoLogout).length;
+    const complianceRate = s.daysWorked > 0 ? Math.round((cleanDays / s.daysWorked) * 100) : 100;
+
+    return (
+        <div className="panel-3d p-4 rounded-[1.25rem] flex flex-col gap-3">
+            <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 border border-indigo-400/30 flex items-center justify-center text-sm font-black text-white shadow-lg">
+                    {name[0]?.toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                    <p className="text-sm font-extrabold text-white tracking-tight truncate">{name}</p>
+                    <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider truncate">{clientName || 'Unassigned'}</p>
+                </div>
+            </div>
+
+            {s.daysWorked === 0 ? (
+                <div className="flex flex-col items-center justify-center py-6 text-center bg-black/20 rounded-xl border border-white/5">
+                    <p className="text-xs font-bold text-slate-500">No hours logged</p>
+                    <p className="text-[9px] text-slate-600 uppercase tracking-wider mt-1">In selected range</p>
+                </div>
+            ) : (
+                <>
+                    {/* Compliance Score Ring */}
+                    <div className="flex items-center justify-center py-2">
+                        <div className={`relative w-20 h-20 rounded-full border-4 flex items-center justify-center ${
+                            complianceRate >= 90 ? 'border-emerald-500/60' : complianceRate >= 70 ? 'border-amber-500/60' : 'border-rose-500/60'
+                        }`}>
+                            <div className="text-center">
+                                <p className={`text-xl font-black font-mono ${
+                                    complianceRate >= 90 ? 'text-emerald-400' : complianceRate >= 70 ? 'text-amber-400' : 'text-rose-400'
+                                }`}>{complianceRate}%</p>
+                                <p className="text-[7px] font-bold uppercase tracking-widest text-slate-500">Clean</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-1.5">
+                        {[
+                            { label: 'Days Worked', val: `${s.daysWorked}`, color: 'text-white' },
+                            { label: 'Total Hours', val: formatDuration(s.totalWorked), color: 'text-indigo-400' },
+                            { label: 'Avg Break/d', val: formatDuration(avgBreak), color: avgBreak > BREAK_LIMIT_MS ? 'text-rose-400' : 'text-amber-400' },
+                            { label: 'Violations', val: `${totalViol}`, color: totalViol > 0 ? 'text-rose-400' : 'text-emerald-400' },
+                        ].map(stat => (
+                            <div key={stat.label} className="bg-black/30 border border-white/5 rounded-lg py-1.5 px-2 text-center">
+                                <p className="text-[8px] font-bold tracking-widest uppercase text-slate-500 mb-0.5">{stat.label}</p>
+                                <p className={`text-sm font-extrabold font-mono tracking-tight ${stat.color}`}>{stat.val}</p>
+                            </div>
+                        ))}
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}
+
 type ViolFilter = 'late_in' | 'break' | 'brb' | 'auto_out' | 'all' | null;
 
 export default function MasterReports() {
@@ -286,12 +347,12 @@ export default function MasterReports() {
         : 'custom';
 
     const [rows, setRows] = useState<DayRow[]>([]);
+    const [allUsersList, setAllUsersList] = useState<User[]>([]);
     const [loading, setLoading] = useState(false);
     const [clients, setClients] = useState<ClientRow[]>([]);
     const [selectedClients, setSelectedClients] = useState<string[]>([]);
     const [loadingClients, setLoadingClients] = useState(true);
-    // Name search + chips
-    const [recruiterSearch, setRecruiterSearch] = useState('');
+    // Selected recruiter chips
     const [selectedRecruiters, setSelectedRecruiters] = useState<string[]>([]);
 
     // Violation filter tile
@@ -300,6 +361,23 @@ export default function MasterReports() {
     // Dynamic Filters
     const [statusDropFilter, setStatusDropFilter] = useState<string>('');
     const [violDropFilter, setViolDropFilter] = useState<string>('');
+
+    // Comparison mode
+    const [compareMode, setCompareMode] = useState(false);
+
+    // Export dropdown
+    const [exportOpen, setExportOpen] = useState(false);
+    const exportRef = useRef<HTMLDivElement>(null);
+
+    // Violation mini-timeline
+    const [showViolTimeline, setShowViolTimeline] = useState(false);
+
+    // Promoted search bar
+    const searchInputRef = useRef<HTMLInputElement>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchFocused, setSearchFocused] = useState(false);
+    const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [debouncedQuery, setDebouncedQuery] = useState('');
 
     const [selectedUserForEdit, setSelectedUserForEdit] = useState<{ user: User, date: string } | null>(null);
     const currentAdminId = getCurrentUser()?.id ?? '';
@@ -313,6 +391,38 @@ export default function MasterReports() {
             setLoadingClients(false);
         });
     }, []);
+
+    /* ── Phase 1: Keyboard shortcut — Press `/` to focus search ── */
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) {
+                e.preventDefault();
+                searchInputRef.current?.focus();
+            }
+        };
+        document.addEventListener('keydown', handler);
+        return () => document.removeEventListener('keydown', handler);
+    }, []);
+
+    /* ── Close export dropdown on outside click ── */
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+                setExportOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, []);
+
+    /* ── Debounce the search query ── */
+    useEffect(() => {
+        if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+        searchDebounceRef.current = setTimeout(() => {
+            setDebouncedQuery(searchQuery);
+        }, 200);
+        return () => { if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current); };
+    }, [searchQuery]);
 
     /* ── Generate dates from dateRange ────────────────────────────── */
     const generateDatesFromRange = useCallback((): string[] => {
@@ -331,6 +441,7 @@ export default function MasterReports() {
         setLoading(true);
         try {
             const users = (await getAllUsers()).filter((u) => !u.isMaster);
+            setAllUsersList(users);
             const userIds = users.map(u => u.id);
             const dates = generateDatesFromRange();
 
@@ -352,11 +463,49 @@ export default function MasterReports() {
     // Build rows whenever range/offsets change
     useEffect(() => { buildRows(); }, [buildRows]);
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const _unused = 0; // suppress unused warning
+    /* ── Export helpers ── */
+    const buildExportData = (type: 'daily' | 'weekly' | 'violation') => {
+        if (type === 'weekly') {
+            const byUser = new Map<string, DayRow[]>();
+            filteredRows.forEach(r => {
+                const list = byUser.get(r.name) ?? [];
+                list.push(r);
+                byUser.set(r.name, list);
+            });
+            const header = [
+                'Name', 'Client', 'Days Worked', 'Total Worked', 'Avg Worked/Day',
+                'Breaks #', 'Break Time', 'Avg Break/Day', 'BRBs #', 'BRB Time',
+                'Break Viols', 'BRB Viols', 'Late Ins', 'Early Outs', 'Auto Outs', 'Compliance %'
+            ];
+            const data = [...byUser.entries()].map(([name, uRows]) => {
+                const worked = uRows.filter(r => r.workedMs > 0);
+                const s = summarize(worked);
+                const cleanDays = s.daysWorked - worked.filter(r => r.breakViol || r.brbViol || r.lateIn || r.earlyOut || r.autoLogout).length;
+                const compliance = s.daysWorked > 0 ? `${Math.round((cleanDays / s.daysWorked) * 100)}%` : '100%';
+                const avgWork = s.daysWorked > 0 ? s.totalWorked / s.daysWorked : 0;
+                const avgBreak = s.daysWorked > 0 ? s.totalBreak / s.daysWorked : 0;
+                return [
+                    name, uRows[0]?.clientName ?? '', s.daysWorked, formatDuration(s.totalWorked), formatDuration(avgWork),
+                    s.breakCount, formatDuration(s.totalBreak), formatDuration(avgBreak), s.brbCount, formatDuration(s.totalBrb),
+                    s.breakViolDays, s.brbViolDays, s.lateInDays, s.earlyOutDays, s.autoLogoutDays, compliance
+                ];
+            });
+            exportExcel([
+                header,
+                ...data,
+                [],
+                ['Period', `${dateRange.startDate} to ${dateRange.endDate}`],
+                ['Policy Rules', 'Break allowance: 1h | Max: 1h 15m', 'BRB max: 10m/day', 'Shift: 8:00 AM CST | Grace: 8:05 AM', 'Shift end: 5:00 PM CST']
+            ], 'weekly-summary');
+            return;
+        }
 
-    const handleCSV = () => {
-        const isMultiDay = ['week', 'month'].includes(range);
+        const isMultiDay = ['week', 'month'].includes(range) || dateRange.startDate !== dateRange.endDate;
+        const sourceRows = type === 'violation'
+            ? filteredRows.filter(r => r.breakViol || r.brbViol || r.lateIn || r.earlyOut || r.autoLogout)
+            : filteredRows;
+        const label = type === 'violation' ? 'violation-report' : 'daily-attendance';
+
         const header = [
             'Name', 'Client', 'Status', 
             ...(isMultiDay ? ['Date', 'Day'] : []), 
@@ -364,7 +513,7 @@ export default function MasterReports() {
             'Total Break Exceed', 'Break Viol', 'BRB Viol', 'Late In', 'Early Out'
         ];
         
-        const data = filteredRows.map((r: DayRow) => {
+        const data = sourceRows.map((r: DayRow) => {
             const totExMs = (r.breakViolMs || 0) + (r.brbViolMs || 0);
             return [
                 r.name, r.clientName, (r.punchIn || r.workedMs > 0) ? 'Active' : 'Offline', 
@@ -385,9 +534,7 @@ export default function MasterReports() {
             ];
         });
         
-        const s = summarize(filteredRows.filter((r: DayRow) => r.workedMs > 0));
-        const lateInDays = filteredRows.filter(r => r.lateIn).length;
-        const earlyOutDays = filteredRows.filter(r => r.earlyOut).length;
+        const s = summarize(sourceRows.filter((r: DayRow) => r.workedMs > 0));
         
         const totalsRow = [
             'TOTALS', '', '', 
@@ -402,8 +549,8 @@ export default function MasterReports() {
             '',
             `${s.breakViolDays} day(s)`, 
             `${s.brbViolDays} day(s)`, 
-            `${filteredRows.filter((r: DayRow) => r.lateIn).length} day(s)`, 
-            `${filteredRows.filter((r: DayRow) => r.earlyOut).length} day(s)`
+            `${sourceRows.filter((r: DayRow) => r.lateIn).length} day(s)`, 
+            `${sourceRows.filter((r: DayRow) => r.earlyOut).length} day(s)`
         ];
         
         exportExcel([
@@ -413,15 +560,22 @@ export default function MasterReports() {
             totalsRow, 
             [], 
             ['Policy Rules', 'Break allowance: 1h | Max: 1h 15m', 'BRB max: 10m/day', 'Shift: 8:00 AM CST | Grace: 8:05 AM', 'Shift end: 5:00 PM CST']
-        ], 'data-report');
+        ], label);
     };
+
+    const handleCSV = () => buildExportData('daily');
 
     const isMultiDay = dateRange.startDate !== dateRange.endDate;
 
     // Memoized derived data
     const { filteredRows, baseS, uniqueUsers, recruiterFiltered, avgWorkedMs, uniqueUserCount } = useMemo(() => {
         const clientFiltered = selectedClients.length === 0 ? rows : rows.filter((r: DayRow) => selectedClients.includes(r.clientName));
-        const rFiltered = clientFiltered.filter((r: DayRow) => selectedRecruiters.length === 0 || selectedRecruiters.includes(r.name));
+        const q = debouncedQuery.trim().toLowerCase();
+        const rFiltered = clientFiltered.filter((r: DayRow) => {
+            const matchesSelected = selectedRecruiters.length === 0 || selectedRecruiters.includes(r.name);
+            const matchesQuery = !q || r.name.toLowerCase().includes(q) || r.clientName.toLowerCase().includes(q);
+            return matchesSelected && matchesQuery;
+        });
 
         const fRows = (violationFilter === null ? rFiltered
             : violationFilter === 'late_in' ? rFiltered.filter((r: DayRow) => r.lateIn)
@@ -448,22 +602,206 @@ export default function MasterReports() {
         const avgWkMs = bS.totalWorked / uUserCount;
 
         return { filteredRows: fRows, baseS: bS, uniqueUsers: uUsers, recruiterFiltered: rFiltered, avgWorkedMs: avgWkMs, uniqueUserCount: uUserCount };
-    }, [rows, selectedClients, selectedRecruiters, violationFilter, statusDropFilter, violDropFilter]);
+    }, [rows, selectedClients, selectedRecruiters, debouncedQuery, violationFilter, statusDropFilter, violDropFilter]);
 
-    // All recruiter names for typeahead
-    const allRecruiters = useMemo(() => [...new Set(rows.map(r => r.name))].sort(), [rows]);
-    const filteredSuggestions = recruiterSearch.trim()
-        ? allRecruiters.filter(n => n.toLowerCase().includes(recruiterSearch.toLowerCase()) && !selectedRecruiters.includes(n))
-        : [];
-    const addRecruiter = (name: string) => { setSelectedRecruiters(prev => prev.includes(name) ? prev : [...prev, name]); setRecruiterSearch(''); };
+    // All recruiter names (with client) for typeahead & dropdown — uses allUsersList so it works even while loading or on sparse ranges
+    const allRecruiters = useMemo(() => {
+        const names = allUsersList.length > 0 ? allUsersList.map(u => u.name) : rows.map(r => r.name);
+        return [...new Set(names)].sort();
+    }, [allUsersList, rows]);
+    const recruiterClientMap = useMemo(() => {
+        const map: Record<string, string> = {};
+        allUsersList.forEach(u => { if (!map[u.name]) map[u.name] = u.clientName; });
+        rows.forEach(r => { if (!map[r.name]) map[r.name] = r.clientName; });
+        return map;
+    }, [allUsersList, rows]);
+
+    // Promoted search suggestions (debounced)
+    const searchSuggestions = useMemo(() => {
+        if (!debouncedQuery.trim()) return [];
+        const q = debouncedQuery.toLowerCase();
+        return allRecruiters
+            .filter(n => (n.toLowerCase().includes(q) || (recruiterClientMap[n] ?? '').toLowerCase().includes(q)) && !selectedRecruiters.includes(n))
+            .slice(0, 8);
+    }, [debouncedQuery, allRecruiters, recruiterClientMap, selectedRecruiters]);
+
+    const addRecruiter = (name: string) => { setSelectedRecruiters(prev => prev.includes(name) ? prev : [...prev, name]); setSearchQuery(''); };
     const removeRecruiter = (name: string) => setSelectedRecruiters(prev => prev.filter(n => n !== name));
 
     // Summary always based on un-violation-filtered data for the tile counts to stay stable
     const allS = summarize(filteredRows.filter(r => r.workedMs > 0));
     const totalViol = (baseS.breakViolDays || 0) + (baseS.brbViolDays || 0) + (baseS.lateInDays || 0) + (baseS.earlyOutDays || 0) + (baseS.autoLogoutDays || 0);
 
+    // Can compare? 2-4 selected recruiters
+    const canCompare = selectedRecruiters.length >= 2 && selectedRecruiters.length <= 4;
+
+    // Violation timeline data
+    const violTimelineData = useMemo(() => {
+        if (!showViolTimeline) return [];
+        const violByDate: Record<string, number> = {};
+        recruiterFiltered.forEach(r => {
+            const count = (r.breakViol ? 1 : 0) + (r.brbViol ? 1 : 0) + (r.lateIn ? 1 : 0) + (r.earlyOut ? 1 : 0) + (r.autoLogout ? 1 : 0);
+            if (count > 0) {
+                violByDate[r.date] = (violByDate[r.date] || 0) + count;
+            }
+        });
+        return Object.entries(violByDate).sort(([a], [b]) => a.localeCompare(b));
+    }, [showViolTimeline, recruiterFiltered]);
+
+    const maxViolPerDay = useMemo(() => Math.max(1, ...violTimelineData.map(([, c]) => c)), [violTimelineData]);
+
+    // Sticky summary stats
+    const summaryStats = useMemo(() => {
+        const totalDays = generateDatesFromRange().length;
+        const totalHoursMs = baseS.totalWorked;
+        const cleanRows = recruiterFiltered.filter(r => r.workedMs > 0 && !r.breakViol && !r.brbViol && !r.lateIn && !r.earlyOut && !r.autoLogout).length;
+        const totalWorkedRows = recruiterFiltered.filter(r => r.workedMs > 0).length;
+        const complianceRate = totalWorkedRows > 0 ? Math.round((cleanRows / totalWorkedRows) * 100) : 100;
+        const avgPerPerson = uniqueUserCount > 0 ? baseS.totalWorked / uniqueUserCount : 0;
+        return {
+            recruiters: uniqueUserCount,
+            days: totalDays,
+            totalHours: formatDuration(totalHoursMs),
+            complianceRate,
+            avgPerPerson: formatDuration(avgPerPerson),
+        };
+    }, [baseS, recruiterFiltered, uniqueUserCount, generateDatesFromRange]);
+
+    // Check if any filter is active
+    const hasActiveFilters = selectedClients.length > 0 || selectedRecruiters.length > 0 || debouncedQuery.trim() !== '' || statusDropFilter !== '' || violDropFilter !== '' || violationFilter !== null;
+
     return (
         <div className="space-y-3.5">
+            {/* ═══ Phase 2: PROMOTED SEARCH BAR ═══════════════════════════════════════ */}
+            <div className="relative">
+                <div className="relative flex items-center h-[40px] rounded-xl bg-[#0c0d15]/90 border border-white/[0.08] focus-within:border-indigo-500/40 backdrop-blur-xl shadow-lg px-3 gap-2 transition-colors">
+                    <Search size={16} className="text-slate-500 flex-shrink-0" />
+                    <input
+                        ref={searchInputRef}
+                        type="text"
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        onFocus={() => setSearchFocused(true)}
+                        onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
+                        onKeyDown={e => {
+                            if (e.key === 'Escape') {
+                                setSearchQuery('');
+                                searchInputRef.current?.blur();
+                            } else if (e.key === 'Enter' && searchSuggestions.length > 0) {
+                                e.preventDefault();
+                                addRecruiter(searchSuggestions[0]);
+                            }
+                        }}
+                        placeholder="Search recruiters or clients…"
+                        className="flex-1 bg-transparent text-sm text-white placeholder-slate-600 outline-none font-medium tracking-tight"
+                    />
+                    {searchQuery ? (
+                        <button
+                            type="button"
+                            onClick={() => setSearchQuery('')}
+                            className="p-1 text-slate-400 hover:text-white hover:bg-white/10 rounded-md transition-colors"
+                            title="Clear search"
+                        >
+                            <X size={13} />
+                        </button>
+                    ) : (
+                        <kbd className="hidden sm:inline-flex items-center text-[9px] font-mono font-bold text-slate-600 bg-white/[0.04] border border-white/[0.08] px-1.5 py-0.5 rounded-md">/</kbd>
+                    )}
+                </div>
+
+                {/* Autocomplete dropdown */}
+                <AnimatePresence>
+                    {searchFocused && searchSuggestions.length > 0 && (
+                        <motion.div
+                            initial={{ opacity: 0, y: -4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -4 }}
+                            transition={{ duration: 0.15 }}
+                            className="absolute z-[300] top-full mt-1 left-0 right-0 bg-[#12141f] border border-white/10 rounded-xl shadow-2xl overflow-hidden max-h-60 overflow-y-auto"
+                        >
+                            {searchSuggestions.map(name => (
+                                <button
+                                    key={name}
+                                    onMouseDown={() => addRecruiter(name)}
+                                    className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-indigo-500/10 transition-colors"
+                                >
+                                    <div className="w-6 h-6 rounded-lg bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
+                                        {name[0]?.toUpperCase()}
+                                    </div>
+                                    <div className="min-w-0">
+                                        <span className="text-sm font-semibold text-zinc-200 truncate">{name}</span>
+                                        {recruiterClientMap[name] && (
+                                            <span className="text-[10px] text-slate-500 ml-1.5">({recruiterClientMap[name]})</span>
+                                        )}
+                                    </div>
+                                </button>
+                            ))}
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </div>
+
+            {/* ═══ Phase 2: RICH FILTER CHIPS ═════════════════════════════════════════ */}
+            {hasActiveFilters && (
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 px-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                        {/* Recruiter chips — avatar + name + client */}
+                        {selectedRecruiters.map(name => (
+                            <span key={name} className="inline-flex items-center gap-1.5 text-[11px] font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 pl-1 pr-2 py-1 rounded-lg">
+                                <span className="w-5 h-5 rounded-md bg-indigo-500/25 text-indigo-200 text-[9px] font-black flex items-center justify-center flex-shrink-0">
+                                    {name[0]?.toUpperCase()}
+                                </span>
+                                <span className="truncate max-w-[120px]">{name}</span>
+                                {recruiterClientMap[name] && (
+                                    <span className="text-[9px] text-indigo-400/60 font-medium hidden sm:inline">· {recruiterClientMap[name]}</span>
+                                )}
+                                <button onClick={() => removeRecruiter(name)} className="text-indigo-400 hover:text-white transition-colors ml-0.5"><X size={10} /></button>
+                            </span>
+                        ))}
+
+                        {/* Client chips — briefcase + name */}
+                        {selectedClients.map(name => (
+                            <span key={name} className="inline-flex items-center gap-1 text-[11px] font-bold bg-purple-500/15 text-purple-300 border border-purple-500/25 px-2 py-1 rounded-lg">
+                                <Briefcase size={10} className="text-purple-400 flex-shrink-0" />
+                                <span className="truncate max-w-[120px]">{name}</span>
+                                <button onClick={() => setSelectedClients(prev => prev.filter(c => c !== name))} className="text-purple-400 hover:text-white transition-colors ml-0.5"><X size={10} /></button>
+                            </span>
+                        ))}
+
+                        {/* Violation filter chip (when active) */}
+                        {violationFilter && (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-rose-500/15 text-rose-300 border border-rose-500/30 px-2 py-1 rounded-lg">
+                                {violationFilter === 'late_in' && <Clock size={10} className="text-amber-400" />}
+                                {violationFilter === 'break' && <Coffee size={10} className="text-orange-400" />}
+                                {violationFilter === 'brb' && <Clock3 size={10} className="text-sky-400" />}
+                                {violationFilter === 'auto_out' && <LogOut size={10} className="text-red-400" />}
+                                {violationFilter === 'all' && <AlertTriangle size={10} className="text-rose-400" />}
+                                <span>
+                                    {violationFilter === 'late_in' ? 'Late Logins' 
+                                     : violationFilter === 'break' ? 'Break Exceeds' 
+                                     : violationFilter === 'brb' ? 'BRB Exceeds' 
+                                     : violationFilter === 'auto_out' ? 'Auto Outs' 
+                                     : 'All Violations'}
+                                </span>
+                                <button onClick={() => setViolationFilter(null)} className="text-rose-400 hover:text-white transition-colors"><X size={10} /></button>
+                            </span>
+                        )}
+
+                        {/* Clear all */}
+                        <button onClick={() => { setSelectedClients([]); setSelectedRecruiters([]); setSearchQuery(''); setStatusDropFilter(''); setViolDropFilter(''); setViolationFilter(null); setCompareMode(false); }}
+                            className="flex items-center gap-1 text-[10px] font-bold text-slate-500 hover:text-white transition-colors px-1.5 py-0.5 rounded hover:bg-white/5">
+                            <X size={9} /> Clear all filters
+                        </button>
+                    </div>
+
+                    <div className="flex items-center gap-2 pr-1 pl-3 border-l border-white/10 flex-shrink-0">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 font-mono whitespace-nowrap">
+                            Showing {filteredRows.length} of {rows.length} records
+                        </span>
+                    </div>
+                </div>
+            )}
+
             {/* ── VIOLATIONS DASHBOARD (KPI Cards - Absolute Top) ─────────────────────────────────────────── */}
             {!loading && baseS.daysWorked > 0 && (
                 <div className="space-y-2">
@@ -493,7 +831,17 @@ export default function MasterReports() {
                             const isActive = violationFilter === t.key;
                             return (
                                 <button key={t.label}
-                                    onClick={() => t.count > 0 && setViolationFilter(isActive ? null : t.key)}
+                                    onClick={() => {
+                                        if (t.count > 0) {
+                                            setViolationFilter(isActive ? null : t.key);
+                                            // Toggle violation timeline when clicking any violation card
+                                            if (t.key !== null && !isActive) {
+                                                setShowViolTimeline(true);
+                                            } else {
+                                                setShowViolTimeline(false);
+                                            }
+                                        }
+                                    }}
                                     className={`panel-3d p-3 flex flex-col justify-between text-left transition-all duration-300 relative overflow-hidden rounded-[1.25rem] min-h-[96px]
                                         ${isActive ? t.active + ' scale-[1.02] border-t-2' : t.idle}
                                         ${t.count === 0 ? 'cursor-default' : 'cursor-pointer hover:scale-[1.02] hover:-translate-y-0.5'}`}>
@@ -557,120 +905,229 @@ export default function MasterReports() {
                 </div>
             )}
 
-            {/* ── Filter bar — unified style (Aligned 6-Column cockpit controls) ─────────────────────────────── */}
-            <div className="rounded-2xl bg-[#0c0d15]/80 border border-white/[0.08] p-3 shadow-2xl backdrop-blur-xl">
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 items-end">
-                    <CustomSelect
-                        multi
-                        options={allRecruiters.map(name => ({ value: name, label: name }))}
-                        value={selectedRecruiters}
-                        onChange={setSelectedRecruiters}
-                        placeholder="Select Recruiters"
-                        searchable
-                    />
-
-                    <CustomSelect
-                        multi
-                        options={clients.map(c => ({ value: c.name, label: c.name }))}
-                        value={selectedClients}
-                        onChange={setSelectedClients}
-                        placeholder="Select Clients"
-                        searchable
-                    />
-
-                    <CustomSelect
-                        options={[
-                            { value: 'Active', label: 'Active Now' },
-                            { value: 'Not Active', label: 'Offline' }
-                        ]}
-                        value={statusDropFilter}
-                        onChange={setStatusDropFilter}
-                        placeholder="Engagement Status"
-                    />
-
-                    <CustomSelect
-                        options={[
-                            { value: 'Late In', label: 'Late Login' },
-                            { value: 'Early Out', label: 'Early Logout' },
-                            { value: 'Break Exceed', label: 'Break Violation' },
-                            { value: 'BRB Exceed', label: 'BRB Violation' },
-                            { value: 'Auto Out', label: 'Auto Logout' }
-                        ]}
-                        value={violDropFilter}
-                        onChange={setViolDropFilter}
-                        placeholder="Violation Protocol"
-                    />
-
-                    <DateRangePicker
-                        value={dateRange}
-                        onChange={setDateRange}
-                    />
-
-                    <motion.button 
-                        onClick={handleCSV} 
-                        whileHover={{ scale: 1.02 }} 
-                        whileTap={{ scale: 0.98 }} 
-                        disabled={filteredRows.length === 0}
-                        className="flex items-center justify-center gap-2 h-[36px] w-full rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-[10px] font-black tracking-[0.2em] uppercase hover:brightness-110 transition-all shadow-[0_4px_12px_rgba(99,102,241,0.25)] disabled:opacity-20 disabled:pointer-events-none"
+            {/* ═══ Phase 9: VIOLATION MINI-TIMELINE ════════════════════════════════════ */}
+            <AnimatePresence>
+                {showViolTimeline && violTimelineData.length > 0 && (
+                    <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="panel-3d p-3 rounded-[1.25rem] overflow-hidden"
                     >
-                        <Zap size={13} fill="currentColor" className="text-white" /> Export CSV
-                    </motion.button>
+                        <div className="flex items-center justify-between mb-2">
+                            <p className="text-[9px] font-black tracking-widest uppercase text-slate-500">Violation Timeline</p>
+                            <button onClick={() => setShowViolTimeline(false)} className="p-1 text-slate-500 hover:text-white transition-colors rounded-lg hover:bg-white/5">
+                                <X size={12} />
+                            </button>
+                        </div>
+                        <div className="flex items-end gap-1 h-16 overflow-x-auto scrollbar-thin">
+                            {violTimelineData.map(([date, count]) => (
+                                <div key={date} className="flex flex-col items-center gap-0.5 flex-shrink-0 group" title={`${date}: ${count} violation${count !== 1 ? 's' : ''}`}>
+                                    <span className="text-[8px] font-mono font-bold text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity">{count}</span>
+                                    <div
+                                        className="w-5 rounded-t-sm bg-gradient-to-t from-rose-600 to-rose-400 transition-all hover:from-rose-500 hover:to-rose-300"
+                                        style={{ height: `${Math.max(4, (count / maxViolPerDay) * 48)}px` }}
+                                    />
+                                    <span className="text-[6px] font-mono text-slate-600 rotate-0 whitespace-nowrap">{date.slice(5)}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* ═══ Phase 2: REDESIGNED FILTER BAR — Grouped Semantically ═══════════════ */}
+            <div className="rounded-2xl bg-[#0c0d15]/80 border border-white/[0.08] p-3 shadow-2xl backdrop-blur-xl">
+                <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr_auto_auto_auto_auto] gap-2.5 items-end">
+                    {/* Group 1: WHO */}
+                    <div className="space-y-1">
+                        <p className="text-[8px] font-black tracking-[0.2em] uppercase text-slate-600 px-1">Who</p>
+                        <div className="grid grid-cols-2 gap-2">
+                            <CustomSelect
+                                multi
+                                options={allRecruiters.map(name => ({ value: name, label: name }))}
+                                value={selectedRecruiters}
+                                onChange={setSelectedRecruiters}
+                                placeholder="Select Recruiters"
+                                searchable
+                            />
+                            <CustomSelect
+                                multi
+                                options={clients.map(c => ({ value: c.name, label: c.name }))}
+                                value={selectedClients}
+                                onChange={setSelectedClients}
+                                placeholder="Select Clients"
+                                searchable
+                            />
+                        </div>
+                    </div>
+
+                    {/* Divider */}
+                    <div className="hidden lg:block w-px h-8 bg-white/[0.06] self-center" />
+
+                    {/* Group 2: WHAT */}
+                    <div className="space-y-1">
+                        <p className="text-[8px] font-black tracking-[0.2em] uppercase text-slate-600 px-1">What</p>
+                        <div className="grid grid-cols-2 gap-2">
+                            <CustomSelect
+                                options={[
+                                    { value: 'Active', label: 'Active Now' },
+                                    { value: 'Not Active', label: 'Offline' }
+                                ]}
+                                value={statusDropFilter}
+                                onChange={setStatusDropFilter}
+                                placeholder="Status"
+                            />
+                            <CustomSelect
+                                options={[
+                                    { value: 'Late In', label: 'Late Login' },
+                                    { value: 'Early Out', label: 'Early Logout' },
+                                    { value: 'Break Exceed', label: 'Break Violation' },
+                                    { value: 'BRB Exceed', label: 'BRB Violation' },
+                                    { value: 'Auto Out', label: 'Auto Logout' }
+                                ]}
+                                value={violDropFilter}
+                                onChange={setViolDropFilter}
+                                placeholder="Violation"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Divider */}
+                    <div className="hidden lg:block w-px h-8 bg-white/[0.06] self-center" />
+
+                    {/* Group 3: WHEN */}
+                    <div className="space-y-1">
+                        <p className="text-[8px] font-black tracking-[0.2em] uppercase text-slate-600 px-1">When</p>
+                        <DateRangePicker
+                            value={dateRange}
+                            onChange={setDateRange}
+                        />
+                    </div>
+
+                    {/* Divider */}
+                    <div className="hidden lg:block w-px h-8 bg-white/[0.06] self-center" />
+
+                    {/* Group 4: ACTION — Export Templates Dropdown + Compare */}
+                    <div className="space-y-1">
+                        <p className="text-[8px] font-black tracking-[0.2em] uppercase text-slate-600 px-1">Action</p>
+                        <div className="flex items-center gap-2">
+                            {/* Compare toggle (shown when 2-4 recruiters selected) */}
+                            {canCompare && (
+                                <motion.button
+                                    onClick={() => setCompareMode(prev => !prev)}
+                                    whileHover={{ scale: 1.02 }}
+                                    whileTap={{ scale: 0.98 }}
+                                    className={`flex items-center justify-center gap-1.5 h-[36px] px-3 rounded-xl text-[10px] font-black tracking-[0.15em] uppercase transition-all whitespace-nowrap ${
+                                        compareMode
+                                            ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-[0_4px_12px_rgba(6,182,212,0.3)]'
+                                            : 'bg-white/[0.04] border border-white/[0.08] text-slate-400 hover:text-white hover:border-cyan-500/30'
+                                    }`}
+                                >
+                                    <GitCompare size={13} />
+                                    {compareMode ? 'Comparing' : 'Compare'}
+                                </motion.button>
+                            )}
+
+                            {/* Export Templates Dropdown */}
+                            <div ref={exportRef} className="relative">
+                                <motion.button 
+                                    onClick={() => setExportOpen(prev => !prev)}
+                                    whileHover={{ scale: 1.02 }} 
+                                    whileTap={{ scale: 0.98 }} 
+                                    disabled={filteredRows.length === 0}
+                                    className="flex items-center justify-center gap-1.5 h-[36px] px-4 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-[10px] font-black tracking-[0.2em] uppercase hover:brightness-110 transition-all shadow-[0_4px_12px_rgba(99,102,241,0.25)] disabled:opacity-20 disabled:pointer-events-none whitespace-nowrap"
+                                >
+                                    <Zap size={13} fill="currentColor" className="text-white" />
+                                    Export
+                                    <ChevronDown size={12} className={`transition-transform ${exportOpen ? 'rotate-180' : ''}`} />
+                                </motion.button>
+
+                                <AnimatePresence>
+                                    {exportOpen && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: -4 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            exit={{ opacity: 0, y: -4 }}
+                                            className="absolute z-[400] top-full mt-1 right-0 min-w-[200px] bg-[#12141f] border border-white/10 rounded-xl shadow-2xl overflow-hidden"
+                                        >
+                                            {[
+                                                { label: 'Daily Attendance Report', type: 'daily' as const, icon: <FileText size={12} /> },
+                                                { label: 'Weekly Summary Report', type: 'weekly' as const, icon: <Calendar size={12} /> },
+                                                { label: 'Violation Report', type: 'violation' as const, icon: <AlertTriangle size={12} /> },
+                                            ].map(item => (
+                                                <button
+                                                    key={item.type}
+                                                    onClick={() => { buildExportData(item.type); setExportOpen(false); }}
+                                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-[11px] font-semibold text-slate-300 hover:bg-indigo-500/10 hover:text-white transition-colors"
+                                                >
+                                                    <span className="text-slate-500">{item.icon}</span>
+                                                    {item.label}
+                                                </button>
+                                            ))}
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            {/* ── Active Chips & Match Count ── */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1">
-                <div className="flex flex-wrap items-center gap-1.5">
-                    {/* Selected recruiter chips */}
-                    {selectedRecruiters.map(name => (
-                        <span key={name} className="flex items-center gap-1 text-[9px] font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 px-2 py-0.5 rounded-md">
-                            {name}
-                            <button onClick={() => removeRecruiter(name)} className="text-indigo-400 hover:text-white transition-colors"><X size={8} /></button>
-                        </span>
-                    ))}
-
-                    {/* Violation filter chip (when active) */}
-                    {violationFilter && (
-                        <span className="flex items-center gap-1 text-[9px] font-bold bg-rose-500/15 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded-md">
-                            {violationFilter === 'late_in' && <Clock size={10} className="text-amber-400" />}
-                            {violationFilter === 'break' && <Coffee size={10} className="text-orange-400" />}
-                            {violationFilter === 'brb' && <Clock3 size={10} className="text-sky-400" />}
-                            {violationFilter === 'auto_out' && <LogOut size={10} className="text-red-400" />}
-                            {violationFilter === 'all' && <AlertTriangle size={10} className="text-rose-400" />}
-                            <span>
-                                {violationFilter === 'late_in' ? 'Late Logins' 
-                                 : violationFilter === 'break' ? 'Break Exceeds' 
-                                 : violationFilter === 'brb' ? 'BRB Exceeds' 
-                                 : violationFilter === 'auto_out' ? 'Auto Outs' 
-                                 : 'All Violations'}
-                            </span>
-                            <button onClick={() => setViolationFilter(null)} className="text-rose-400 hover:text-white transition-colors"><X size={8} /></button>
-                        </span>
-                    )}
-
-                    {(selectedClients.length > 0 || selectedRecruiters.length > 0 || statusDropFilter !== '' || violDropFilter !== '' || violationFilter !== null) && (
-                        <button onClick={() => { setSelectedClients([]); setSelectedRecruiters([]); setRecruiterSearch(''); setStatusDropFilter(''); setViolDropFilter(''); setViolationFilter(null); }}
-                            className="flex items-center gap-1 text-[9px] font-bold text-slate-500 hover:text-white transition-colors px-1.5 py-0.5 rounded hover:bg-white/5">
-                            <X size={9} /> Clear all
-                        </button>
-                    )}
+            {/* ═══ Phase 2: STICKY SUMMARY STRIP ══════════════════════════════════════ */}
+            {!loading && baseS.daysWorked > 0 && (
+                <div className="panel-3d rounded-xl px-4 py-2 border border-white/[0.06]">
+                    <div className="flex items-center justify-between gap-4 overflow-x-auto scrollbar-thin">
+                        {[
+                            { label: 'Recruiters', value: `${summaryStats.recruiters}`, color: 'text-indigo-400' },
+                            { label: 'Days in Range', value: `${summaryStats.days}`, color: 'text-slate-300' },
+                            { label: 'Total Hours', value: summaryStats.totalHours, color: 'text-emerald-400' },
+                            { label: 'Compliance', value: `${summaryStats.complianceRate}%`, color: summaryStats.complianceRate >= 90 ? 'text-emerald-400' : summaryStats.complianceRate >= 70 ? 'text-amber-400' : 'text-rose-400' },
+                            { label: 'Avg / Person', value: summaryStats.avgPerPerson, color: 'text-indigo-400' },
+                        ].map(stat => (
+                            <div key={stat.label} className="flex items-center gap-2 flex-shrink-0">
+                                <p className="text-[8px] font-black tracking-[0.15em] uppercase text-slate-600 whitespace-nowrap">{stat.label}</p>
+                                <p className={`text-sm font-extrabold font-mono tracking-tight ${stat.color}`}>{stat.value}</p>
+                            </div>
+                        ))}
+                    </div>
                 </div>
-
-                <div className="flex items-center gap-2 pr-1 pl-3 border-l border-white/10">
-                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 font-mono">
-                        {filteredRows.length} Match{filteredRows.length !== 1 ? 'es' : ''}
-                    </span>
-                </div>
-            </div>
+            )}
 
             {loading && <p className="text-center text-slate-500 font-medium text-sm py-12 animate-pulse">Processing report data…</p>}
 
-            {!loading && <ReportTable rows={filteredRows} showDate={isMultiDay} showName={true} onEdit={(r) => {
-                getAllUsers().then(users => {
-                    const fullUser = users.find(u => u.id === r.userId);
-                    if (fullUser) setSelectedUserForEdit({ user: fullUser, date: r.date });
-                });
-            }} />}
+            {/* ═══ Phase 3: COMPARISON MODE ════════════════════════════════════════════ */}
+            {!loading && compareMode && canCompare ? (
+                <div className="space-y-3">
+                    <div className="flex items-center gap-2 px-1">
+                        <GitCompare size={14} className="text-cyan-400" />
+                        <p className="text-xs font-black text-white tracking-wider uppercase">Comparing {selectedRecruiters.length} Recruiters</p>
+                    </div>
+                    <div className={`grid gap-3 ${selectedRecruiters.length === 2 ? 'grid-cols-1 sm:grid-cols-2' : selectedRecruiters.length === 3 ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'}`}>
+                        {selectedRecruiters.map(name => {
+                            const userRows = filteredRows.filter(r => r.name === name);
+                            return (
+                                <ComparisonCard
+                                    key={name}
+                                    name={name}
+                                    clientName={recruiterClientMap[name] || ''}
+                                    rows={userRows}
+                                />
+                            );
+                        })}
+                    </div>
+                </div>
+            ) : (
+                /* Normal table view */
+                <>
+                    {!loading && <ReportTable rows={filteredRows} showDate={isMultiDay} showName={true} onEdit={(r) => {
+                        getAllUsers().then(users => {
+                            const fullUser = users.find(u => u.id === r.userId);
+                            if (fullUser) setSelectedUserForEdit({ user: fullUser, date: r.date });
+                        });
+                    }} />}
+                </>
+            )}
 
             {/* Policy Legend Footnote under the table */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[8px] font-bold tracking-widest uppercase text-slate-500 px-2 mt-1">

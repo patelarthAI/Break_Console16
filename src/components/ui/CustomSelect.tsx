@@ -138,7 +138,7 @@ export default function CustomSelect(props: CustomSelectProps) {
             transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
             style={{
               position: 'absolute',
-              zIndex: 200,
+              zIndex: 400,
               width: '100%',
               minWidth: '180px',
               marginTop: '6px',
