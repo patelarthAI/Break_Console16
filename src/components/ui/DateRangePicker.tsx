@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Calendar,
@@ -53,7 +54,7 @@ const humanDate = (iso: string): string => {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-/** Compact human date for range display: "Nov 11" (no year) */
+/** Compact human date for range display: "Nov 11" */
 const humanDateShort = (iso: string): string => {
   const d = new Date(iso + 'T00:00');
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -138,7 +139,6 @@ function getMonthGrid(year: number, month: number) {
   return cells;
 }
 
-/** Look up preset label by key */
 const presetLabel = (key: DatePreset | null): string | null => {
   if (!key) return null;
   return PRESETS.find(p => p.key === key)?.label ?? null;
@@ -147,62 +147,110 @@ const presetLabel = (key: DatePreset | null): string | null => {
 /* ── Component ───────────────────────────────────────────────────── */
 export default function DateRangePicker({ value, onChange, className = '' }: Props) {
   const [isOpen, setIsOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [selecting, setSelecting] = useState<'start' | 'end' | null>(null);
+
+  useEffect(() => { setMounted(true); }, []);
   const [hoverDate, setHoverDate] = useState<string | null>(null);
   const [viewMonth, setViewMonth] = useState(() => {
     const d = value.startDate ? new Date(value.startDate + 'T00:00') : today();
     return { year: d.getFullYear(), month: d.getMonth() };
   });
 
-  // Draft state — what the user is building before hitting Apply
   const [draft, setDraft] = useState<{ startDate: string; endDate: string; preset: DatePreset | null }>({
     startDate: value.startDate,
     endDate: value.endDate,
     preset: value.preset,
   });
 
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [panelPos, setPanelPos] = useState<{ top: number; left: number; width: number }>({
+    top: 0,
+    left: 0,
+    width: 640,
+  });
 
-  // Sync draft with external value changes when panel is closed
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  const updatePanelPos = useCallback(() => {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const panelWidth = Math.min(640, vw - 16);
+    const panelHeight = 450;
+
+    // Right-align to trigger if possible, otherwise clamp within viewport
+    let left = rect.right - panelWidth;
+    if (left < 8) left = Math.max(8, Math.min(rect.left, vw - panelWidth - 8));
+
+    let top = rect.bottom + 8;
+    if (top + panelHeight > vh - 8 && rect.top - panelHeight - 8 > 8) {
+      top = rect.top - panelHeight - 8;
+    }
+
+    setPanelPos({ top, left, width: panelWidth });
+  }, []);
+
   useEffect(() => {
     if (!isOpen) {
       setDraft({ startDate: value.startDate, endDate: value.endDate, preset: value.preset });
     }
   }, [value, isOpen]);
 
-  // Close on outside click
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+    if (!isOpen) return;
+    updatePanelPos();
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setDraft({ startDate: value.startDate, endDate: value.endDate, preset: value.preset });
         setIsOpen(false);
         setSelecting(null);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    window.addEventListener('resize', updatePanelPos);
+    window.addEventListener('scroll', updatePanelPos, true);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      window.removeEventListener('resize', updatePanelPos);
+      window.removeEventListener('scroll', updatePanelPos, true);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [isOpen, updatePanelPos, value]);
 
+  const handleOpenToggle = () => {
+    if (!isOpen) {
+      const d = value.startDate ? new Date(value.startDate + 'T00:00') : today();
+      setViewMonth({ year: d.getFullYear(), month: d.getMonth() });
+      setDraft({ startDate: value.startDate, endDate: value.endDate, preset: value.preset });
+      setSelecting('start');
+      setIsOpen(true);
+    } else {
+      setIsOpen(false);
+      setSelecting(null);
+    }
+  };
+
+  // Preset: 1-click immediate apply & close for fast workflow
   const handlePreset = useCallback((preset: DatePreset) => {
     const { start, end } = getPresetDates(preset);
-    setDraft({ preset, startDate: start, endDate: end });
+    onChange({ preset, startDate: start, endDate: end });
+    setIsOpen(false);
     setSelecting(null);
-  }, []);
+  }, [onChange]);
 
-  const handleDateClick = useCallback((dateStr: string) => {
+  const handleDateClick = useCallback((ds: string) => {
     if (selecting === null || selecting === 'start') {
-      // Set start date; end defaults to same date until they pick the end
-      setDraft({ preset: null, startDate: dateStr, endDate: dateStr });
+      setDraft({ preset: null, startDate: ds, endDate: ds });
       setSelecting('end');
     } else {
-      // End date selection
       const start = draft.startDate;
-      if (dateStr < start) {
-        setDraft({ preset: null, startDate: dateStr, endDate: start });
+      if (ds < start) {
+        setDraft({ preset: null, startDate: ds, endDate: start });
       } else {
-        setDraft({ preset: null, startDate: start, endDate: dateStr });
+        setDraft({ preset: null, startDate: start, endDate: ds });
       }
       setSelecting(null);
-      // Panel stays open — user must click Apply
     }
   }, [selecting, draft.startDate]);
 
@@ -213,13 +261,12 @@ export default function DateRangePicker({ value, onChange, className = '' }: Pro
   }, [onChange, draft]);
 
   const handleCancel = useCallback(() => {
-    // Revert draft to the committed value
     setDraft({ startDate: value.startDate, endDate: value.endDate, preset: value.preset });
     setIsOpen(false);
     setSelecting(null);
   }, [value]);
 
-  const handleResetToToday = useCallback((e: React.MouseEvent) => {
+  const handleResetToToday = useCallback((e: React.MouseEvent | React.KeyboardEvent) => {
     e.stopPropagation();
     const { start, end } = getPresetDates('today');
     onChange({ preset: 'today', startDate: start, endDate: end });
@@ -248,7 +295,7 @@ export default function DateRangePicker({ value, onChange, className = '' }: Pro
   const grid = useMemo(() => getMonthGrid(viewMonth.year, viewMonth.month), [viewMonth]);
 
   const monthLabel = (y: number, m: number) =>
-    new Date(y, m).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    new Date(y, m).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 
   const nextMonthData = useMemo(() => {
     const d = new Date(viewMonth.year, viewMonth.month + 1, 1);
@@ -257,10 +304,10 @@ export default function DateRangePicker({ value, onChange, className = '' }: Pro
 
   const nextGrid = useMemo(() => getMonthGrid(nextMonthData.year, nextMonthData.month), [nextMonthData]);
 
-  const isInRange = (dateStr: string) => {
+  const isInRange = (ds: string) => {
     const effectiveEnd = selecting === 'end' && hoverDate ? (hoverDate > draft.startDate ? hoverDate : draft.startDate) : draft.endDate;
     const effectiveStart = selecting === 'end' && hoverDate && hoverDate < draft.startDate ? hoverDate : draft.startDate;
-    return dateStr >= effectiveStart && dateStr <= effectiveEnd;
+    return ds >= effectiveStart && ds <= effectiveEnd;
   };
   const isRangeStart = (ds: string) => ds === draft.startDate;
   const isRangeEnd = (ds: string) => {
@@ -268,40 +315,33 @@ export default function DateRangePicker({ value, onChange, className = '' }: Pro
     return ds === draft.endDate;
   };
 
-  // Working days for the draft range
   const workingDays = useMemo(
     () => countWorkingDays(draft.startDate, draft.endDate),
     [draft.startDate, draft.endDate]
   );
 
-  // Build human-readable trigger label
   const triggerLabel = useMemo(() => {
     const pLabel = presetLabel(value.preset);
     if (value.startDate === value.endDate) {
-      // Single day
       const hd = humanDate(value.startDate);
-      return pLabel ? `${pLabel} · ${hd}` : hd;
+      return pLabel ? `${pLabel} · ${humanDateShort(value.startDate)}` : hd;
     }
-    const range = `${humanDateShort(value.startDate)} – ${humanDateShort(value.endDate)}`;
-    return pLabel ? `${pLabel} · ${range}` : range;
+    const rangeText = `${humanDateShort(value.startDate)} – ${humanDateShort(value.endDate)}`;
+    return pLabel ? `${pLabel} · ${rangeText}` : rangeText;
   }, [value]);
 
-  // Selection guidance text
-  const selectionHint = useMemo(() => {
-    if (selecting === 'start' || selecting === null) return 'Pick start date';
-    return 'Pick end date';
-  }, [selecting]);
+  const selectionHint = selecting === 'end' ? 'Step 2: Pick end date' : 'Step 1: Pick start date';
 
-  const renderCalendarGrid = (cells: (Date | null)[], year: number, month: number) => (
+  const renderCalendarGrid = (cells: (Date | null)[]) => (
     <div>
-      <div className="grid grid-cols-7 gap-1.5 mb-3">
+      <div className="grid grid-cols-7 gap-1 mb-2">
         {WEEKDAYS.map((d, index) => (
-          <div key={`${d}-${index}`} className="text-center text-[9px] font-black text-slate-600 uppercase tracking-widest py-1">{d}</div>
+          <div key={`${d}-${index}`} className="text-center text-[10px] font-bold text-slate-500 uppercase py-1">{d}</div>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-1.5">
+      <div className="grid grid-cols-7 gap-1">
         {cells.map((cell, i) => {
-          if (!cell) return <div key={`empty-${i}`} className="h-9" />;
+          if (!cell) return <div key={`empty-${i}`} className="h-8" />;
           const ds = fmt(cell);
           const isToday = ds === todayStr;
           const inRange = isInRange(ds);
@@ -319,22 +359,22 @@ export default function DateRangePicker({ value, onChange, className = '' }: Pro
               onMouseEnter={() => selecting === 'end' && setHoverDate(ds)}
               onMouseLeave={() => setHoverDate(null)}
               className={`
-                h-9 w-full rounded-xl text-[12px] font-mono font-bold transition-all relative overflow-hidden group/cell
-                ${isFuture ? 'text-slate-800 cursor-not-allowed opacity-20' : 'cursor-pointer'}
-                ${isWeekend && !inRange && !isFuture ? 'text-rose-400/50' : ''}
+                h-8 w-full rounded-lg text-xs font-mono font-semibold transition-all relative
+                ${isFuture ? 'text-slate-700 cursor-not-allowed opacity-25' : 'cursor-pointer'}
+                ${isWeekend && !inRange && !isFuture ? 'text-rose-400/60' : ''}
                 ${isStart || isEnd
-                  ? 'bg-gradient-to-br from-violet-600 to-indigo-600 text-white font-extrabold z-10 border border-violet-400/40 shadow-[0_0_15px_rgba(139,92,246,0.4)]'
+                  ? 'bg-indigo-600 text-white font-bold shadow-[0_0_12px_rgba(99,102,241,0.45)]'
                   : inRange
-                    ? 'bg-indigo-500/10 text-indigo-300 rounded-none first:rounded-l-xl last:rounded-r-xl border-y border-indigo-500/15'
+                    ? 'bg-indigo-500/15 text-indigo-200'
                     : isToday
-                      ? 'bg-indigo-500/10 text-indigo-300 font-extrabold border border-indigo-500/35'
-                      : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                      ? 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/40'
+                      : 'text-slate-300 hover:bg-white/[0.08] hover:text-white'
                 }
               `}
             >
-              <span className="relative z-10">{cell.getDate()}</span>
+              <span>{cell.getDate()}</span>
               {isToday && !isStart && !isEnd && (
-                <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-indigo-500 shadow-[0_0_6px_#6366f1]" />
+                <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-indigo-400" />
               )}
             </button>
           );
@@ -343,196 +383,204 @@ export default function DateRangePicker({ value, onChange, className = '' }: Pro
     </div>
   );
 
-  return (
-    <div className={`relative ${className}`} ref={containerRef}>
-      {/* ── Trigger ────────────────────────────────────────────────── */}
-      <button
-        type="button"
-        onClick={() => { setIsOpen(!isOpen); if (!isOpen) setSelecting('start'); }}
-        className={`group flex items-center justify-between w-full px-4 h-11 rounded-xl bg-[#08080b]/40 backdrop-blur-3xl border transition-all duration-300 ${
-          isOpen
-            ? 'border-indigo-500/40 shadow-[0_0_20px_rgba(99,102,241,0.15)]'
-            : 'border-white/[0.06] hover:border-white/20'
-        }`}
-      >
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0">
-            <Calendar size={15} />
-          </div>
-          <div className="flex flex-col items-start min-w-0">
-            <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] leading-none mb-1">Date Range</span>
-            <span className="text-[12px] font-black text-white font-mono leading-none tracking-tight truncate max-w-full">
-              {triggerLabel}
-            </span>
-          </div>
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          {/* Reset-to-today clear button */}
-          {value.preset !== 'today' && (
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={handleResetToToday}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleResetToToday(e as unknown as React.MouseEvent); }}
-              className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-white/10 text-slate-500 hover:text-white transition-colors cursor-pointer"
-              title="Reset to Today"
-            >
-              <X size={12} />
-            </div>
-          )}
-          <ChevronDown size={14} className={`text-slate-500 transition-transform duration-500 ${isOpen ? 'rotate-180 text-indigo-400' : ''}`} />
-        </div>
-      </button>
-
-      {/* ── Dropdown Hub ─────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {isOpen && (
-          <>
-            <motion.div
-              key="datepicker-backdrop"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={handleCancel}
-              className="fixed inset-0 z-[500] bg-black/40 backdrop-blur-sm cursor-default"
-            />
-            <motion.div
-              key="datepicker-panel"
-              initial={{ opacity: 0, y: 12, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 12, scale: 0.98 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-              className="absolute z-[501] right-0 mt-3 rounded-2xl bg-gradient-to-b from-indigo-500/[0.02] to-[#08080b]/95 backdrop-blur-[48px] border border-white/[0.08] shadow-[0_30px_80px_rgba(0,0,0,0.85)] overflow-hidden w-[640px] max-w-[95vw] max-sm:w-full max-sm:left-0 max-sm:right-0"
-            >
-              <div className="flex flex-col md:flex-row h-auto">
-                {/* Sidebar: Presets */}
-                <div className="md:w-[200px] border-b md:border-b-0 md:border-r border-white/5 p-5 space-y-1 bg-white/[0.01]">
-                  <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] px-3 pb-4">Quick Ranges</p>
-                  {PRESETS.map(p => {
-                    const active = draft.preset === p.key;
-                    return (
-                      <button
-                        key={p.key}
-                        type="button"
-                        onClick={() => handlePreset(p.key)}
-                        className={`w-full text-left px-4 py-3 rounded-xl text-[10px] font-black transition-all uppercase tracking-wider ${
-                          active
-                            ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/25 shadow-[0_0_12px_rgba(99,102,241,0.1)]'
-                            : 'text-slate-500 hover:bg-white/5 hover:text-white'
-                        }`}
-                      >
-                        {p.label}
-                      </button>
-                    );
-                  })}
-
-                  {/* Selection guidance */}
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="mt-6 px-4 py-4 rounded-xl bg-indigo-500/10 border border-indigo-500/25"
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      {selecting === 'end' ? (
-                        <Target size={12} className="text-emerald-400" />
-                      ) : (
-                        <Target size={12} className="text-indigo-400" />
-                      )}
-                      <p className={`text-[9px] font-black uppercase tracking-widest ${
-                        selecting === 'end' ? 'text-emerald-400' : 'text-indigo-400'
-                      }`}>
-                        {selectionHint}
-                      </p>
-                    </div>
-                    <p className="text-[9px] text-indigo-400/60 font-bold uppercase tracking-widest leading-normal">
-                      {selecting === 'end'
-                        ? `Start: ${humanDateShort(draft.startDate)}`
-                        : 'Click a date on the calendar'}
-                    </p>
-                  </motion.div>
+  const portalContent = (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          <motion.div
+            key="datepicker-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={handleCancel}
+            className="fixed inset-0 z-[9995] bg-black/55 backdrop-blur-sm cursor-default"
+          />
+          <motion.div
+            ref={panelRef}
+            key="datepicker-panel"
+            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.98 }}
+            transition={{ type: 'spring', damping: 28, stiffness: 360 }}
+            style={{
+              position: 'fixed',
+              zIndex: 9996,
+              top: panelPos.top,
+              left: panelPos.left,
+              width: panelPos.width,
+              maxHeight: 'calc(100vh - 16px)',
+            }}
+            className="rounded-2xl bg-[#0d0f1a] border border-white/[0.12] shadow-[0_30px_90px_rgba(0,0,0,0.95)] overflow-y-auto"
+          >
+            <div className="flex flex-col md:flex-row">
+              {/* Sidebar: Quick Presets */}
+              <div className="md:w-[175px] border-b md:border-b-0 md:border-r border-white/[0.08] p-3.5 bg-[#0a0c15] flex flex-col justify-between gap-3">
+                <div>
+                  <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.18em] px-2.5 pb-2">Quick Ranges</p>
+                  <div className="grid grid-cols-2 md:grid-cols-1 gap-1">
+                    {PRESETS.map(p => {
+                      const active = value.preset === p.key;
+                      return (
+                        <button
+                          key={p.key}
+                          type="button"
+                          onClick={() => handlePreset(p.key)}
+                          className={`w-full text-left px-3 py-2 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
+                            active
+                              ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/35'
+                              : 'text-slate-400 hover:bg-white/[0.06] hover:text-white border border-transparent'
+                          }`}
+                        >
+                          {p.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
-                {/* Main Matrix: Calendars */}
-                <div className="flex-1 p-6">
-                  <div className="flex items-center justify-between mb-8 px-2">
-                    <button type="button" onClick={prevMonth} className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 text-slate-500 hover:text-white transition-all cursor-pointer">
-                      <ChevronLeft size={16} />
-                    </button>
-                    <div className="flex items-center gap-6 sm:gap-12">
-                      <span className="text-[10px] font-black text-slate-200 uppercase tracking-[0.2em]">{monthLabel(viewMonth.year, viewMonth.month)}</span>
-                      <span className="text-[10px] font-black text-slate-200 uppercase tracking-[0.2em] hidden md:block">{monthLabel(nextMonthData.year, nextMonthData.month)}</span>
-                      {/* Go to Today button */}
-                      <button
-                        type="button"
-                        onClick={handleGoToToday}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/5 hover:bg-indigo-500/10 hover:border-indigo-500/20 text-slate-500 hover:text-indigo-400 transition-all cursor-pointer"
-                        title="Go to today"
-                      >
-                        <RotateCcw size={10} />
-                        <span className="text-[8px] font-black uppercase tracking-widest">Today</span>
-                      </button>
-                    </div>
-                    <button type="button" onClick={nextMonth} className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 text-slate-500 hover:text-white transition-all cursor-pointer">
-                      <ChevronRight size={16} />
+                {/* Selection Guidance */}
+                <div className={`px-3 py-2.5 rounded-xl border ${
+                  selecting === 'end'
+                    ? 'bg-emerald-500/10 border-emerald-500/25'
+                    : 'bg-indigo-500/10 border-indigo-500/25'
+                }`}>
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <Target size={11} className={selecting === 'end' ? 'text-emerald-400' : 'text-indigo-400'} />
+                    <p className={`text-[10px] font-bold uppercase tracking-wider ${
+                      selecting === 'end' ? 'text-emerald-300' : 'text-indigo-300'
+                    }`}>
+                      {selectionHint}
+                    </p>
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-mono">
+                    {selecting === 'end'
+                      ? `Start: ${humanDateShort(draft.startDate)}`
+                      : 'Click any date'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Main Matrix: Dual-Month Calendar */}
+              <div className="flex-1 p-4 sm:p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <button
+                    type="button"
+                    onClick={prevMonth}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/[0.05] border border-white/[0.08] hover:bg-white/10 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                  >
+                    <ChevronLeft size={15} />
+                  </button>
+
+                  <div className="flex items-center gap-4 sm:gap-10">
+                    <span className="text-xs font-bold text-zinc-100 uppercase tracking-wider">{monthLabel(viewMonth.year, viewMonth.month)}</span>
+                    <span className="text-xs font-bold text-zinc-100 uppercase tracking-wider hidden md:block">{monthLabel(nextMonthData.year, nextMonthData.month)}</span>
+                    <button
+                      type="button"
+                      onClick={handleGoToToday}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/[0.05] border border-white/[0.08] hover:bg-indigo-500/15 hover:border-indigo-500/30 text-slate-400 hover:text-indigo-300 transition-colors cursor-pointer"
+                      title="Jump to current month"
+                    >
+                      <RotateCcw size={10} />
+                      <span className="text-[10px] font-bold uppercase tracking-wider">Today</span>
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                    {renderCalendarGrid(grid, viewMonth.year, viewMonth.month)}
-                    <div className="hidden md:block">
-                      {renderCalendarGrid(nextGrid, nextMonthData.year, nextMonthData.month)}
-                    </div>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={nextMonth}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/[0.05] border border-white/[0.08] hover:bg-white/10 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                  >
+                    <ChevronRight size={15} />
+                  </button>
+                </div>
 
-                  {/* Footer */}
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mt-10 pt-6 border-t border-white/[0.05] gap-4">
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
-                          <Clock size={14} />
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] mb-0.5">Selected</span>
-                          <span className="text-[12px] font-black font-mono text-white tabular-nums tracking-tighter">
-                            {humanDateShort(draft.startDate)} <span className="mx-1.5 opacity-20 text-xs">→</span> {humanDateShort(draft.endDate)}
-                          </span>
-                        </div>
-                      </div>
-                      {/* Working days counter */}
-                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                        <Zap size={10} className="text-emerald-400" />
-                        <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest">
-                          {workingDays} working day{workingDays !== 1 ? 's' : ''}
-                        </span>
-                      </div>
-                    </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {renderCalendarGrid(grid)}
+                  <div className="hidden md:block">
+                    {renderCalendarGrid(nextGrid)}
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mt-5 pt-4 border-t border-white/[0.08] gap-3">
+                  <div className="flex items-center flex-wrap gap-2.5">
                     <div className="flex items-center gap-2">
-                      <motion.button
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        type="button"
-                        onClick={handleCancel}
-                        className="px-6 py-3 rounded-xl bg-white/5 border border-white/10 text-slate-400 text-[10px] font-black uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all cursor-pointer"
-                      >
-                        Cancel
-                      </motion.button>
-                      <motion.button
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        type="button"
-                        onClick={handleApply}
-                        className="px-8 py-3 rounded-xl bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 transition-all shadow-[0_10px_30px_rgba(99,102,241,0.3)] cursor-pointer"
-                      >
-                        Apply Range
-                      </motion.button>
+                      <Clock size={13} className="text-indigo-400" />
+                      <span className="text-xs font-bold font-mono text-white tabular-nums">
+                        {humanDateShort(draft.startDate)} → {humanDateShort(draft.endDate)}
+                      </span>
                     </div>
+                    <div className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/25">
+                      <Zap size={10} className="text-emerald-400" />
+                      <span className="text-[10px] font-bold text-emerald-300">
+                        {workingDays} working day{workingDays !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 self-end sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={handleCancel}
+                      className="px-4 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-slate-300 text-xs font-semibold hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleApply}
+                      className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-colors shadow-[0_4px_16px_rgba(99,102,241,0.35)] cursor-pointer"
+                    >
+                      Apply Range
+                    </button>
                   </div>
                 </div>
               </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+
+  return (
+    <div className={`relative ${className}`}>
+      {/* ── Trigger (matches 38px height of all controls) ──────────── */}
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={handleOpenToggle}
+        className={`flex items-center justify-between w-full h-[38px] px-3 gap-2 rounded-xl text-xs transition-all cursor-pointer outline-none border ${
+          isOpen
+            ? 'border-indigo-500/60 bg-[#141728] shadow-[0_0_0_2px_rgba(99,102,241,0.18)]'
+            : 'border-white/[0.09] bg-[#131624] hover:border-white/20 hover:bg-[#171a2b]'
+        }`}
+      >
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <Calendar size={14} className="text-indigo-400 shrink-0" />
+          <span className="text-xs font-semibold text-zinc-100 font-mono truncate text-left">
+            {triggerLabel}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          {value.preset !== 'today' && (
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={handleResetToToday}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleResetToToday(e); } }}
+              className="p-0.5 rounded hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+              title="Reset to Today"
+            >
+              <X size={12} />
+            </span>
+          )}
+          <ChevronDown size={13} className={`text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180 text-indigo-400' : ''}`} />
+        </div>
+      </button>
+
+      {mounted && createPortal(portalContent, document.body)}
     </div>
   );
 }

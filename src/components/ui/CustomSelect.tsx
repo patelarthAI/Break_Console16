@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Check, Search, X, RotateCcw } from 'lucide-react';
 
@@ -18,6 +19,7 @@ interface SingleSelectProps {
   label?: string;
   className?: string;
   searchable?: boolean;
+  allowClear?: boolean;
 }
 
 interface MultiSelectProps {
@@ -29,30 +31,86 @@ interface MultiSelectProps {
   label?: string;
   className?: string;
   searchable?: boolean;
+  allowClear?: boolean;
 }
 
 type CustomSelectProps = SingleSelectProps | MultiSelectProps;
 
 export default function CustomSelect(props: CustomSelectProps) {
-  const { options, placeholder = 'Select…', label, className = '', searchable = false, multi } = props;
+  const { options, placeholder = 'Select…', label, className = '', searchable = false, multi, allowClear = false } = props;
 
   const [isOpen, setIsOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => { setMounted(true); }, []);
+  const [coords, setCoords] = useState<{ top: number; left: number; width: number; openUp: boolean }>({
+    top: 0,
+    left: 0,
+    width: 200,
+    openUp: false,
+  });
+
   const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const filteredOptions = searchable
     ? options.filter(opt => opt.label.toLowerCase().includes(searchTerm.toLowerCase()))
     : options;
 
+  const updatePosition = useCallback(() => {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openUp = spaceBelow < 260 && rect.top > spaceBelow;
+    const minWidth = Math.max(rect.width, 200);
+    const maxLeft = Math.max(8, window.innerWidth - minWidth - 8);
+    setCoords({
+      top: openUp ? rect.top - 6 : rect.bottom + 6,
+      left: Math.min(rect.left, maxLeft),
+      width: minWidth,
+      openUp,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [isOpen, updatePosition]);
+
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(target) &&
+        (!dropdownRef.current || !dropdownRef.current.contains(target))
+      ) {
         setIsOpen(false);
         setSearchTerm('');
       }
     };
-    if (isOpen) document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsOpen(false);
+        setSearchTerm('');
+      }
+    };
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, [isOpen]);
 
   const multiValue = multi ? (props as MultiSelectProps).value : [];
@@ -63,7 +121,14 @@ export default function CustomSelect(props: CustomSelectProps) {
     multiOnChange(multiValue.includes(val) ? multiValue.filter(v => v !== val) : [...multiValue, val]);
   }, [multiValue, multiOnChange]);
 
-  const clearAll = useCallback(() => { multiOnChange?.([]); setSearchTerm(''); }, [multiOnChange]);
+  const clearAll = useCallback(() => {
+    if (multi) {
+      multiOnChange?.([]);
+    } else {
+      (props as SingleSelectProps).onChange('');
+    }
+    setSearchTerm('');
+  }, [multi, multiOnChange, props]);
 
   const singleValue = !multi ? (props as SingleSelectProps).value : '';
   const singleOnChange = !multi ? (props as SingleSelectProps).onChange : undefined;
@@ -73,14 +138,134 @@ export default function CustomSelect(props: CustomSelectProps) {
 
   const triggerLabel = () => {
     if (multi) {
-      return multiValue.length === 0
-        ? <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>{placeholder}</span>
-        : <span style={{ color: 'var(--accent-pale)', fontWeight: 700 }}>{multiValue.length} selected</span>;
+      if (multiValue.length === 0) {
+        return <span className="text-slate-400 font-medium">{placeholder}</span>;
+      }
+      if (multiValue.length === 1) {
+        const match = options.find(o => o.value === multiValue[0]);
+        return <span className="text-indigo-200 font-semibold">{match?.label ?? multiValue[0]}</span>;
+      }
+      return <span className="text-indigo-200 font-bold">{multiValue.length} selected</span>;
     }
     return selectedOption
-      ? <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{selectedOption.label}</span>
-      : <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>{placeholder}</span>;
+      ? <span className="text-zinc-100 font-semibold">{selectedOption.label}</span>
+      : <span className="text-slate-400 font-medium">{placeholder}</span>;
   };
+
+  const dropdownContent = (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          ref={dropdownRef}
+          initial={{ opacity: 0, y: coords.openUp ? 4 : -4, scale: 0.99 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: coords.openUp ? 4 : -4, scale: 0.99 }}
+          transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
+          style={{
+            position: 'fixed',
+            zIndex: 9990,
+            top: coords.openUp ? undefined : coords.top,
+            bottom: coords.openUp ? window.innerHeight - coords.top : undefined,
+            left: coords.left,
+            width: coords.width,
+            borderRadius: '14px',
+            backgroundColor: '#10121e',
+            border: '1px solid rgba(255,255,255,0.12)',
+            boxShadow: '0 24px 60px rgba(0,0,0,0.92), 0 0 0 1px rgba(99,102,241,0.12)',
+            overflow: 'hidden',
+          }}
+        >
+          {/* Search */}
+          {searchable && (
+            <div className="p-2 border-b border-white/[0.08] bg-[#0b0d17]">
+              <div className="relative">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400" />
+                <input
+                  autoFocus
+                  type="text"
+                  placeholder="Search…"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  className="w-full bg-[#151828] border border-white/10 focus:border-indigo-500/50 rounded-lg py-1.5 pl-8 pr-2.5 text-xs text-zinc-100 placeholder-slate-500 outline-none"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Multi header: select all / clear */}
+          {multi && (
+            <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/[0.06] bg-[#0c0e18]">
+              <button
+                type="button"
+                onClick={() => multiOnChange?.(options.map(o => o.value))}
+                className="text-[10px] font-bold tracking-wider uppercase text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer"
+              >
+                Select All
+              </button>
+              <button
+                type="button"
+                onClick={clearAll}
+                className="flex items-center gap-1 text-[10px] font-bold tracking-wider uppercase text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <RotateCcw size={9} /> Clear
+              </button>
+            </div>
+          )}
+
+          {/* Options list */}
+          <div className="max-h-[220px] overflow-y-auto p-1.5 scrollbar-thin">
+            {filteredOptions.length > 0 ? (
+              <div className="flex flex-col gap-0.5">
+                {filteredOptions.map((opt, idx) => {
+                  const isSelected = multi ? multiValue.includes(opt.value) : opt.value === singleValue;
+                  return (
+                    <button
+                      key={`${opt.value}-${idx}`}
+                      type="button"
+                      onClick={() => {
+                        if (multi) toggleMultiValue(opt.value);
+                        else {
+                          singleOnChange?.(isSelected && allowClear ? '' : opt.value);
+                          setIsOpen(false);
+                          setSearchTerm('');
+                        }
+                      }}
+                      className={`flex items-center justify-between w-full px-2.5 py-2 rounded-lg text-xs text-left transition-colors cursor-pointer ${
+                        isSelected
+                          ? 'bg-indigo-500/20 text-indigo-200 font-semibold border border-indigo-500/35'
+                          : 'text-slate-300 hover:bg-white/[0.06] hover:text-white border border-transparent'
+                      }`}
+                    >
+                      <span className="truncate pr-2">{opt.label}</span>
+                      {isSelected && <Check size={13} className="shrink-0 text-indigo-400" />}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-6 opacity-50">
+                <Search size={14} className="mb-1.5 text-slate-500" />
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">No results</p>
+              </div>
+            )}
+          </div>
+
+          {/* Multi footer */}
+          {multi && (
+            <div className="p-2 border-t border-white/[0.06] bg-[#0b0d17]">
+              <button
+                type="button"
+                onClick={() => { setIsOpen(false); setSearchTerm(''); }}
+                className="w-full py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+          )}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
 
   return (
     <div className={`relative ${className}`} ref={containerRef}>
@@ -90,170 +275,39 @@ export default function CustomSelect(props: CustomSelectProps) {
 
       {/* Trigger */}
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setIsOpen(prev => !prev)}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          width: '100%',
-          height: '36px',
-          padding: '0 12px',
-          borderRadius: '8px',
-          border: `1px solid ${isOpen ? 'rgba(99,102,241,0.6)' : hasValue ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.1)'}`,
-          background: hasValue ? 'rgba(99,102,241,0.12)' : '#151928',
-          fontFamily: 'inherit',
-          fontSize: '12px',
-          cursor: 'pointer',
-          transition: 'all 0.15s ease',
-          boxShadow: isOpen ? '0 0 0 2px rgba(99,102,241,0.2)' : 'none',
-          outline: 'none',
-        }}
+        className={`flex items-center justify-between w-full h-[38px] px-3 rounded-xl text-xs transition-all cursor-pointer outline-none border ${
+          isOpen
+            ? 'border-indigo-500/60 bg-[#141728] shadow-[0_0_0_2px_rgba(99,102,241,0.18)]'
+            : hasValue
+              ? 'border-indigo-500/40 bg-indigo-500/10 hover:border-indigo-400/60'
+              : 'border-white/[0.09] bg-[#131624] hover:border-white/20 hover:bg-[#171a2b]'
+        }`}
       >
-        <div className="flex-1 min-w-0 text-left truncate mr-2 text-zinc-200">{triggerLabel()}</div>
-        <div className="flex items-center gap-1 flex-shrink-0">
-          {hasValue && multi && multiValue.length > 0 && (
-            <button
-              type="button"
+        <div className="flex-1 min-w-0 text-left truncate mr-2">{triggerLabel()}</div>
+        <div className="flex items-center gap-1 shrink-0">
+          {hasValue && (multi || allowClear) && (
+            <span
+              role="button"
+              tabIndex={0}
               onClick={e => { e.stopPropagation(); clearAll(); }}
-              className="hover:text-white text-zinc-400 p-0.5 rounded transition-colors"
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); clearAll(); } }}
+              className="hover:text-white text-slate-400 p-0.5 rounded hover:bg-white/10 transition-colors"
+              title="Clear selection"
             >
               <X size={12} />
-            </button>
+            </span>
           )}
           <ChevronDown
             size={13}
-            className={`transition-transform duration-200 ${isOpen ? 'rotate-180 text-indigo-400' : hasValue ? 'text-indigo-400' : 'text-zinc-400'}`}
+            className={`transition-transform duration-200 ${isOpen ? 'rotate-180 text-indigo-400' : hasValue ? 'text-indigo-400' : 'text-slate-400'}`}
           />
         </div>
       </button>
 
-      {/* Dropdown */}
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: -4, scale: 0.99 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -4, scale: 0.99 }}
-            transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
-            style={{
-              position: 'absolute',
-              zIndex: 400,
-              width: '100%',
-              minWidth: '180px',
-              marginTop: '6px',
-              borderRadius: 'var(--r-lg)',
-              background: 'var(--bg-overlay)',
-              border: '1px solid var(--border-strong)',
-              boxShadow: '0 16px 48px rgba(0,0,0,0.8), 0 0 0 1px rgba(168,85,247,0.06)',
-              overflow: 'hidden',
-            }}
-          >
-            {/* Search */}
-            {searchable && (
-              <div style={{ padding: '8px 8px 4px', borderBottom: '1px solid var(--border-subtle)' }}>
-                <div className="relative">
-                  <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-muted)' }} />
-                  <input
-                    autoFocus
-                    type="text"
-                    placeholder="Search…"
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
-                    style={{
-                      width: '100%',
-                      background: 'var(--bg-input)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 'var(--r-sm)',
-                      padding: '6px 8px 6px 28px',
-                      fontSize: '12px',
-                      fontFamily: 'var(--f-body)',
-                      color: 'var(--text-primary)',
-                      outline: 'none',
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Multi header: select all / clear */}
-            {multi && !searchable && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px 4px', borderBottom: '1px solid var(--border-subtle)' }}>
-                <button type="button" onClick={() => multiOnChange?.(options.map(o => o.value))}
-                  style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--accent-pale)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0' }}>
-                  All
-                </button>
-                <button type="button" onClick={clearAll}
-                  style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <RotateCcw size={9} /> Clear
-                </button>
-              </div>
-            )}
-
-            {/* Options list */}
-            <div style={{ maxHeight: '220px', overflowY: 'auto', padding: '6px' }}>
-              {filteredOptions.length > 0 ? (
-                <div className="flex flex-col gap-0.5">
-                  {filteredOptions.map((opt, idx) => {
-                    const isSelected = multi ? multiValue.includes(opt.value) : opt.value === singleValue;
-                    return (
-                      <button
-                        key={`${opt.value}-${idx}`}
-                        type="button"
-                        onClick={() => {
-                          if (multi) toggleMultiValue(opt.value);
-                          else { singleOnChange?.(opt.value); setIsOpen(false); setSearchTerm(''); }
-                        }}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          width: '100%',
-                          padding: '7px 10px',
-                          borderRadius: 'var(--r-sm)',
-                          fontSize: '12px',
-                          fontFamily: 'var(--f-body)',
-                          fontWeight: isSelected ? 600 : 400,
-                          color: isSelected ? 'var(--accent-pale)' : 'var(--text-secondary)',
-                          background: isSelected ? 'var(--accent-dim)' : 'transparent',
-                          border: isSelected ? '1px solid var(--accent-border)' : '1px solid transparent',
-                          cursor: 'pointer',
-                          textAlign: 'left',
-                          transition: 'background 0.12s ease, color 0.12s ease',
-                        }}
-                        onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)'; }}
-                        onMouseLeave={e => { if (!isSelected) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)'; } }}
-                      >
-                        <span className="truncate pr-2">{opt.label}</span>
-                        {isSelected && <Check size={12} style={{ flexShrink: 0, color: 'var(--accent)' }} />}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-6" style={{ opacity: 0.4 }}>
-                  <Search size={14} style={{ marginBottom: 6, color: 'var(--text-muted)' }} />
-                  <p className="text-stat-label">No results</p>
-                </div>
-              )}
-            </div>
-
-            {/* Multi footer */}
-            {multi && (
-              <div style={{ padding: '6px 8px', borderTop: '1px solid var(--border-subtle)' }}>
-                <button
-                  type="button"
-                  onClick={() => setIsOpen(false)}
-                  className="btn btn-primary"
-                  style={{ width: '100%', justifyContent: 'center' }}
-                >
-                  Apply
-                </button>
-              </div>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {mounted && createPortal(dropdownContent, document.body)}
     </div>
   );
 }
