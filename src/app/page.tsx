@@ -10,13 +10,15 @@ import EliteDashboard from '@/components/EliteDashboard';
 import NASAClock from '@/components/NASAClock';
 import { User, TimeLog, AppStatus } from '@/types';
 import {
-  getCurrentUser, setCurrentUser, getLogs, insertLog, getAllUsersStatus, UserStatusRecord, getSingleUserStatus
+  getCurrentUser, setCurrentUser, getLogs, insertLog, getAllUsersStatus, UserStatusRecord, getSingleUserStatus,
+  closeStalePreviousSessions,
 } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 import { subscribe } from '@/lib/realtime';
 import {
   computeSession, computeWorkedTime, computeTotalTime,
-  generateUUID, getTodayKey, setServerOffset, getRealNow, countBRBs, getPastDaysZoned
+  generateUUID, getTodayKey, setServerOffset, getRealNow, countBRBs, getPastDaysZoned,
+  isSessionWindowStillOpen,
 } from '@/lib/timeUtils';
 import { useClock } from '@/hooks/useClock';
 import { STATUS_COUNTS } from '@/lib/statusMap';
@@ -207,15 +209,22 @@ export default function Home() {
   const now = useClock();
   const { error: showError } = useToast();
 
-  const loadLogs = useCallback(async (userId: string) => {
+  const loadLogs = useCallback(async (targetUser: User) => {
     setLogsLoading(true);
     try {
-      let dayLogs = await getLogs(userId, getTodayKey());
-      // Cross-midnight: if today has no punch_in, check if yesterday had an active or stitched session
+      const todayKey = getTodayKey();
+      if (!targetUser.isMaster) {
+        await closeStalePreviousSessions(targetUser, todayKey, false);
+      }
+      let dayLogs = await getLogs(targetUser.id, todayKey);
+      // Cross-midnight: only stitch yesterday when today has no punch_in AND yesterday's shift window is genuinely still open
       if (!dayLogs.some(l => l.eventType === 'punch_in')) {
         const yesterdayKey = getPastDaysZoned(1, true)[0];
-        if (yesterdayKey) {
-          const yLogs = await getLogs(userId, yesterdayKey);
+        if (
+          yesterdayKey &&
+          isSessionWindowStillOpen(targetUser.shiftStart, targetUser.shiftEnd, targetUser.timezone, yesterdayKey, getRealNow())
+        ) {
+          const yLogs = await getLogs(targetUser.id, yesterdayKey);
           if (yLogs.length > 0) {
             const hasOpenYesterdayShift = yLogs.some(l => l.eventType === 'punch_in') &&
               !yLogs.some(l => l.eventType === 'punch_out' || l.eventType === 'auto_logout');
@@ -257,7 +266,7 @@ export default function Home() {
       if (saved.isApproved || saved.isMaster) {
         // Fire-and-forget: each dashboard renders its own loading/skeleton
         // state, so we never block the whole app behind the session splash.
-        void loadLogs(saved.id);
+        void loadLogs(saved);
         void loadTeamStatus();
       }
     }
@@ -316,16 +325,22 @@ export default function Home() {
 
   const addLog = useCallback(async (eventType: TimeLog['eventType']) => {
     if (!user) return;
-    const log: TimeLog = { id: generateUUID(), eventType, timestamp: getRealNow(), date: getTodayKey() };
+    const todayKey = getTodayKey();
+    const log: TimeLog = { id: generateUUID(), eventType, timestamp: getRealNow(), date: todayKey };
     setLogs((prev) => [...prev, log]); // optimistic
     try {
+      if (eventType === 'punch_in' && !user.isMaster) {
+        // Ensure any unclosed previous-day shift is auto-logged out before punching in on a new day
+        // (same-day logs on todayKey are preserved untouched for accidental logout recovery)
+        await closeStalePreviousSessions(user, todayKey, true);
+      }
       await insertLog(user.id, log);
       loadTeamStatus(); // refresh global state immediately
     } catch (e) {
       console.error('Failed to save time log:', e);
       // Roll back the optimistic entry and resync truth from the server.
       setLogs((prev) => prev.filter((l) => l.id !== log.id));
-      await loadLogs(user.id);
+      await loadLogs(user);
       showError('Action not saved', 'Check your connection and try again.');
     }
   }, [user, loadTeamStatus, loadLogs, showError]);
@@ -333,7 +348,7 @@ export default function Home() {
   const handleLogin = async (u: User) => { 
     setUser(u); 
     if (u.isApproved || u.isMaster) {
-      await loadLogs(u.id); 
+      await loadLogs(u); 
       await loadTeamStatus();
     }
   };

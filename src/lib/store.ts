@@ -1,6 +1,10 @@
 import { supabase, UserRow, LogRow, describeSupabaseError } from './supabase';
 import { User, TimeLog, AppStatus, LeaveRecord, AppNotification } from '@/types';
-import { getTodayKey, generateUUID, getPastDaysZoned, getElapsedWeekdays, checkViolations, toZonedMinutes, toZonedTimestamp, getRealNow, parseShiftMins } from './timeUtils';
+import {
+    getTodayKey, generateUUID, getPastDaysZoned, getElapsedWeekdays, checkViolations,
+    toZonedMinutes, getRealNow, parseShiftMins,
+    getRelativeDate, isSessionWindowStillOpen, computeAutoLogoutTs,
+} from './timeUtils';
 import { toTitleCase } from './utils';
 
 export interface ClientRow {
@@ -252,15 +256,12 @@ function withSyntheticAutoLogout(logs: TimeLog[], user: User, date: string): Tim
         return logs;
     }
 
-    const todayStr = getTodayKey();
-    const isPastDate = date < todayStr;
-    const userNowMins = toZonedMinutes(getRealNow(), user.timezone);
-    const shiftEndMins = parseShiftMins(user.shiftEnd);
+    const nowMs = getRealNow();
+    if (isSessionWindowStillOpen(user.shiftStart, user.shiftEnd, user.timezone, date, nowMs)) {
+        return logs;
+    }
 
-    // If it is today and we have not exceeded shiftEnd + 90m yet, keep shift active
-    if (!isPastDate && userNowMins <= shiftEndMins + 90) return logs;
-
-    const penaltyTimestamp = toZonedTimestamp(date, user.shiftEnd, user.timezone) - (10 * 60000);
+    const penaltyTimestamp = computeAutoLogoutTs(logs, user.shiftStart, user.shiftEnd, user.timezone, date, nowMs);
     return [
         ...logs,
         {
@@ -973,6 +974,70 @@ export async function insertLog(userId: string, log: TimeLog): Promise<void> {
     clearStatsCache();
 }
 
+/**
+ * Auto-closes any unclosed sessions from previous days (date < todayKey) so yesterday's
+ * forgotten punch-out does not count into today's session or login counts.
+ * Never touches logs on todayKey (same-day accidental logout is preserved for re-login).
+ */
+export async function closeStalePreviousSessions(
+    user: User,
+    todayKey: string,
+    forceCloseAllPast = false,
+): Promise<boolean> {
+    try {
+        const lookbackStart = getRelativeDate(todayKey, -7);
+        const { data, error } = await supabase
+            .from('time_logs')
+            .select(LOG_SELECT)
+            .eq('user_id', user.id)
+            .gte('date', lookbackStart)
+            .lt('date', todayKey)
+            .order('timestamp', { ascending: true });
+
+        if (error || !data?.length) return false;
+
+        const byDate = new Map<string, TimeLog[]>();
+        for (const row of data as LogRow[]) {
+            const log = rowToLog(row);
+            const list = byDate.get(log.date);
+            if (list) list.push(log);
+            else byDate.set(log.date, [log]);
+        }
+
+        const nowMs = getRealNow();
+        let closedAny = false;
+
+        for (const [prevDate, prevLogs] of Array.from(byDate.entries()).sort(([a], [b]) => a.localeCompare(b))) {
+            const meaningful = prevLogs.filter(l => l.eventType !== 'manual_flag');
+            if (!meaningful.length) continue;
+
+            const hasPunchIn = meaningful.some(l => l.eventType === 'punch_in');
+            const lastLog = meaningful[meaningful.length - 1];
+            const isOpen = hasPunchIn && lastLog.eventType !== 'punch_out' && lastLog.eventType !== 'auto_logout';
+            if (!isOpen) continue;
+
+            if (!forceCloseAllPast && isSessionWindowStillOpen(user.shiftStart, user.shiftEnd, user.timezone, prevDate, nowMs)) {
+                continue;
+            }
+
+            const autoLogoutTs = computeAutoLogoutTs(meaningful, user.shiftStart, user.shiftEnd, user.timezone, prevDate, nowMs);
+            await insertLog(user.id, {
+                id: generateUUID(),
+                eventType: 'auto_logout',
+                timestamp: autoLogoutTs,
+                date: prevDate,
+                addedBy: 'system:next-day-autologout',
+            });
+            closedAny = true;
+        }
+
+        return closedAny;
+    } catch (e) {
+        console.warn('closeStalePreviousSessions failed (non-blocking):', e);
+        return false;
+    }
+}
+
 export async function getLogsForDate(userId: string, date: string): Promise<TimeLog[]> {
     return getLogs(userId, date);
 }
@@ -1107,9 +1172,13 @@ function deriveStatus(logs: TimeLog[]): Omit<UserStatusRecord, 'user'> {
         if (!punchIn && log.eventType !== 'punch_in') continue;
         switch (log.eventType) {
             case 'punch_in':
-                status = 'working'; punchIn = log.timestamp; workStart = log.timestamp;
-                currentWorkSegStart = log.timestamp;
-                punchOut = undefined; breakStart = brbStart = undefined; break;
+                if (punchIn === undefined) punchIn = log.timestamp;
+                status = 'working'; workStart = log.timestamp;
+                isAutoLogout = false;
+                if (breakStart) { breakMs += Math.max(0, log.timestamp - breakStart); breakStart = undefined; }
+                if (brbStart) { brbMs += Math.max(0, log.timestamp - brbStart); brbStart = undefined; }
+                if (!currentWorkSegStart) currentWorkSegStart = log.timestamp;
+                punchOut = undefined; break;
             case 'punch_out':
                 isAutoLogout = false;
                 status = 'punched_out'; punchOut = log.timestamp; breakStart = brbStart = undefined; workStart = undefined;
@@ -1217,14 +1286,14 @@ export async function getAllUsersStatus(clientName?: string, force = false): Pro
             const yestLogs = getLogsForUserDate(logsByUserDate, user.id, yesterday);
             const todayHasPunchIn = todayLogs.some(l => l.eventType === 'punch_in');
 
-            // Cross-midnight continuation: stitch yesterday's punch_in when needed.
+            // Cross-midnight continuation: only stitch yesterday when today has unanchored events or overnight window is genuinely active
             let sessionLogs = todayLogs;
             let sessionDate = today;
-            if (todayLogs.length > 0 && !todayHasPunchIn && yestLogs.length > 0) {
+            const overnightWindowOpen = isSessionWindowStillOpen(user.shiftStart, user.shiftEnd, user.timezone, yesterday, getRealNow());
+            if (todayLogs.length > 0 && !todayHasPunchIn && yestLogs.length > 0 && overnightWindowOpen) {
                 sessionLogs = [...yestLogs, ...todayLogs].sort((a, b) => a.timestamp - b.timestamp);
                 sessionDate = yesterday;
-            } else if (todayLogs.length === 0 && yestLogs.length > 0) {
-                // If user has 0 logs today, check if yesterday's session is still active
+            } else if (todayLogs.length === 0 && yestLogs.length > 0 && overnightWindowOpen) {
                 const yestStatus = deriveStatus(yestLogs);
                 if (['working', 'on_break', 'on_brb'].includes(yestStatus.status)) {
                     sessionLogs = yestLogs;
@@ -1260,13 +1329,14 @@ export async function getSingleUserStatus(userId: string): Promise<UserStatusRec
     let sessionDate = today;
     const yesterday = getPastDaysZoned(1, true)[0] ?? today;
 
-    if (todayLogs.length > 0 && !todayHasPunchIn) {
+    const overnightWindowOpen = isSessionWindowStillOpen(user.shiftStart, user.shiftEnd, user.timezone, yesterday, getRealNow());
+    if (todayLogs.length > 0 && !todayHasPunchIn && overnightWindowOpen) {
         const yestLogs = await getLogs(userId, yesterday);
         if (yestLogs.length > 0) {
             sessionLogs = [...yestLogs, ...todayLogs].sort((a, b) => a.timestamp - b.timestamp);
             sessionDate = yesterday;
         }
-    } else if (todayLogs.length === 0) {
+    } else if (todayLogs.length === 0 && overnightWindowOpen) {
         const yestLogs = await getLogs(userId, yesterday);
         if (yestLogs.length > 0) {
             const yestStatus = deriveStatus(yestLogs);

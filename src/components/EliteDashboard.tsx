@@ -161,8 +161,16 @@ function ActionTiles({ status, onAction, onClockOutClick }: { status: string; on
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         {isIdle && (
           <>
-            <ActionTile label="Clock In" sub="Start shift" color="#00F5A0" Icon={LogIn}
-              onClick={() => onAction('punch_in')} disabled={false} primary={true} gridSpan={2} />
+            <ActionTile
+              label={status === 'punched_out' ? 'Resume Shift' : 'Clock In'}
+              sub={status === 'punched_out' ? 'Same-day re-login' : 'Start shift'}
+              color="#00F5A0"
+              Icon={LogIn}
+              onClick={() => onAction('punch_in')}
+              disabled={false}
+              primary={true}
+              gridSpan={2}
+            />
             <ActionTile label="Clock Out" sub="End shift" color="#FF3B5C" Icon={LogOut}
               onClick={() => {}} disabled={true} primary={false} gridSpan={2} />
           </>

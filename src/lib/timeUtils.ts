@@ -91,6 +91,49 @@ export function toZonedTimestamp(dateStr: string, timeStr: string, timezone: str
     return targetUtc + offsetDiff;
 }
 
+export interface PolicyLimits {
+    breakLimitMs?: number;
+    brbLimitMs?: number;
+    combinedLimitMs?: number;
+    graceMins?: number;
+}
+
+/** Returns true if a previous-date shift window (including overnight shifts + 90m grace) is still open at nowMs. */
+export function isSessionWindowStillOpen(
+    shiftStart = '08:00',
+    shiftEnd = '17:00',
+    timezone = 'America/Chicago',
+    sessionDate: string,
+    nowMs: number,
+): boolean {
+    const todayStr = dateStr(new Date(nowMs));
+    if (sessionDate >= todayStr) return true;
+
+    const startMins = parseShiftMins(shiftStart || '08:00');
+    const endMins = parseShiftMins(shiftEnd || '17:00');
+    const endDate = endMins <= startMins ? getRelativeDate(sessionDate, 1) : sessionDate;
+    const shiftEndTs = toZonedTimestamp(endDate, shiftEnd || '17:00', timezone || 'America/Chicago');
+    return nowMs <= shiftEndTs + 90 * 60 * 1000;
+}
+
+/** Computes a safe auto-logout timestamp for an unclosed date, never earlier than the day's last event. */
+export function computeAutoLogoutTs(
+    logsOnDate: TimeLog[],
+    shiftStart = '08:00',
+    shiftEnd = '17:00',
+    timezone = 'America/Chicago',
+    sessionDate: string,
+    nowMs: number,
+): number {
+    const startMins = parseShiftMins(shiftStart || '08:00');
+    const endMins = parseShiftMins(shiftEnd || '17:00');
+    const endDate = endMins <= startMins ? getRelativeDate(sessionDate, 1) : sessionDate;
+    const scheduledTs = toZonedTimestamp(endDate, shiftEnd || '17:00', timezone || 'America/Chicago') - 10 * 60000;
+    const lastTs = logsOnDate.reduce((max, l) => Math.max(max, l.timestamp), 0);
+    const floorTs = lastTs > 0 ? lastTs + 60 * 1000 : scheduledTs;
+    return Math.min(nowMs, Math.max(scheduledTs, floorTs));
+}
+
 export function checkViolations(
     breakMs: number,
     brbMs: number,
@@ -100,15 +143,23 @@ export function checkViolations(
     shiftEnd = '17:00',
     timezone = 'America/Chicago',
     logs?: TimeLog[],
+    limits?: PolicyLimits,
 ) {
-    const breakViolMs = Math.max(0, breakMs - BREAK_LIMIT_MS);
-    const breakViol = breakViolMs > 0;
-    const brbViolMs = Math.max(0, brbMs - BRB_LIMIT_MS);
-    const brbViol = brbViolMs > 0;
+    const breakLimitMs = limits?.breakLimitMs ?? BREAK_LIMIT_MS;
+    const brbLimitMs = limits?.brbLimitMs ?? BRB_LIMIT_MS;
+    const combinedLimitMs = limits?.combinedLimitMs ?? COMBINED_LIMIT_MS;
+    const graceMins = limits?.graceMins ?? 5;
 
-    // Grace period: 5 minutes after shift start
-    const graceCutoff = parseShiftMins(shiftStart) + 5;  // e.g. 08:00 → 485
-    const shiftEndMin = parseShiftMins(shiftEnd);          // e.g. 17:00 → 1020
+    const breakViolMs = Math.max(0, breakMs - breakLimitMs);
+    const breakViol = breakViolMs > 0;
+    const brbViolMs = Math.max(0, brbMs - brbLimitMs);
+    const brbViol = brbViolMs > 0;
+    const totalBreakViolMs = Math.max(0, (breakMs + brbMs) - combinedLimitMs);
+    const totalBreakViol = totalBreakViolMs > 0;
+
+    // Grace period after shift start (e.g. 08:00 + 5m -> 485)
+    const graceCutoff = parseShiftMins(shiftStart) + graceMins;
+    const shiftEndMin = parseShiftMins(shiftEnd);
 
     let lateInMs = 0;
     let lateIn = false;
@@ -132,7 +183,8 @@ export function checkViolations(
 
     let autoLogout = false;
     if (punchOut && logs) {
-        const lastLog = logs[logs.length - 1];
+        const meaningful = logs.filter(l => l.eventType !== 'manual_flag');
+        const lastLog = meaningful[meaningful.length - 1];
         if (lastLog?.eventType === 'auto_logout') autoLogout = true;
     }
 
@@ -141,12 +193,14 @@ export function checkViolations(
         breakViolMs,
         brbViol,
         brbViolMs,
+        totalBreakViol,
+        totalBreakViolMs,
         lateIn,
         lateInMs,
-        earlyOut: earlyOut && !autoLogout, // If auto-logout, we show autoLogout violation instead of earlyOut
+        earlyOut: earlyOut && !autoLogout, // If auto-logout, show autoLogout instead of earlyOut
         earlyOutMs,
         autoLogout,
-        any: breakViol || brbViol || lateIn || earlyOut || autoLogout,
+        any: breakViol || brbViol || totalBreakViol || lateIn || (earlyOut && !autoLogout) || autoLogout,
     };
 }
 
@@ -157,6 +211,27 @@ export function formatDuration(ms: number): string {
     const m = Math.floor((totalSecs % 3600) / 60);
     const s = totalSecs % 60;
     return `${pad(h)}:${pad(m)}:${pad(s)}`;
+}
+
+/** Formats duration as compact hours/minutes with zero seconds (e.g. "6h 39m", "42m", "<1m", "0m"). */
+export function formatDurationHM(ms: number): string {
+    if (ms <= 0) return '0m';
+    const totalMins = Math.floor(ms / 60000);
+    if (totalMins === 0) return '<1m';
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
+    if (h === 0) return `${m}m`;
+    return m > 0 ? `${h}h ${pad(m)}m` : `${h}h`;
+}
+
+/** Formats exceed durations with no seconds; shows "Xh Ym" whenever >= 60 minutes (e.g. "14m", "1h 32m"). */
+export function formatExceedHM(ms: number): string {
+    if (ms <= 0) return '0m';
+    const totalMins = Math.max(1, Math.round(ms / 60000));
+    if (totalMins < 60) return `${totalMins}m`;
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
+    return `${h}h ${pad(m)}m`;
 }
 
 /** Alias for formatDuration to match elite naming conventions */
@@ -182,6 +257,13 @@ export function getEliteTime(ts: number, timezone = 'America/Chicago') {
 export function formatTime(ts: number): string {
     return new Date(ts).toLocaleTimeString('en-US', {
         hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
+    });
+}
+
+/** Formats clock time without seconds (e.g. "08:04 AM"). */
+export function formatTimeNoSec(ts: number): string {
+    return new Date(ts).toLocaleTimeString('en-US', {
+        hour: '2-digit', minute: '2-digit', hour12: true,
     });
 }
 
@@ -310,7 +392,20 @@ export function computeSession(logs: TimeLog[]): DaySession {
 
     for (const log of logs) {
         switch (log.eventType) {
-            case 'punch_in': session.punchIn = log.timestamp; break;
+            case 'punch_in':
+                // Preserve first arrival of the day; clear prior punchOut when resuming on the same day
+                if (session.punchIn === undefined) session.punchIn = log.timestamp;
+                session.punchOut = undefined;
+                session.isAutoLogout = false;
+                if (breakStart !== null) {
+                    session.breaks.push({ start: breakStart, end: log.timestamp });
+                    breakStart = null;
+                }
+                if (brbStart !== null) {
+                    session.brbs.push({ start: brbStart, end: log.timestamp });
+                    brbStart = null;
+                }
+                break;
             case 'punch_out':
                 session.punchOut = log.timestamp;
                 session.isAutoLogout = false;
@@ -356,21 +451,53 @@ export function computeTotalTime(records: (BreakRecord | BRBRecord)[], now: numb
 
 export function computeWorkedTime(session: DaySession, now: number, date?: string, shiftEnd = '17:00', timezone = 'America/Chicago'): number {
     if (!session.punchIn) return 0;
-    
+
     let end = session.punchOut ?? now;
-    
+
     // If this is a past date and there's no punch out, cap it at shift end in user/shift timezone
     if (date && !session.punchOut) {
         const todayStr = dateStr(new Date(now));
         if (date < todayStr) {
             const shiftEndTs = toZonedTimestamp(date, shiftEnd, timezone);
-            end = Math.min(end, shiftEndTs);
+            end = Math.min(end, Math.max(session.punchIn, shiftEndTs));
         }
     }
-    
-    const totalBreak = computeTotalTime(session.breaks, end);
-    const totalBrb = computeTotalTime(session.brbs, end);
-    return Math.max(0, end - session.punchIn - totalBreak - totalBrb);
+
+    // Sum segment-by-segment so same-day re-logins after an accidental logout never double-count gaps or go negative
+    let workedMs = 0;
+    let segStart: number | null = null;
+    let hasSeenPunchIn = false;
+
+    for (const log of session.logs) {
+        if (log.timestamp > end) break;
+        switch (log.eventType) {
+            case 'punch_in':
+                hasSeenPunchIn = true;
+                if (segStart === null) segStart = log.timestamp;
+                break;
+            case 'break_start':
+            case 'brb_start':
+            case 'punch_out':
+            case 'auto_logout':
+                if (segStart !== null) {
+                    workedMs += Math.max(0, log.timestamp - segStart);
+                    segStart = null;
+                }
+                break;
+            case 'break_end':
+            case 'brb_end':
+                if (hasSeenPunchIn && segStart === null) {
+                    segStart = log.timestamp;
+                }
+                break;
+        }
+    }
+
+    if (segStart !== null) {
+        workedMs += Math.max(0, end - segStart);
+    }
+
+    return workedMs;
 }
 
 export function countBreaks(logs: TimeLog[]): number {
