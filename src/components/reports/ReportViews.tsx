@@ -64,38 +64,41 @@ export function ViolBadge({ r }: { r: DayRow }) {
                     {r.anomalies[0]}
                 </span>
             )}
-            {r.totalBreakViol && (
+            {r.totalBreakViol ? (
                 <span className="inline-flex items-center gap-1 text-[10px] font-bold text-fuchsia-300 bg-fuchsia-500/15 border border-fuchsia-500/35 px-2 py-0.5 rounded-md">
                     <Flame size={10} className="shrink-0" />
                     Brk+BRB (+{formatExceedHM(r.totalBreakViolMs)})
                 </span>
-            )}
-            {r.breakViol && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-orange-300 bg-orange-500/10 border border-orange-500/25 px-2 py-0.5 rounded-md">
-                    <AlertTriangle size={10} className="shrink-0" />
-                    Break (+{formatExceedHM(r.breakViolMs)})
-                </span>
-            )}
-            {r.brbViol && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-sky-300 bg-sky-500/10 border border-sky-500/25 px-2 py-0.5 rounded-md">
-                    <AlertTriangle size={10} className="shrink-0" />
-                    BRB (+{formatExceedHM(r.brbViolMs)})
-                </span>
+            ) : (
+                <>
+                    {r.breakViol && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-orange-300 bg-orange-500/10 border border-orange-500/25 px-2 py-0.5 rounded-md">
+                            <AlertTriangle size={10} className="shrink-0" />
+                            Break (+{formatExceedHM(r.breakViolMs)})
+                        </span>
+                    )}
+                    {r.brbViol && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-sky-300 bg-sky-500/10 border border-sky-500/25 px-2 py-0.5 rounded-md">
+                            <AlertTriangle size={10} className="shrink-0" />
+                            BRB (+{formatExceedHM(r.brbViolMs)})
+                        </span>
+                    )}
+                </>
             )}
             {r.lateIn && (
                 <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-300 bg-amber-500/10 border border-amber-500/25 px-2 py-0.5 rounded-md">
                     <AlertTriangle size={10} className="shrink-0" />
-                    Late ({formatExceedHM(r.lateInMs)})
+                    Late (+{formatExceedHM(r.lateInMs)})
                 </span>
             )}
             {r.earlyOut && (
                 <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-300 bg-purple-500/10 border border-purple-500/25 px-2 py-0.5 rounded-md">
                     <AlertTriangle size={10} className="shrink-0" />
-                    Early ({formatExceedHM(r.earlyOutMs)})
+                    Early (-{formatExceedHM(r.earlyOutMs)})
                 </span>
             )}
             {r.autoLogout && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-rose-300 bg-rose-500/10 border border-rose-500/25 px-2 py-0.5 rounded-md">
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-300 bg-slate-500/15 border border-slate-500/30 px-2 py-0.5 rounded-md">
                     Auto Out
                 </span>
             )}
@@ -129,8 +132,8 @@ export function DailyReportTable({
     }
 
     const gridCols = showDate
-        ? 'minmax(175px, 1.35fr) minmax(118px, 0.9fr) 82px 86px 86px 96px 88px minmax(145px, 1.15fr) minmax(195px, 1.55fr) 36px'
-        : 'minmax(185px, 1.4fr) 82px 86px 86px 96px 88px minmax(150px, 1.2fr) minmax(205px, 1.6fr) 36px';
+        ? 'minmax(180px, 1.35fr) minmax(115px, 0.85fr) 82px 86px 115px minmax(165px, 1.25fr) minmax(145px, 1.1fr) minmax(185px, 1.4fr) 36px'
+        : 'minmax(190px, 1.45fr) 82px 86px 115px minmax(175px, 1.35fr) minmax(155px, 1.2fr) minmax(195px, 1.5fr) 36px';
 
     const SortHdr = ({
         k,
@@ -182,9 +185,8 @@ export function DailyReportTable({
                         Departure
                     </div>
                     <SortHdr k="workedMs" label="Net Active" className="text-emerald-400" />
-                    <SortHdr k="breakMs" label="Break" />
-                    <SortHdr k="brbMs" label="BRB" />
-                    <SortHdr k="totalBreakMs" label="Brks & Exceed" className="text-fuchsia-300" />
+                    <SortHdr k="totalBreakCount" label="Breaks Taken" className="text-zinc-300" />
+                    <SortHdr k="totalBreakMs" label="Brk+BRB / Exceed" className="text-fuchsia-300" />
                     <div className="text-[10px] font-mono font-bold tracking-widest uppercase text-zinc-300">
                         Compliance
                     </div>
@@ -194,136 +196,151 @@ export function DailyReportTable({
                 </div>
 
                 {/* Data Rows (click anywhere to audit/edit logs) */}
-                {rows.map((r, i) => (
-                    <div
-                        key={`${r.userId}-${r.date}-${i}`}
-                        onClick={() => onEdit(r)}
-                        title="Click row to inspect or edit daily logs"
-                        className={`grid gap-3 px-4 py-2.5 items-center rounded-xl transition-colors duration-150 border cursor-pointer group ${
-                            r.hasAnomaly
-                                ? 'border-amber-500/35 bg-amber-500/[0.04] hover:bg-amber-500/[0.08]'
-                                : 'border-white/[0.04] bg-[#121524]/70 hover:bg-[#181c30] hover:border-indigo-500/30'
-                        }`}
-                        style={{ gridTemplateColumns: gridCols }}
-                    >
-                        {/* Recruiter */}
-                        <div className="flex items-center gap-2.5 min-w-0">
-                            <div
-                                className={`w-8 h-8 rounded-lg border text-xs font-bold flex items-center justify-center shrink-0 ${
-                                    r.hasAnomaly
-                                        ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
-                                        : 'bg-indigo-500/15 border-indigo-500/30 text-indigo-300'
-                                }`}
-                            >
-                                {r.name[0]?.toUpperCase()}
-                            </div>
-                            <div className="min-w-0">
-                                <div className="font-semibold text-[13px] text-zinc-100 tracking-tight truncate group-hover:text-indigo-200 transition-colors">
-                                    {r.name}
+                {rows.map((r, i) => {
+                    const shiftTarget = 8 * 3600000;
+                    const workedDiff = r.workedMs > 0 ? r.workedMs - shiftTarget : 0;
+                    const workedDiffSign = workedDiff >= 0 ? '+' : '-';
+                    const workedDiffFormatted = workedDiff !== 0 ? `${workedDiffSign}${formatDurationHM(Math.abs(workedDiff))}` : '';
+
+                    return (
+                        <div
+                            key={`${r.userId}-${r.date}-${i}`}
+                            onClick={() => onEdit(r)}
+                            title="Click row to inspect or edit daily logs"
+                            className={`grid gap-3 px-4 py-2.5 items-center rounded-xl transition-colors duration-150 border cursor-pointer group ${
+                                r.hasAnomaly
+                                    ? 'border-amber-500/35 bg-amber-500/[0.04] hover:bg-amber-500/[0.08]'
+                                    : 'border-white/[0.04] bg-[#121524]/70 hover:bg-[#181c30] hover:border-indigo-500/30'
+                            }`}
+                            style={{ gridTemplateColumns: gridCols }}
+                        >
+                            {/* Recruiter */}
+                            <div className="flex items-center gap-2.5 min-w-0">
+                                <div
+                                    className={`w-8 h-8 rounded-lg border text-xs font-bold flex items-center justify-center shrink-0 ${
+                                        r.hasAnomaly
+                                            ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+                                            : 'bg-indigo-500/15 border-indigo-500/30 text-indigo-300'
+                                    }`}
+                                >
+                                    {r.name[0]?.toUpperCase()}
                                 </div>
-                                <div className="text-[10px] text-slate-500 truncate">{r.clientName}</div>
+                                <div className="min-w-0">
+                                    <div className="font-semibold text-[13px] text-zinc-100 tracking-tight truncate group-hover:text-indigo-200 transition-colors">
+                                        {r.name}
+                                    </div>
+                                    <div className="text-[10px] text-slate-500 truncate">{r.clientName}</div>
+                                </div>
                             </div>
-                        </div>
 
-                        {/* Date + Day combined */}
-                        {showDate && (
-                            <div className="text-xs font-mono text-zinc-300">
-                                <span className="font-medium">{r.date}</span>
-                                <span className="text-zinc-500 ml-1.5 font-sans text-[11px]">{dayName(r.date)}</span>
+                            {/* Date + Day combined */}
+                            {showDate && (
+                                <div className="text-xs font-mono text-zinc-300">
+                                    <span className="font-medium">{r.date}</span>
+                                    <span className="text-zinc-500 ml-1.5 font-sans text-[11px]">{dayName(r.date)}</span>
+                                </div>
+                            )}
+
+                            {/* Arrival (no seconds) */}
+                            <div className="text-xs font-mono text-zinc-300 font-medium">
+                                {r.punchIn ? formatTimeNoSec(r.punchIn) : <span className="text-zinc-600 font-sans">—</span>}
                             </div>
-                        )}
 
-                        {/* Arrival (no seconds) */}
-                        <div className="text-xs font-mono text-zinc-300 font-medium">
-                            {r.punchIn ? formatTimeNoSec(r.punchIn) : <span className="text-zinc-600 font-sans">—</span>}
-                        </div>
-
-                        {/* Departure (no seconds) */}
-                        <div className="text-xs font-mono text-zinc-300 font-medium">
-                            {r.punchOut ? (
-                                <span className={r.autoLogout ? 'text-rose-400 font-semibold' : 'text-zinc-300'}>
-                                    {formatTimeNoSec(r.punchOut)}
-                                </span>
-                            ) : r.punchIn ? (
-                                <span className="text-sky-400 font-bold text-[10px] uppercase tracking-wider bg-sky-500/10 px-2 py-0.5 rounded-md border border-sky-500/20">
-                                    Active
-                                </span>
-                            ) : (
-                                <span className="text-zinc-600 font-sans">—</span>
-                            )}
-                        </div>
-
-                        {/* Net Active (no seconds) */}
-                        <div className="text-xs font-mono text-emerald-400 font-semibold">
-                            {r.workedMs > 0 ? formatDurationHM(r.workedMs) : <span className="text-zinc-600 font-sans">—</span>}
-                        </div>
-
-                        {/* Break duration + count */}
-                        <div className={`text-xs font-mono flex items-center gap-1.5 ${r.breakViol ? 'text-orange-300 font-semibold' : 'text-zinc-300'}`}>
-                            {r.breakMs > 0 || r.breakCount > 0 ? (
-                                <>
-                                    <span>{formatDurationHM(r.breakMs)}</span>
-                                    <span className="text-[10px] text-zinc-500">({r.breakCount})</span>
-                                </>
-                            ) : (
-                                <span className="text-zinc-600 font-sans">—</span>
-                            )}
-                        </div>
-
-                        {/* BRB duration + count */}
-                        <div className={`text-xs font-mono flex items-center gap-1.5 ${r.brbViol ? 'text-sky-300 font-semibold' : 'text-zinc-300'}`}>
-                            {r.brbMs > 0 || r.brbCount > 0 ? (
-                                <>
-                                    <span>{formatDurationHM(r.brbMs)}</span>
-                                    <span className="text-[10px] text-zinc-500">({r.brbCount})</span>
-                                </>
-                            ) : (
-                                <span className="text-zinc-600 font-sans">—</span>
-                            )}
-                        </div>
-
-                        {/* Total Breaks Count + Brk+BRB Combined + Exceed */}
-                        <div className="flex items-center gap-1.5 text-xs font-mono">
-                            {r.totalBreakMs > 0 || r.totalBreakCount > 0 ? (
-                                <>
-                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white/[0.06] text-zinc-300 border border-white/10">
-                                        {r.totalBreakCount}×
+                            {/* Departure (no seconds) */}
+                            <div className="text-xs font-mono text-zinc-300 font-medium">
+                                {r.punchOut ? (
+                                    <span className={r.autoLogout ? 'text-rose-400 font-semibold' : 'text-zinc-300'}>
+                                        {formatTimeNoSec(r.punchOut)}
                                     </span>
-                                    <span className={r.totalBreakViol ? 'text-fuchsia-300 font-semibold' : 'text-zinc-200'}>
-                                        {formatDurationHM(r.totalBreakMs)}
+                                ) : r.punchIn ? (
+                                    <span className="text-sky-400 font-bold text-[10px] uppercase tracking-wider bg-sky-500/10 px-2 py-0.5 rounded-md border border-sky-500/20">
+                                        Active
                                     </span>
-                                    {r.totalBreakViol && (
-                                        <span className="text-[10px] font-bold text-rose-200 bg-rose-500/20 border border-rose-500/35 px-1.5 py-0.5 rounded">
-                                            +{formatExceedHM(r.totalBreakViolMs)}
+                                ) : (
+                                    <span className="text-zinc-600 font-sans">—</span>
+                                )}
+                            </div>
+
+                            {/* Net Active with Benchmark Variance */}
+                            <div className="text-xs font-mono font-semibold">
+                                {r.workedMs > 0 ? (
+                                    <div className="flex items-baseline gap-1">
+                                        <span className="text-emerald-400">{formatDurationHM(r.workedMs)}</span>
+                                        {workedDiffFormatted && (
+                                            <span
+                                                className={`text-[10px] font-normal ${
+                                                    workedDiff >= 0 ? 'text-emerald-500/80' : 'text-slate-500'
+                                                }`}
+                                            >
+                                                ({workedDiffFormatted})
+                                            </span>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <span className="text-zinc-600 font-sans">—</span>
+                                )}
+                            </div>
+
+                            {/* Breaks Taken (Clean Breakdown of B and R) */}
+                            <div className="text-xs font-mono flex items-center gap-1.5">
+                                {r.totalBreakCount > 0 ? (
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white/[0.06] text-zinc-300 border border-white/10">
+                                            {r.totalBreakCount}×
                                         </span>
-                                    )}
-                                </>
-                            ) : (
-                                <span className="text-zinc-600 font-sans">—</span>
-                            )}
-                        </div>
+                                        <span className="text-zinc-300 text-[11px]">
+                                            {r.breakCount > 0 && <span>{r.breakCount}B ({formatDurationHM(r.breakMs)})</span>}
+                                            {r.breakCount > 0 && r.brbCount > 0 && <span className="text-zinc-600 mx-1">·</span>}
+                                            {r.brbCount > 0 && <span>{r.brbCount}R ({formatDurationHM(r.brbMs)})</span>}
+                                        </span>
+                                    </div>
+                                ) : (
+                                    <span className="text-zinc-600 font-sans">—</span>
+                                )}
+                            </div>
 
-                        {/* Compliance */}
-                        <div className="min-w-0">
-                            <ViolBadge r={r} />
-                        </div>
+                            {/* Combined Duration & Exceed Indicator */}
+                            <div className="flex items-center gap-1.5 text-xs font-mono">
+                                {r.totalBreakMs > 0 ? (
+                                    <>
+                                        <span className={r.totalBreakViol ? 'text-fuchsia-300 font-semibold' : 'text-zinc-200'}>
+                                            {formatDurationHM(r.totalBreakMs)}
+                                        </span>
+                                        {r.totalBreakViol ? (
+                                            <span className="text-[10px] font-bold text-rose-200 bg-rose-500/20 border border-rose-500/35 px-1.5 py-0.5 rounded">
+                                                +{formatExceedHM(r.totalBreakViolMs)}
+                                            </span>
+                                        ) : (
+                                            <span className="text-[10px] text-emerald-400/80 font-bold">OK</span>
+                                        )}
+                                    </>
+                                ) : (
+                                    <span className="text-zinc-600 font-sans">—</span>
+                                )}
+                            </div>
 
-                        {/* Edit trigger */}
-                        <div className="flex justify-end">
-                            <button
-                                type="button"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onEdit(r);
-                                }}
-                                title="Edit daily logs"
-                                className="p-1.5 rounded-lg bg-white/[0.04] hover:bg-indigo-500/25 border border-white/[0.07] hover:border-indigo-500/40 text-zinc-400 hover:text-indigo-200 transition-all opacity-50 group-hover:opacity-100 cursor-pointer"
-                            >
-                                <Pencil size={12} />
-                            </button>
+                            {/* Compliance */}
+                            <div className="min-w-0">
+                                <ViolBadge r={r} />
+                            </div>
+
+                            {/* Edit trigger */}
+                            <div className="flex justify-end">
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onEdit(r);
+                                    }}
+                                    title="Edit daily logs"
+                                    className="p-1.5 rounded-lg bg-white/[0.04] hover:bg-indigo-500/25 border border-white/[0.07] hover:border-indigo-500/40 text-zinc-400 hover:text-indigo-200 transition-all opacity-50 group-hover:opacity-100 cursor-pointer"
+                                >
+                                    <Pencil size={12} />
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
 
                 {/* Sticky Totals & Overall Exceed Bar */}
                 <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-5 py-3 mt-1 rounded-xl bg-[#121629]/95 border border-indigo-500/25 shadow-lg">
@@ -414,7 +431,7 @@ export function RecruiterRollupTable({
                     <span>Avg Exceed</span>
                     <span className="text-fuchsia-300">Overall Exceed</span>
                     <span>Violations</span>
-                    <span>Compliance</span>
+                    <span>Break Score</span>
                     <span className="text-right">Actions</span>
                 </div>
 
@@ -478,14 +495,15 @@ export function RecruiterRollupTable({
 
                         <div>
                             <div className="flex items-center justify-between text-[11px] font-mono font-bold mb-1">
-                                <span className={r.complianceRate >= 90 ? 'text-emerald-400' : r.complianceRate >= 70 ? 'text-amber-400' : 'text-rose-400'}>
-                                    {r.complianceRate}%
+                                <span className={r.breakComplianceRate >= 90 ? 'text-emerald-400' : r.breakComplianceRate >= 70 ? 'text-amber-400' : 'text-rose-400'}>
+                                    {r.breakComplianceRate}%
                                 </span>
+                                <span className="text-[9px] text-slate-400">{r.punctualityRate}% in</span>
                             </div>
                             <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
                                 <div
-                                    className={`h-full rounded-full ${r.complianceRate >= 90 ? 'bg-emerald-500' : r.complianceRate >= 70 ? 'bg-amber-500' : 'bg-rose-500'}`}
-                                    style={{ width: `${r.complianceRate}%` }}
+                                    className={`h-full rounded-full ${r.breakComplianceRate >= 90 ? 'bg-emerald-500' : r.breakComplianceRate >= 70 ? 'bg-amber-500' : 'bg-rose-500'}`}
+                                    style={{ width: `${r.breakComplianceRate}%` }}
                                 />
                             </div>
                         </div>

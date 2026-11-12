@@ -80,83 +80,6 @@ type ViolFilter =
     | 'all'
     | null;
 
-/* ── Per-Recruiter Summary Card (multi-day breakdown) ───────────────────────── */
-function UserSummaryCard({
-    name,
-    clientName,
-    rows,
-    onPrint,
-}: {
-    name: string;
-    clientName: string;
-    rows: DayRow[];
-    onPrint: () => void;
-}) {
-    const active = rows.filter(r => r.punchIn || r.workedMs > 0 || r.totalBreakMs > 0);
-    const s = summarizeRows(active);
-    const denom = s.activeDays || 1;
-    const avgCombined = s.totalCombinedBreak / denom;
-    const avgExceed = s.totalBreakViolMsSum / denom;
-    const totalViol =
-        s.breakViolDays + s.brbViolDays + s.totalBreakViolDays + s.lateInDays + s.earlyOutDays + s.autoLogoutDays;
-    const hasViol = totalViol > 0 || s.anomalyDays > 0;
-
-    return (
-        <div
-            className={`panel-3d transition-all hover:scale-[1.01] p-3.5 rounded-2xl ${
-                hasViol
-                    ? 'border-rose-500/35 bg-rose-950/20 shadow-[0_8px_24px_rgba(225,29,72,0.12)]'
-                    : 'border-white/[0.08] bg-[#0b0d18]/75'
-            }`}
-        >
-            <div className="flex items-center justify-between gap-2 mb-2.5">
-                <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-600 to-blue-800 border border-indigo-400/30 flex items-center justify-center text-xs font-black text-white shrink-0">
-                        {name[0]?.toUpperCase()}
-                    </div>
-                    <div className="min-w-0">
-                        <p className="text-sm font-extrabold text-white tracking-tight truncate">{name}</p>
-                        {clientName && <p className="text-[10px] text-slate-500 truncate">{clientName}</p>}
-                    </div>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                    {hasViol && (
-                        <span className="flex items-center gap-1 text-[10px] text-rose-300 font-bold bg-rose-500/20 border border-rose-500/30 px-2 py-0.5 rounded-full">
-                            <AlertTriangle size={10} /> {totalViol}
-                        </span>
-                    )}
-                    <button
-                        type="button"
-                        onClick={onPrint}
-                        title="Print / Save PDF Scorecard"
-                        className="p-1.5 rounded-lg bg-white/[0.05] hover:bg-emerald-500/20 border border-white/10 text-slate-300 hover:text-emerald-300 transition-colors cursor-pointer"
-                    >
-                        <Printer size={12} />
-                    </button>
-                </div>
-            </div>
-            <div className="grid grid-cols-3 gap-1.5 text-center">
-                {[
-                    { label: 'Active Days', val: `${s.activeDays}d`, color: 'text-white' },
-                    { label: 'Net Active', val: formatDurationHM(s.totalWorked), color: 'text-emerald-400' },
-                    { label: 'Total Brks', val: `${s.totalBreakCountSum} (${s.totalBreakEventsSum}B+${s.totalBrbEventsSum}R)`, color: 'text-zinc-200' },
-                    { label: 'Avg Brk+BRB/d', val: formatDurationHM(avgCombined), color: avgCombined > COMBINED_LIMIT_MS ? 'text-fuchsia-400' : 'text-emerald-400' },
-                    { label: 'Avg Exceed/d', val: avgExceed > 0 ? `+${formatExceedHM(avgExceed)}` : '0m', color: avgExceed > 0 ? 'text-rose-400' : 'text-emerald-400' },
-                    { label: 'Overall Exceed', val: s.totalBreakViolMsSum > 0 ? `+${formatExceedHM(s.totalBreakViolMsSum)}` : '0m', color: s.totalBreakViolMsSum > 0 ? 'text-rose-300' : 'text-slate-500' },
-                    { label: 'Avg Brk/d', val: formatDurationHM(s.totalBreak / denom), color: s.totalBreak / denom > BREAK_LIMIT_MS ? 'text-orange-400' : 'text-amber-300' },
-                    { label: 'Avg BRB/d', val: formatDurationHM(s.totalBrb / denom), color: s.totalBrb / denom > BRB_LIMIT_MS ? 'text-sky-400' : 'text-blue-300' },
-                    { label: 'Auto Outs', val: `${s.autoLogoutDays}d`, color: s.autoLogoutDays > 0 ? 'text-red-400' : 'text-slate-500' },
-                ].map(stat => (
-                    <div key={stat.label} className="bg-black/30 border border-white/5 rounded-lg py-1.5 px-1.5">
-                        <p className="text-[8px] font-bold tracking-wider uppercase text-slate-500 mb-0.5 truncate">{stat.label}</p>
-                        <p className={`text-[11px] font-extrabold font-mono tracking-tight truncate ${stat.color}`}>{stat.val}</p>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-}
-
 /* ── Comparison Card for compare mode ─────────────────────────────────────── */
 function ComparisonCard({
     name,
@@ -176,10 +99,6 @@ function ComparisonCard({
     const avgExceed = s.totalBreakViolMsSum / denom;
     const totalViol =
         s.breakViolDays + s.brbViolDays + s.totalBreakViolDays + s.lateInDays + s.earlyOutDays + s.autoLogoutDays;
-    const cleanDays =
-        s.activeDays -
-        active.filter(r => r.breakViol || r.brbViol || r.totalBreakViol || r.lateIn || r.earlyOut || r.autoLogout).length;
-    const complianceRate = s.activeDays > 0 ? Math.round((cleanDays / s.activeDays) * 100) : 100;
 
     return (
         <div className="panel-3d p-4 rounded-[1.25rem] flex flex-col gap-3">
@@ -215,9 +134,9 @@ function ComparisonCard({
                     <div className="flex flex-col items-center justify-center py-2">
                         <div
                             className={`relative w-20 h-20 rounded-full border-4 flex items-center justify-center ${
-                                complianceRate >= 90
+                                s.breakComplianceRate >= 90
                                     ? 'border-emerald-500/60'
-                                    : complianceRate >= 70
+                                    : s.breakComplianceRate >= 70
                                         ? 'border-amber-500/60'
                                         : 'border-rose-500/60'
                             }`}
@@ -225,20 +144,20 @@ function ComparisonCard({
                             <div className="text-center">
                                 <p
                                     className={`text-xl font-black font-mono ${
-                                        complianceRate >= 90
+                                        s.breakComplianceRate >= 90
                                             ? 'text-emerald-400'
-                                            : complianceRate >= 70
+                                            : s.breakComplianceRate >= 70
                                                 ? 'text-amber-400'
                                                 : 'text-rose-400'
                                     }`}
                                 >
-                                    {complianceRate}%
+                                    {s.breakComplianceRate}%
                                 </p>
-                                <p className="text-[8px] font-bold uppercase tracking-widest text-slate-500">Clean</p>
+                                <p className="text-[8px] font-bold uppercase tracking-widest text-slate-500">Clean Brk</p>
                             </div>
                         </div>
                         <p className="text-[10px] text-slate-400 font-mono mt-1.5">
-                            {totalViol} violation{totalViol !== 1 ? 's' : ''}
+                            {s.punctualityRate}% on-time · {totalViol} flags
                         </p>
                     </div>
 
@@ -1177,7 +1096,7 @@ export default function MasterReports() {
                         <div className="panel-3d border border-indigo-500/20 border-t-2 border-t-indigo-500 bg-[#0b0c14]/70 p-3.5 rounded-2xl flex flex-col justify-between min-h-[90px]">
                             <div className="flex items-center justify-between">
                                 <p className="text-[10px] font-black tracking-widest uppercase text-slate-400">
-                                    Net Active &amp; Avg / Person
+                                    Net Active &amp; Production
                                 </p>
                                 <span className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400">
                                     <Users size={12} />
@@ -1188,12 +1107,12 @@ export default function MasterReports() {
                                     <p className="text-xl lg:text-2xl font-black font-mono tracking-tight text-indigo-400">
                                         {formatDurationHM(baseS.totalWorked)}
                                     </p>
-                                    <span className="text-[11px] font-mono text-slate-400">
-                                        Avg {formatDurationHM(avgWorkedMs)}/p
+                                    <span className={`text-[11px] font-mono font-bold ${baseS.workedVarianceMs >= 0 ? 'text-emerald-400' : 'text-slate-400'}`}>
+                                        {baseS.workedVarianceMs >= 0 ? `+${formatDurationHM(baseS.workedVarianceMs)}` : `-${formatDurationHM(Math.abs(baseS.workedVarianceMs))}`}
                                     </span>
                                 </div>
                                 <p className="text-[10px] font-medium text-slate-500 mt-1 truncate">
-                                    {uniqueUserCount} {uniqueUserCount === 1 ? 'recruiter' : 'recruiters'} · {baseS.activeDays} active days
+                                    {uniqueUserCount} {uniqueUserCount === 1 ? 'recruiter' : 'recruiters'} · {baseS.activeDays}d active · Avg {formatDurationHM(avgWorkedMs)}/p
                                 </p>
                             </div>
                         </div>
@@ -1202,7 +1121,7 @@ export default function MasterReports() {
                         <div className="panel-3d border border-cyan-500/20 border-t-2 border-t-cyan-500 bg-[#0b0c14]/70 p-3.5 rounded-2xl flex flex-col justify-between min-h-[90px]">
                             <div className="flex items-center justify-between">
                                 <p className="text-[10px] font-black tracking-widest uppercase text-slate-400">
-                                    Total Breaks &amp; Avg Brk+BRB/d
+                                    Total Combined Breaks
                                 </p>
                                 <span className="p-1.5 rounded-lg bg-cyan-500/10 text-cyan-400">
                                     <Coffee size={12} />
@@ -1211,14 +1130,14 @@ export default function MasterReports() {
                             <div className="mt-1.5">
                                 <div className="flex items-baseline gap-2">
                                     <p className="text-xl lg:text-2xl font-black font-mono tracking-tight text-cyan-300">
-                                        {baseS.totalBreakCountSum} brks
+                                        {formatDurationHM(baseS.totalCombinedBreak)}
                                     </p>
                                     <span className="text-[11px] font-mono text-slate-300">
                                         Avg {formatDurationHM(avgCombinedBreakPerDay)}/d
                                     </span>
                                 </div>
                                 <p className="text-[10px] font-medium text-slate-500 mt-1 truncate">
-                                    {baseS.totalBreakEventsSum} Break ({formatDurationHM(baseS.totalBreak)}) · {baseS.totalBrbEventsSum} BRB ({formatDurationHM(baseS.totalBrb)})
+                                    {baseS.totalBreakCountSum} breaks ({baseS.totalBreakEventsSum}B + {baseS.totalBrbEventsSum}R) · 1h 25m budget
                                 </p>
                             </div>
                         </div>
@@ -1237,7 +1156,7 @@ export default function MasterReports() {
                         >
                             <div className="flex items-center justify-between w-full">
                                 <p className="text-[10px] font-black tracking-widest uppercase text-slate-400">
-                                    Overall Break Exceed (Brk+BRB)
+                                    Overall Break Exceed (Lost Time)
                                 </p>
                                 <span className={`p-1.5 rounded-lg ${baseS.totalBreakViolMsSum > 0 ? 'bg-fuchsia-500/15 text-fuchsia-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
                                     <Flame size={12} />
@@ -1245,7 +1164,7 @@ export default function MasterReports() {
                             </div>
                             <div className="mt-1.5">
                                 <div className="flex items-baseline gap-2">
-                                    <p className={`text-xl lg:text-2xl font-black font-mono tracking-tight ${baseS.totalBreakViolMsSum > 0 ? 'text-fuchsia-400' : 'text-emerald-400'}`}>
+                                    <p className={`text-xl lg:text-2xl font-black font-mono tracking-tight ${baseS.totalBreakViolMsSum > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
                                         {baseS.totalBreakViolMsSum > 0 ? `+${formatExceedHM(baseS.totalBreakViolMsSum)}` : '0m'}
                                     </p>
                                     <span className="text-[11px] font-mono text-slate-300">
@@ -1253,7 +1172,7 @@ export default function MasterReports() {
                                     </span>
                                 </div>
                                 <p className="text-[10px] font-medium text-slate-500 mt-1 truncate">
-                                    Total Brk+BRB {formatDurationHM(baseS.totalCombinedBreak)} · {baseS.totalBreakViolDays} of {baseS.activeDays}d exceeded
+                                    {baseS.totalBreakViolDays} of {baseS.activeDays}d exceeded · {baseS.cleanBreakDays}d clean
                                 </p>
                             </div>
                         </button>
@@ -1270,7 +1189,7 @@ export default function MasterReports() {
                         >
                             <div className="flex items-center justify-between w-full">
                                 <p className="text-[10px] font-black tracking-widest uppercase text-slate-400">
-                                    Compliance &amp; Audit Queue
+                                    Break &amp; Attendance Quality
                                 </p>
                                 <span className={`p-1.5 rounded-lg ${baseS.anomalyDays > 0 ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/10 text-emerald-400'}`}>
                                     <ShieldAlert size={12} />
@@ -1280,23 +1199,21 @@ export default function MasterReports() {
                                 <div className="flex items-baseline gap-2">
                                     <p
                                         className={`text-xl lg:text-2xl font-black font-mono tracking-tight ${
-                                            complianceRate >= 90
+                                            baseS.breakComplianceRate >= 90
                                                 ? 'text-emerald-400'
-                                                : complianceRate >= 70
+                                                : baseS.breakComplianceRate >= 70
                                                     ? 'text-amber-400'
                                                     : 'text-rose-400'
                                         }`}
                                     >
-                                        {complianceRate}% clean
+                                        {baseS.breakComplianceRate}% break clean
                                     </p>
-                                    {baseS.anomalyDays > 0 && (
-                                        <span className="text-[11px] font-mono font-bold text-amber-300">
-                                            {baseS.anomalyDays} audit{baseS.anomalyDays !== 1 ? 's' : ''}
-                                        </span>
-                                    )}
+                                    <span className="text-[11px] font-mono text-slate-400">
+                                        {baseS.punctualityRate}% on-time
+                                    </span>
                                 </div>
                                 <p className="text-[10px] font-medium text-slate-500 mt-1 truncate">
-                                    {totalViol} total violations · click any row to audit
+                                    {baseS.lateInDays} Late · {baseS.autoLogoutDays} Auto-Out · {baseS.anomalyDays} Audits
                                 </p>
                             </div>
                         </button>
@@ -1675,31 +1592,6 @@ export default function MasterReports() {
                 onSave={handleSavePolicy}
                 onClose={() => setPolicyModalOpen(false)}
             />
-
-            {!loading && isMultiDay && viewMode === 'daily' && uniqueUsers.length > 0 && uniqueUsers.length <= 12 && (
-                <div className="space-y-3 pt-3 border-t border-white/10">
-                    <div className="flex items-center gap-2">
-                        <div className="p-1.5 bg-gradient-to-br from-[#ffd700]/20 to-[#d4af37]/10 rounded-lg border border-[#ffd700]/30">
-                            <BarChart2 size={13} className="text-[#ffd700]" />
-                        </div>
-                        <h3 className="text-xs font-black text-white tracking-wider uppercase">Per-Recruiter Breakdown</h3>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {uniqueUsers.map((uid: string) => {
-                            const uRows = filteredRows.filter(r => r.userId === uid);
-                            return (
-                                <UserSummaryCard
-                                    key={uid}
-                                    name={uRows[0]?.name ?? uid}
-                                    clientName={uRows[0]?.clientName ?? ''}
-                                    rows={uRows}
-                                    onPrint={() => handlePrintRecruiter(uid, uRows[0]?.name ?? uid, uRows[0]?.clientName ?? '')}
-                                />
-                            );
-                        })}
-                    </div>
-                </div>
-            )}
 
             {mounted && createPortal(searchPortal, document.body)}
             {mounted && createPortal(exportPortal, document.body)}
