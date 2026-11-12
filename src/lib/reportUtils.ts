@@ -851,9 +851,3 @@ export function openPrintableScorecard(
     w.document.close();
     return true;
 }
-
-    w.document.open();
-    w.document.write(html);
-    w.document.close();
-    return true;
-}
