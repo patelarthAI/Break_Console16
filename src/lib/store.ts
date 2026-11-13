@@ -1490,15 +1490,7 @@ export async function getWeeklyBreakStats(clientName?: string, force = false): P
 
 // ─── Notifications ────────────────────────────────────────────────────────────
 
-export async function getActiveNotifications(userId: string): Promise<AppNotification[]> {
-    let localDismissed = new Set<string>();
-    if (typeof window !== 'undefined' && userId) {
-        try {
-            const cached = localStorage.getItem(`dismissed_notifs_${userId}`);
-            if (cached) JSON.parse(cached).forEach((id: string) => localDismissed.add(id));
-        } catch {}
-    }
-
+export async function getActiveNotifications(userId?: string): Promise<AppNotification[]> {
     try {
         const { data: notifs, error: notifsError } = await supabase
             .from('notifications')
@@ -1511,28 +1503,14 @@ export async function getActiveNotifications(userId: string): Promise<AppNotific
             return [];
         }
 
-        const dismissedIds = new Set<string>(localDismissed);
-        if (userId) {
-            try {
-                const { data: dismissals } = await supabase
-                    .from('notification_dismissals')
-                    .select('notification_id')
-                    .eq('user_id', userId);
-                (dismissals ?? []).forEach((d: any) => dismissedIds.add(d.notification_id));
-            } catch (err) {
-                console.warn('[Notifications] Dismissals lookup notice:', err);
-            }
-        }
-
-        return (notifs ?? [])
-            .filter((n: any) => !dismissedIds.has(n.id))
-            .map((n: any) => ({
-                id: n.id,
-                message: n.message,
-                createdBy: n.created_by,
-                createdAt: n.created_at,
-                isActive: n.is_active,
-            }));
+        // Standing 2026 broadcast: All active broadcasts are delivered live to all users (no dismiss filter)
+        return (notifs ?? []).map((n: any) => ({
+            id: n.id,
+            message: n.message,
+            createdBy: n.created_by,
+            createdAt: n.created_at,
+            isActive: n.is_active,
+        }));
     } catch (e) {
         console.error('[Notifications] Error in getActiveNotifications:', e);
         return [];
