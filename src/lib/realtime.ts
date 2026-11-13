@@ -16,8 +16,15 @@ interface ListenerEntry {
     callback: RealtimeCallback;
 }
 
+interface BroadcastListenerEntry {
+    id: string;
+    event: string;
+    callback: (payload: any, event: string) => void;
+}
+
 let sharedChannel: RealtimeChannel | null = null;
 let listeners: ListenerEntry[] = [];
+let broadcastListeners: BroadcastListenerEntry[] = [];
 let listenerIdCounter = 0;
 let isConnected = false;
 let connectionAttempts = 0;
@@ -46,7 +53,7 @@ function buildAndSubscribeChannel(): void {
         sharedChannel = null;
     }
 
-    if (listeners.length === 0) {
+    if (listeners.length === 0 && broadcastListeners.length === 0) {
         setConnectionStatus('disconnected');
         return;
     }
@@ -63,6 +70,25 @@ function buildAndSubscribeChannel(): void {
     let channel = supabase.channel('brigade-pulse-shared', {
         config: { broadcast: { self: false } },
     });
+
+    // Listen for ephemeral broadcast events across shared channel (zero DB writes)
+    channel = channel.on(
+        'broadcast' as any,
+        { event: '*' },
+        (data: any) => {
+            const eventName = data.event || data.type || '*';
+            const eventPayload = data.payload ?? data;
+            for (const bl of broadcastListeners) {
+                if (bl.event === '*' || bl.event === eventName) {
+                    try {
+                        bl.callback(eventPayload, eventName);
+                    } catch (e) {
+                        console.error('[Realtime Broadcast] Listener error:', e);
+                    }
+                }
+            }
+        }
+    );
 
     for (const sub of uniqueSubscriptions.values()) {
         const opts: Record<string, string> = {
@@ -169,4 +195,44 @@ export function subscribe(
  */
 export function getRealtimeStatus(): ConnectionStatus {
     return connectionStatus;
+}
+
+/**
+ * Subscribe to Realtime broadcast events.
+ * Runs purely in memory across WebSocket clients — zero DB writes or storage impact.
+ */
+export function onBroadcast(
+    event: string,
+    callback: (payload: any, event: string) => void,
+): () => void {
+    const id = `bl_${++listenerIdCounter}`;
+    broadcastListeners.push({ id, event, callback });
+    scheduleRebuild();
+
+    return () => {
+        broadcastListeners = broadcastListeners.filter(b => b.id !== id);
+        scheduleRebuild();
+    };
+}
+
+/**
+ * Send an ephemeral broadcast message across the shared WebSocket channel.
+ * Completely bypasses PostgreSQL — 0 rows, 0 storage, 0 database compute.
+ */
+export async function sendBroadcast(event: string, payload: any): Promise<boolean> {
+    if (!sharedChannel) {
+        buildAndSubscribeChannel();
+    }
+    if (!sharedChannel) return false;
+    try {
+        await sharedChannel.send({
+            type: 'broadcast',
+            event,
+            payload,
+        });
+        return true;
+    } catch (err) {
+        console.warn('[Realtime Broadcast] send error:', err);
+        return false;
+    }
 }

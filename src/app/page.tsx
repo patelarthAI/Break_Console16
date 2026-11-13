@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LogOut, Check } from 'lucide-react';
+import { LogOut, Check, ShieldAlert } from 'lucide-react';
 import AuthModal from '@/components/AuthModal';
 import { useToast } from '@/components/Toast';
 import AppShell from '@/components/shell/AppShell';
@@ -15,6 +15,7 @@ import {
 } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 import { subscribe } from '@/lib/realtime';
+import { claimWorkstationSession, releaseWorkstationSession, listenForSessionOverride } from '@/lib/sessionLock';
 import {
   computeSession, computeWorkedTime, computeTotalTime,
   generateUUID, getTodayKey, setServerOffset, getRealNow, countBRBs, getPastDaysZoned,
@@ -206,6 +207,11 @@ export default function Home() {
     clockedOut: 0,
     offline: 0
   });
+  const [sessionOverride, setSessionOverride] = useState<{
+    time: string;
+    remoteDeviceId: string;
+    remoteUser?: string;
+  } | null>(null);
   const now = useClock();
   const { error: showError } = useToast();
 
@@ -262,6 +268,9 @@ export default function Home() {
 
     const saved = getCurrentUser();
     if (saved) {
+      if (!saved.isMaster) {
+        claimWorkstationSession(saved.id, saved.name);
+      }
       setUser(saved);
       if (saved.isApproved || saved.isMaster) {
         // Fire-and-forget: each dashboard renders its own loading/skeleton
@@ -345,7 +354,23 @@ export default function Home() {
     }
   }, [user, loadTeamStatus, loadLogs, showError]);
 
+  // Realtime single-active-device session lock listener (0 database writes, 0 storage impact)
+  useEffect(() => {
+    if (!user || user.isMaster) return;
+    const unsubOverride = listenForSessionOverride(user.id, (info) => {
+      setSessionOverride(info);
+      setCurrentUser(null);
+    });
+    return () => {
+      unsubOverride();
+    };
+  }, [user]);
+
   const handleLogin = async (u: User) => { 
+    if (!u.isMaster) {
+      claimWorkstationSession(u.id, u.name);
+    }
+    setSessionOverride(null);
     setUser(u); 
     if (u.isApproved || u.isMaster) {
       await loadLogs(u); 
@@ -354,6 +379,8 @@ export default function Home() {
   };
 
   const handleLogout = () => {
+    releaseWorkstationSession();
+    setSessionOverride(null);
     setCurrentUser(null); 
     setUser(null); 
     setLogs([]); 
@@ -425,6 +452,12 @@ export default function Home() {
                 brbCount={brbCount}
                 totalBreakMs={totalBreakMs + totalBrbMs}
                 onAction={(action: string) => {
+                  // Guard: reject actions if session was overridden by another workstation
+                  if (sessionOverride) {
+                    showError('Session Overridden', 'This workstation was disconnected because your account was claimed on another machine.');
+                    return;
+                  }
+
                   // Guard: reject actions from mobile devices
                   if (typeof window !== 'undefined') {
                     const ua = navigator.userAgent || '';
@@ -459,6 +492,52 @@ export default function Home() {
           </motion.div>
         )}
       </AnimatePresence>
+      {sessionOverride && (
+        <div className="fixed inset-0 z-[350] flex items-center justify-center p-6 bg-[#02050A]/94 backdrop-blur-lg">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.94, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="w-full max-w-[420px] p-8 rounded-3xl bg-zinc-950/95 border border-red-500/30 shadow-[0_0_60px_rgba(239,68,68,0.25)] text-center flex flex-col items-center"
+          >
+            <div className="w-14 h-14 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400 mb-4 shadow-[0_0_20px_rgba(239,68,68,0.2)]">
+              <ShieldAlert size={28} />
+            </div>
+            <div className="text-[10px] font-mono font-bold tracking-[0.2em] uppercase text-red-400 mb-2">
+              Single-Device Security Lock
+            </div>
+            <h2 className="text-xl font-bold text-white mb-2">
+              Workstation Disconnected
+            </h2>
+            <p className="text-xs text-zinc-400 leading-relaxed mb-6">
+              Your recruiter account was just accessed on another computer <span className="font-mono text-amber-300 font-bold">#{sessionOverride.remoteDeviceId}</span> at <span className="font-mono text-zinc-200">{sessionOverride.time}</span>.
+              <br /><br />
+              To prevent proxy break taking and ensure floor integrity, simultaneous sessions across multiple machines are locked.
+            </p>
+            <div className="flex gap-3 w-full">
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="flex-1 py-3 px-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-zinc-300 text-xs font-bold transition-all cursor-pointer"
+              >
+                Sign Out
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (user) {
+                    claimWorkstationSession(user.id, user.name);
+                    setCurrentUser(user);
+                    setSessionOverride(null);
+                  }
+                }}
+                className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs font-bold transition-all shadow-[0_0_25px_rgba(239,68,68,0.35)] cursor-pointer"
+              >
+                Reclaim This Desk
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </main>
   );
 }
