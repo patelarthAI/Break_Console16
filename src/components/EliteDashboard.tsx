@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { motion, useMotionValue, useSpring, AnimatePresence } from 'framer-motion';
-import { LogIn, LogOut, Coffee, RotateCcw, Clock3, Play } from 'lucide-react';
+import { LogIn, LogOut, Coffee, RotateCcw, Clock3, Play, SmartphoneOff } from 'lucide-react';
 import { User, TimeLog } from '@/types';
 import TopBar from './elite/TopBar';
 import ControlCenter from './elite/ControlCenter';
@@ -149,7 +149,76 @@ function ActionTile({ label, sub, color, Icon, onClick, disabled, primary, gridS
   );
 }
 
-function ActionTiles({ status, onAction, onClockOutClick }: { status: string; onAction: (a: string) => void; onClockOutClick: () => void }) {
+function useIsMobileDevice() {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const checkMobile = () => {
+      const ua = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
+      const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|mobile|CriOS/i.test(ua);
+      const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 820;
+      const isTouch = typeof window !== 'undefined' && ('ontouchstart' in window || (navigator.maxTouchPoints && navigator.maxTouchPoints > 0));
+      setIsMobile(isMobileUA || (isNarrow && isTouch) || isNarrow);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  return isMobile;
+}
+
+function ActionTiles({ status, onAction, onClockOutClick, isMobile }: { status: string; onAction: (a: string) => void; onClockOutClick: () => void; isMobile: boolean }) {
+  if (isMobile) {
+    return (
+      <div style={{
+        flexShrink: 0,
+        background: 'transparent',
+        padding: '12px 14px 6px',
+      }}>
+        <div style={{
+          padding: '14px 16px',
+          borderRadius: 16,
+          background: 'linear-gradient(145deg, rgba(239, 68, 68, 0.08) 0%, rgba(15, 11, 26, 0.95) 100%)',
+          border: '1px solid rgba(239, 68, 68, 0.25)',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+        }}>
+          <div style={{
+            width: 38, height: 38, borderRadius: 12,
+            background: 'rgba(239, 68, 68, 0.15)',
+            border: '1px solid rgba(239, 68, 68, 0.35)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0,
+            color: '#F87171',
+          }}>
+            <SmartphoneOff size={18} />
+          </div>
+          <div>
+            <div style={{
+              fontSize: 11, fontWeight: 900,
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              color: '#F87171',
+              fontFamily: "'Satoshi', sans-serif",
+            }}>
+              Desktop Workstation Required
+            </div>
+            <div style={{
+              fontSize: 10,
+              color: 'rgba(255, 255, 255, 0.55)',
+              fontFamily: "'Satoshi', sans-serif",
+              marginTop: 2,
+              lineHeight: 1.35,
+            }}>
+              Shift controls (Clock In/Out, Break, BRB) are restricted to authorized desktop computers to ensure workplace compliance.
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const isWorking = status === 'working';
   const isOnBreak = status === 'on_break';
   const isOnBrb   = status === 'on_brb';
@@ -160,7 +229,49 @@ function ActionTiles({ status, onAction, onClockOutClick }: { status: string; on
       background: 'transparent',
       padding: '16px 16px 8px 16px',
     }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+      {/* Fallback for narrow mobile screen even prior to hydration */}
+      <div className="mobile-restricted-fallback" style={{
+        padding: '14px 16px',
+        borderRadius: 16,
+        background: 'linear-gradient(145deg, rgba(239, 68, 68, 0.08) 0%, rgba(15, 11, 26, 0.95) 100%)',
+        border: '1px solid rgba(239, 68, 68, 0.25)',
+        boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+        alignItems: 'center',
+        gap: 12,
+      }}>
+        <div style={{
+          width: 38, height: 38, borderRadius: 12,
+          background: 'rgba(239, 68, 68, 0.15)',
+          border: '1px solid rgba(239, 68, 68, 0.35)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0,
+          color: '#F87171',
+        }}>
+          <SmartphoneOff size={18} />
+        </div>
+        <div>
+          <div style={{
+            fontSize: 11, fontWeight: 900,
+            textTransform: 'uppercase',
+            letterSpacing: '0.08em',
+            color: '#F87171',
+            fontFamily: "'Satoshi', sans-serif",
+          }}>
+            Desktop Workstation Required
+          </div>
+          <div style={{
+            fontSize: 10,
+            color: 'rgba(255, 255, 255, 0.55)',
+            fontFamily: "'Satoshi', sans-serif",
+            marginTop: 2,
+            lineHeight: 1.35,
+          }}>
+            Shift controls (Clock In/Out, Break, BRB) are restricted to authorized desktop computers to ensure workplace compliance.
+          </div>
+        </div>
+      </div>
+
+      <div className="desktop-action-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         {isIdle && (
           <>
             <ActionTile
@@ -209,7 +320,7 @@ function ActionTiles({ status, onAction, onClockOutClick }: { status: string; on
         )}
       </div>
       {/* Keyboard hints */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 18, marginTop: 5 }}>
+      <div className="desktop-keyboard-hints" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 18, marginTop: 5 }}>
         {[['P','Punch'],['B','Break'],['R','BRB']].map(([k,l]) => (
           <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <kbd style={{
@@ -239,11 +350,18 @@ export default function EliteDashboard({
 }: EliteDashboardProps) {
   const [now, setNow] = useState(Date.now());
   const [weeklyStats, setWeeklyStats] = useState<any[]>([]);
+  const isMobile = useIsMobileDevice();
 
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [centerTab, setCenterTab] = useState<'timeline' | 'monthly'>('timeline');
 
   const handleActionWithFeedback = (action: string) => {
+    // Mobile lockdown: recruiters are restricted from taking actions on mobile devices
+    if (isMobile) {
+      alert('Shift actions (Clock In/Out, Breaks, BRB) are restricted to authorized desktop workstations.');
+      return;
+    }
+
     // Guard against invalid status transitions
     if (action === 'break_start' && status !== 'working') return;
     if (action === 'break_end' && status !== 'on_break') return;
@@ -283,6 +401,7 @@ export default function EliteDashboard({
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isMobile) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       const k = e.key.toLowerCase();
       if (k === 'b') {
@@ -452,6 +571,20 @@ export default function EliteDashboard({
             padding: 6px 10px 8px;
           }
         }
+
+        @media (max-width: 820px) {
+          .desktop-action-grid, .desktop-keyboard-hints {
+            display: none !important;
+          }
+          .mobile-restricted-fallback {
+            display: flex !important;
+          }
+        }
+        @media (min-width: 821px) {
+          .mobile-restricted-fallback {
+            display: none !important;
+          }
+        }
       `}</style>
 
       {/* Twinkling starfield backdrop overlay */}
@@ -534,7 +667,7 @@ export default function EliteDashboard({
           display: 'flex', flexDirection: 'column',
           overflow: 'hidden',
         }}>
-          <ActionTiles status={status} onAction={handleActionWithFeedback} onClockOutClick={() => setShowConfirmModal(true)} />
+          <ActionTiles status={status} onAction={handleActionWithFeedback} onClockOutClick={() => setShowConfirmModal(true)} isMobile={isMobile} />
           <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent)', margin: '0 16px', flexShrink: 0 }} />
           
           {/* Segmented Mode Switcher */}

@@ -425,6 +425,17 @@ export default function Home() {
                 brbCount={brbCount}
                 totalBreakMs={totalBreakMs + totalBrbMs}
                 onAction={(action: string) => {
+                  // Guard: reject actions from mobile devices
+                  if (typeof window !== 'undefined') {
+                    const ua = navigator.userAgent || '';
+                    const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|mobile|CriOS/i.test(ua);
+                    const isNarrow = window.innerWidth <= 820;
+                    if (isMobileUA || isNarrow) {
+                      showError('Restricted on Mobile', 'Shift actions (Clock in/out, Breaks, BRB) must be recorded from an authorized desktop workstation.');
+                      return;
+                    }
+                  }
+
                   // Guard: reject invalid status transitions to prevent orphan or duplicate logs
                   if (action === 'break_start' && status !== 'working') return;
                   if (action === 'break_end' && status !== 'on_break') return;
