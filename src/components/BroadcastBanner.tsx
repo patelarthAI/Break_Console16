@@ -16,39 +16,49 @@ interface DailyQuote {
   author: string;
 }
 
-// 31 Curated world-class executive quotes (1 per calendar day)
+// Curated world-class motivations focused on desk presence, availability, focus, and recruitment mastery
 const DAILY_QUOTES: DailyQuote[] = [
-  { quote: "Waste no more time arguing about what a good person should be. Be one.", author: "Marcus Aurelius" },
-  { quote: "Discipline is choosing between what you want now and what you want most.", author: "Abraham Lincoln" },
-  { quote: "We are what we repeatedly do. Excellence, then, is not an act, but a habit.", author: "Aristotle" },
-  { quote: "It is not that we have a short time to live, but that we waste a lot of it.", author: "Seneca" },
+  // ── Desk Presence & Availability ──
+  { quote: "Presence is power. When you're at the desk, opportunities and candidates find you.", author: "Elite Standard" },
+  { quote: "Availability is the ultimate ability. The recruiter who is always present is the one who closes.", author: "Brigade Mindset" },
+  { quote: "Every minute away from your desk is a missed connection. Stay active, stay responsive, stay winning.", author: "Focus Protocol" },
+  { quote: "Consistency at the desk builds unshakeable trust with candidates and hiring managers alike.", author: "Pulse System" },
+  { quote: "Candidates call back when you least expect it. Stay seated, stay available, and take the placement.", author: "Recruitment Creed" },
+  { quote: "A filled roster begins with an active, available consultant. Win the shift from your seat.", author: "Floor Directive" },
+  { quote: "Urgency is the currency of recruitment. Be at your desk the moment opportunity knocks.", author: "Placement Principle" },
+  { quote: "The best recruiters aren't just talented — they are consistently there when their clients need them.", author: "Executive Standard" },
+  { quote: "Speed to outreach wins the candidate. Protect your desk presence and seize the window.", author: "Speed Protocol" },
+  { quote: "While others step away, the top biller stays locked in, available, and closing.", author: "Floor Creed" },
+
+  // ── Deep Work & Laser Focus ──
   { quote: "Concentrate all your thoughts upon the work at hand. The sun's rays do not burn until brought to a focus.", author: "Alexander Graham Bell" },
-  { quote: "Amateurs sit and wait for inspiration; the rest of us just get up and go to work.", author: "Stephen King" },
-  { quote: "Action is the foundational key to all success.", author: "Pablo Picasso" },
-  { quote: "I fear not the man who has practiced 10,000 kicks once, but the man who has practiced one kick 10,000 times.", author: "Bruce Lee" },
-  { quote: "Simplicity is the ultimate sophistication.", author: "Leonardo da Vinci" },
-  { quote: "The secret of getting ahead is getting started.", author: "Mark Twain" },
-  { quote: "Victory belongs to the most persevering.", author: "Napoleon Bonaparte" },
-  { quote: "Energy and persistence conquer all things.", author: "Benjamin Franklin" },
-  { quote: "Luck is what happens when preparation meets opportunity.", author: "Seneca" },
-  { quote: "Discipline equals freedom.", author: "Jocko Willink" },
-  { quote: "Continuous effort — not strength or intelligence — is the key to unlocking our potential.", author: "Winston Churchill" },
-  { quote: "Your time is limited, don't waste it living someone else's life.", author: "Steve Jobs" },
-  { quote: "Opportunities don't happen. You create them.", author: "Chris Grosser" },
-  { quote: "Small deeds done are better than great deeds planned.", author: "Peter Marshall" },
-  { quote: "It always seems impossible until it's done.", author: "Nelson Mandela" },
-  { quote: "Well done is better than well said.", author: "Benjamin Franklin" },
-  { quote: "Quality is not an act, it is a habit.", author: "Will Durant" },
-  { quote: "He who has a why to live can bear almost any how.", author: "Friedrich Nietzsche" },
-  { quote: "The impediment to action advances action. What stands in the way becomes the way.", author: "Marcus Aurelius" },
-  { quote: "Success is the sum of small efforts, repeated day in and day out.", author: "Robert Collier" },
-  { quote: "Do not wait; the time will never be 'just right.' Start where you stand.", author: "Napoleon Hill" },
-  { quote: "Fall seven times, stand up eight.", author: "Japanese Proverb" },
-  { quote: "Great things are done by a series of small things brought together.", author: "Vincent van Gogh" },
-  { quote: "A goal without a plan is just a wish.", author: "Antoine de Saint-Exupéry" },
-  { quote: "The mind is everything. What you think you become.", author: "Buddha" },
-  { quote: "If you are going through hell, keep going.", author: "Winston Churchill" },
-  { quote: "You don't have to be great to start, but you have to start to be great.", author: "Zig Ziglar" },
+  { quote: "Focus is a muscle. Train it every hour by staying present, locked in, and dialed into your pipeline.", author: "Brigade Command" },
+  { quote: "Amateurs wait for inspiration; top billers sit down, lock in, and go to work.", author: "Stephen King" },
+  { quote: "Don't count the hours at your desk — make every single hour of focus count.", author: "Muhammad Ali" },
+  { quote: "Discipline is choosing between what you want right now and what you want most.", author: "Abraham Lincoln" },
+  { quote: "You cannot produce high-impact placements with fractured attention. Lock in on one outreach at a time.", author: "Deep Work Standard" },
+  { quote: "The successful consultant is the average person, with laser-like, unbroken focus.", author: "Bruce Lee" },
+  { quote: "Energy flows where attention goes. Eliminate the noise, own your desk, and execute.", author: "High Output Rule" },
+  { quote: "Waste no more time debating what a high performer should be. Sit down and be one.", author: "Marcus Aurelius" },
+  { quote: "Simplicity and relentless focus are the ultimate sophistication in recruiting.", author: "Leonardo da Vinci" },
+
+  // ── Pipeline Momentum & Relentless Execution ──
+  { quote: "Pipeline is power. Precision sourcing and prompt follow-ups outpace mindless volume every time.", author: "Sourcing Doctrine" },
+  { quote: "Discipline equals freedom. Master your desk hours and you master your income.", author: "Jocko Willink" },
+  { quote: "The secret of getting ahead in recruitment is getting started on that next call.", author: "Mark Twain" },
+  { quote: "Victory belongs to the most persevering. Keep dialing, keep sourcing, keep closing.", author: "Napoleon Bonaparte" },
+  { quote: "Action is the foundational key to all success. Start the conversation right now.", author: "Pablo Picasso" },
+  { quote: "We are what we repeatedly do. Excellence at your desk is not an act, but a daily habit.", author: "Aristotle" },
+  { quote: "Opportunities don't just happen. You create them by staying active and available.", author: "Chris Grosser" },
+  { quote: "Small deeds done right now are better than massive plans postponed.", author: "Peter Marshall" },
+  { quote: "Continuous effort and presence — not luck — is the key to unlocking your highest billings.", author: "Winston Churchill" },
+  { quote: "Success is the sum of small outreach sprints, repeated hour after hour, day after day.", author: "Robert Collier" },
+  { quote: "Your pipeline is a living engine. When you stay seated and feed it daily, it delivers.", author: "Brigade Playbook" },
+  { quote: "Do not wait; the time will never be 'just right.' Dial the next candidate from where you stand.", author: "Napoleon Hill" },
+  { quote: "The impediment to action advances action. What stands in your way becomes your placement.", author: "Marcus Aurelius" },
+  { quote: "Well done is always better than well said. Let your desk activity do the talking.", author: "Benjamin Franklin" },
+  { quote: "Quality is not an accident; it is the habit of an active, disciplined recruiter.", author: "Will Durant" },
+  { quote: "If you want to dominate the leaderboard, protect your presence and out-focus everyone.", author: "Elite Standard" },
 ];
 
 function getDailyQuote(): { quote: DailyQuote; dateLabel: string } {
@@ -192,7 +202,7 @@ export default function BroadcastBanner({
             )}
           </div>
 
-          {/* ═════════ CENTER CONTENT (THE BEST QUOTES OR BROADCAST) ═════════ */}
+          {/* ═════════ CENTER CONTENT (THE BEST MOTIVATION OR BROADCAST) ═════════ */}
           {hasBroadcast ? (
             /* Admin Broadcast Ticker */
             <div
@@ -218,7 +228,7 @@ export default function BroadcastBanner({
               </div>
             </div>
           ) : (
-            /* 1 Curated Daily Quote (Spacious, Elegant, Centered) */
+            /* 1 Curated Daily Focus & Availability Motivation */
             <div className="flex-1 overflow-hidden flex items-center justify-center px-4">
               <div className="flex items-center justify-center gap-2 truncate text-center max-w-full">
                 <span className="text-amber-400 text-sm font-serif select-none">“</span>
