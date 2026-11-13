@@ -9,6 +9,7 @@ import ControlCenter from './elite/ControlCenter';
 import Timeline from './elite/Timeline';
 import RightPanel from './elite/RightPanel';
 import BroadcastBanner from './BroadcastBanner';
+import StatusActionModal, { StatusModalType } from './elite/StatusActionModal';
 import { getWeeklyBreakStats } from '@/lib/store';
 import ConfirmDialog from '@/components/ConfirmDialog';
 
@@ -240,6 +241,18 @@ export default function EliteDashboard({
   const [weeklyStats, setWeeklyStats] = useState<any[]>([]);
 
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [statusModalType, setStatusModalType] = useState<StatusModalType | null>(null);
+
+  const handleActionWithFeedback = (action: string) => {
+    if (action === 'break_start') {
+      setStatusModalType('break');
+    } else if (action === 'brb_start') {
+      setStatusModalType('brb');
+    } else if (action === 'break_end' || action === 'brb_end' || action === 'punch_in') {
+      setStatusModalType('resume');
+    }
+    onAction(action);
+  };
 
   /* ── Cursor-reactive ambient glow ───────────────────────── */
   const cursorX = useMotionValue(-600);
@@ -273,13 +286,13 @@ export default function EliteDashboard({
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       const k = e.key.toLowerCase();
       if (k === 'b') {
-        if (status === 'working') onAction('break_start');
-        else if (status === 'on_break') onAction('break_end');
+        if (status === 'working') handleActionWithFeedback('break_start');
+        else if (status === 'on_break') handleActionWithFeedback('break_end');
       } else if (k === 'r') {
-        if (status === 'working') onAction('brb_start');
-        else if (status === 'on_brb') onAction('brb_end');
+        if (status === 'working') handleActionWithFeedback('brb_start');
+        else if (status === 'on_brb') handleActionWithFeedback('brb_end');
       } else if (k === 'p') {
-        if (status === 'idle' || status === 'punched_out') onAction('punch_in');
+        if (status === 'idle' || status === 'punched_out') handleActionWithFeedback('punch_in');
         else setShowConfirmModal(true);
       }
     };
@@ -495,7 +508,7 @@ export default function EliteDashboard({
       <TopBar user={user} onLogout={onLogout} />
 
       {/* Broadcast / Daily Directive Strip */}
-      <BroadcastBanner user={user} />
+      <BroadcastBanner user={user} status={status} />
 
       {/* Main body — 3-col: ControlCenter | Bento Column | RightPanel */}
       <div className="dashboard-grid">
@@ -505,7 +518,7 @@ export default function EliteDashboard({
           <ControlCenter
             now={now} user={user} status={status}
             workedMs={workedMs} breakMs={breakMs} brbMs={brbMs}
-            onAction={onAction} logs={logs}
+            onAction={handleActionWithFeedback} logs={logs}
           />
         </div>
 
@@ -520,7 +533,7 @@ export default function EliteDashboard({
           display: 'flex', flexDirection: 'column',
           overflow: 'hidden',
         }}>
-          <ActionTiles status={status} onAction={onAction} onClockOutClick={() => setShowConfirmModal(true)} />
+          <ActionTiles status={status} onAction={handleActionWithFeedback} onClockOutClick={() => setShowConfirmModal(true)} />
           <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent)', margin: '0 16px', flexShrink: 0 }} />
           <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <Timeline logs={logs} />
@@ -546,6 +559,13 @@ export default function EliteDashboard({
           setShowConfirmModal(false);
         }}
         onCancel={() => setShowConfirmModal(false)}
+      />
+
+      {/* 2026 Futuristic Holographic Status Action Popup */}
+      <StatusActionModal
+        type={statusModalType || 'break'}
+        isOpen={statusModalType !== null}
+        onClose={() => setStatusModalType(null)}
       />
     </div>
   );
