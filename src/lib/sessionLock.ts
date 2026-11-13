@@ -29,7 +29,7 @@ export function getOrCreateDeviceId(): string {
  * to force-terminate any other computer running this user's account.
  * (Zero database writes, zero storage growth).
  */
-export function claimWorkstationSession(userId: string, userName?: string): void {
+export async function claimWorkstationSession(userId: string, userName?: string): Promise<void> {
   if (typeof window === 'undefined') return;
   const deviceId = getOrCreateDeviceId();
   const sessionId = 'sess_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now();
@@ -46,7 +46,7 @@ export function claimWorkstationSession(userId: string, userName?: string): void
   } catch {}
 
   // Broadcast to all other active browsers in the team
-  void sendBroadcast('SESSION_CLAIMED', {
+  await sendBroadcast('SESSION_CLAIMED', {
     userId,
     userName,
     deviceId,

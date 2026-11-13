@@ -95,7 +95,7 @@ export default function AuthModal({ onLogin }: { onLogin: (user: any) => void })
       if (existingUser) {
         const requiredPass = existingUser.isMaster ? '1234' : '123';
         if (password !== requiredPass) { setError('Incorrect password'); setLoading(false); return; }
-        claimWorkstationSession(existingUser.id, existingUser.name);
+        await claimWorkstationSession(existingUser.id, existingUser.name);
         setCurrentUser(existingUser);
         onLogin(existingUser);
         return;
@@ -112,7 +112,7 @@ export default function AuthModal({ onLogin }: { onLogin: (user: any) => void })
         timezone: 'America/Chicago', workMode: 'WFO' as const,
       };
       const savedUser = await upsertUser(newUser);
-      claimWorkstationSession(savedUser.id, savedUser.name);
+      await claimWorkstationSession(savedUser.id, savedUser.name);
       setCurrentUser(savedUser);
       onLogin(savedUser);
     } catch (err: any) {

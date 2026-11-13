@@ -53,11 +53,6 @@ function buildAndSubscribeChannel(): void {
         sharedChannel = null;
     }
 
-    if (listeners.length === 0 && broadcastListeners.length === 0) {
-        setConnectionStatus('disconnected');
-        return;
-    }
-
     // Deduplicate the table+event+filter combos to avoid redundant subscriptions
     const uniqueSubscriptions = new Map<string, { table: string; event: string; filter?: string }>();
     for (const listener of listeners) {
@@ -71,24 +66,26 @@ function buildAndSubscribeChannel(): void {
         config: { broadcast: { self: false } },
     });
 
-    // Listen for ephemeral broadcast events across shared channel (zero DB writes)
-    channel = channel.on(
-        'broadcast' as any,
-        { event: '*' },
-        (data: any) => {
-            const eventName = data.event || data.type || '*';
-            const eventPayload = data.payload ?? data;
-            for (const bl of broadcastListeners) {
-                if (bl.event === '*' || bl.event === eventName) {
-                    try {
-                        bl.callback(eventPayload, eventName);
-                    } catch (e) {
-                        console.error('[Realtime Broadcast] Listener error:', e);
+    // Listen for named broadcast events across shared channel (zero DB writes)
+    const BROADCAST_EVENTS = ['SESSION_CLAIMED', 'FORCE_LOGOUT', 'PRESENCE_PING'];
+    for (const ev of BROADCAST_EVENTS) {
+        channel = channel.on(
+            'broadcast' as any,
+            { event: ev },
+            (data: any) => {
+                const eventPayload = data.payload ?? data;
+                for (const bl of broadcastListeners) {
+                    if (bl.event === '*' || bl.event === ev) {
+                        try {
+                            bl.callback(eventPayload, ev);
+                        } catch (e) {
+                            console.error('[Realtime Broadcast] Listener error:', e);
+                        }
                     }
                 }
             }
-        }
-    );
+        );
+    }
 
     for (const sub of uniqueSubscriptions.values()) {
         const opts: Record<string, string> = {
@@ -223,16 +220,31 @@ export async function sendBroadcast(event: string, payload: any): Promise<boolea
     if (!sharedChannel) {
         buildAndSubscribeChannel();
     }
+    // If channel is still connecting, wait up to 2.5 seconds for it to become SUBSCRIBED
+    if (!isConnected && sharedChannel) {
+        let waited = 0;
+        while (!isConnected && waited < 2500) {
+            await new Promise(r => setTimeout(r, 100));
+            waited += 100;
+        }
+    }
     if (!sharedChannel) return false;
     try {
-        await sharedChannel.send({
+        const resp = await sharedChannel.send({
             type: 'broadcast',
             event,
             payload,
         });
-        return true;
+        return resp === 'ok';
     } catch (err) {
         console.warn('[Realtime Broadcast] send error:', err);
         return false;
     }
+}
+
+// Warm up the shared channel immediately on browser client load
+if (typeof window !== 'undefined') {
+    setTimeout(() => {
+        if (!sharedChannel) buildAndSubscribeChannel();
+    }, 50);
 }
