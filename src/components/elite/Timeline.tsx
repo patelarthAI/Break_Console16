@@ -80,21 +80,32 @@ export default function Timeline({ logs }: TimelineProps) {
   // Display newest-first
   const displayLogs = useMemo(() => [...chronoLogs].reverse(), [chronoLogs]);
 
-  // Pre-compute durations for each "end" event by searching BACKWARD in chrono order
+  // Pre-compute durations using strict sequential pairing (eliminates orphan / reused start bugs)
   const durations = useMemo(() => {
     const map: Record<string, string> = {};
-    for (let i = 0; i < chronoLogs.length; i++) {
-      const log = chronoLogs[i];
-      if (log.eventType === 'break_end' || log.eventType === 'brb_end') {
-        const startType = log.eventType === 'break_end' ? 'break_start' : 'brb_start';
-        // Walk backwards in chrono order to find the most recent matching start
-        for (let j = i - 1; j >= 0; j--) {
-          if (chronoLogs[j].eventType === startType) {
-            const ms = log.timestamp - chronoLogs[j].timestamp;
-            map[log.id] = fmtDuration(ms);
-            break;
-          }
+    let openBreak: { id: string; timestamp: number } | null = null;
+    let openBrb: { id: string; timestamp: number } | null = null;
+
+    for (const log of chronoLogs) {
+      if (log.eventType === 'break_start') {
+        openBreak = { id: log.id, timestamp: log.timestamp };
+      } else if (log.eventType === 'break_end') {
+        if (openBreak) {
+          const ms = Math.max(0, log.timestamp - openBreak.timestamp);
+          map[log.id] = fmtDuration(ms);
+          openBreak = null; // Marked consumed! Cannot be reused by later events
         }
+      } else if (log.eventType === 'brb_start') {
+        openBrb = { id: log.id, timestamp: log.timestamp };
+      } else if (log.eventType === 'brb_end') {
+        if (openBrb) {
+          const ms = Math.max(0, log.timestamp - openBrb.timestamp);
+          map[log.id] = fmtDuration(ms);
+          openBrb = null; // Marked consumed!
+        }
+      } else if (log.eventType === 'punch_out' || log.eventType === 'auto_logout') {
+        openBreak = null;
+        openBrb = null;
       }
     }
     return map;

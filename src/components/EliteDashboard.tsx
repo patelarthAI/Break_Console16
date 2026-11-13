@@ -244,6 +244,13 @@ export default function EliteDashboard({
   const [statusModalType, setStatusModalType] = useState<StatusModalType | null>(null);
 
   const handleActionWithFeedback = (action: string) => {
+    // Guard against invalid status transitions
+    if (action === 'break_start' && status !== 'working') return;
+    if (action === 'break_end' && status !== 'on_break') return;
+    if (action === 'brb_start' && status !== 'working') return;
+    if (action === 'brb_end' && status !== 'on_brb') return;
+    if (action === 'punch_in' && status !== 'idle' && status !== 'punched_out') return;
+
     if (action === 'break_start') {
       setStatusModalType('break');
     } else if (action === 'brb_start') {

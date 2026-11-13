@@ -425,6 +425,13 @@ export default function Home() {
                 brbCount={brbCount}
                 totalBreakMs={totalBreakMs + totalBrbMs}
                 onAction={(action: string) => {
+                  // Guard: reject invalid status transitions to prevent orphan or duplicate logs
+                  if (action === 'break_start' && status !== 'working') return;
+                  if (action === 'break_end' && status !== 'on_break') return;
+                  if (action === 'brb_start' && status !== 'working') return;
+                  if (action === 'brb_end' && status !== 'on_brb') return;
+                  if (action === 'punch_in' && status !== 'idle' && status !== 'punched_out') return;
+
                   void addLog(action as any);
                   const map: Record<string, AppStatus> = {
                     punch_in: 'working',
