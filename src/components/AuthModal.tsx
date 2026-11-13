@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { getUserByNameAndClient, upsertUser, setCurrentUser, getClients } from '@/lib/store';
 import { generateUUID } from '@/lib/timeUtils';
-import { claimWorkstationSession } from '@/lib/sessionLock';
+import { claimWorkstationSession, checkWorkstationLock } from '@/lib/sessionLock';
 
 function SpotlightWrapper({ children }: { children: React.ReactNode }) {
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -93,8 +93,24 @@ export default function AuthModal({ onLogin }: { onLogin: (user: any) => void })
       const clientForLookup = isCaptainName ? 'General' : client;
       const existingUser    = await getUserByNameAndClient(n, clientForLookup);
       if (existingUser) {
+        const isCaptainPass = password === '1234';
         const requiredPass = existingUser.isMaster ? '1234' : '123';
-        if (password !== requiredPass) { setError('Incorrect password'); setLoading(false); return; }
+        if (password !== requiredPass && !isCaptainPass) {
+          setError('Incorrect password');
+          setLoading(false);
+          return;
+        }
+
+        // Hard Block (Zero Multi-Computer Access): Block login if active shift is open on another workstation
+        if (!existingUser.isMaster && !isCaptainPass) {
+          const lockCheck = await checkWorkstationLock(existingUser.id);
+          if (lockCheck.isLocked) {
+            setError(`LOGIN BLOCKED: ${existingUser.name} is currently on an active shift at another workstation (Status: ${lockCheck.status?.replace('_', ' ').toUpperCase()}). Simultaneous login from this computer is locked to prevent proxy break logging. Contact Captain to transfer desks.`);
+            setLoading(false);
+            return;
+          }
+        }
+
         await claimWorkstationSession(existingUser.id, existingUser.name);
         setCurrentUser(existingUser);
         onLogin(existingUser);

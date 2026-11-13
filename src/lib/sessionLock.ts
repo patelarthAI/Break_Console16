@@ -1,9 +1,85 @@
 'use client';
 
 import { onBroadcast, sendBroadcast } from './realtime';
+import { getSingleUserStatus, getLogs } from './store';
+import { getTodayKey, getPastDaysZoned } from './timeUtils';
 
 const DEVICE_ID_KEY = 'bp_workstation_device_id';
 const ACTIVE_SESSION_KEY = 'bp_active_device_session';
+
+export interface WorkstationLockResult {
+  isLocked: boolean;
+  status?: string;
+  stationCode?: string;
+  reason?: string;
+}
+
+/**
+ * Checks if the user is currently on an active shift on a DIFFERENT physical workstation.
+ * If active on another workstation, returns isLocked = true to HARD BLOCK the login.
+ */
+export async function checkWorkstationLock(userId: string): Promise<WorkstationLockResult> {
+  if (typeof window === 'undefined') return { isLocked: false };
+  const myDeviceId = getOrCreateDeviceId();
+
+  try {
+    // 1. Check if user is currently on an active shift (working, on_break, on_brb)
+    const statusRecord = await getSingleUserStatus(userId);
+    if (!statusRecord) return { isLocked: false };
+
+    const activeStatuses = ['working', 'on_break', 'on_brb'];
+    if (!activeStatuses.includes(statusRecord.status)) {
+      // User is idle or punched out: no active shift in progress, any workstation can start shift
+      return { isLocked: false };
+    }
+
+    // 2. Check if THIS browser already holds the active session token for this user
+    try {
+      const localSessionRaw = localStorage.getItem(ACTIVE_SESSION_KEY);
+      if (localSessionRaw) {
+        const localSession = JSON.parse(localSessionRaw);
+        if (localSession.userId === userId && localSession.deviceId === myDeviceId) {
+          // This browser IS the authorized workstation!
+          return { isLocked: false };
+        }
+      }
+    } catch {}
+
+    // 3. Check logs to see what device started today's active shift
+    const today = getTodayKey();
+    let logs = await getLogs(userId, today);
+    if (!logs.some(l => l.eventType === 'punch_in')) {
+      const yesterday = getPastDaysZoned(1, true)[0];
+      if (yesterday) {
+        const yLogs = await getLogs(userId, yesterday);
+        logs = [...yLogs, ...logs];
+      }
+    }
+
+    const punchInLogs = logs.filter(l => l.eventType === 'punch_in');
+    const activePunchIn = punchInLogs[punchInLogs.length - 1];
+    let stationCode = 'OTHER-PC';
+    if (activePunchIn && activePunchIn.addedBy && activePunchIn.addedBy.startsWith('device:')) {
+      const boundDeviceId = activePunchIn.addedBy.replace('device:', '');
+      if (boundDeviceId === myDeviceId) {
+        // Device matches the one recorded on punch_in
+        return { isLocked: false };
+      }
+      stationCode = boundDeviceId.replace('dev_', '').slice(0, 8).toUpperCase();
+    }
+
+    // Hard block!
+    return {
+      isLocked: true,
+      status: statusRecord.status,
+      stationCode,
+      reason: `Active shift in progress on another workstation (Status: ${statusRecord.status.replace('_', ' ').toUpperCase()}).`,
+    };
+  } catch (err) {
+    console.warn('Failed to verify workstation lock:', err);
+    return { isLocked: false };
+  }
+}
 
 /**
  * Returns a persistent workstation device identifier.

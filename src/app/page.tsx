@@ -15,7 +15,7 @@ import {
 } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 import { subscribe } from '@/lib/realtime';
-import { claimWorkstationSession, releaseWorkstationSession, listenForSessionOverride } from '@/lib/sessionLock';
+import { claimWorkstationSession, releaseWorkstationSession, listenForSessionOverride, getOrCreateDeviceId } from '@/lib/sessionLock';
 import {
   computeSession, computeWorkedTime, computeTotalTime,
   generateUUID, getTodayKey, setServerOffset, getRealNow, countBRBs, getPastDaysZoned,
@@ -335,7 +335,13 @@ export default function Home() {
   const addLog = useCallback(async (eventType: TimeLog['eventType']) => {
     if (!user) return;
     const todayKey = getTodayKey();
-    const log: TimeLog = { id: generateUUID(), eventType, timestamp: getRealNow(), date: todayKey };
+    const log: TimeLog = {
+      id: generateUUID(),
+      eventType,
+      timestamp: getRealNow(),
+      date: todayKey,
+      addedBy: 'device:' + getOrCreateDeviceId(),
+    };
     setLogs((prev) => [...prev, log]); // optimistic
     try {
       if (eventType === 'punch_in' && !user.isMaster) {
