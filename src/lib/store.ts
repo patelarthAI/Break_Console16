@@ -1491,24 +1491,52 @@ export async function getWeeklyBreakStats(clientName?: string, force = false): P
 // ─── Notifications ────────────────────────────────────────────────────────────
 
 export async function getActiveNotifications(userId: string): Promise<AppNotification[]> {
-    // We want active notifications that have NOT been dismissed by this user
-    // A query with a left join/filter is tricky in Supabase without a custom view,
-    // so we'll fetch all active notifications and all dismissals for this user, then filter locally.
-    const [{ data: notifs, error: notifsError }, { data: dismissals, error: dismissalsError }] = await Promise.all([
-        supabase.from('notifications').select('*').eq('is_active', true).order('created_at', { ascending: false }),
-        supabase.from('notification_dismissals').select('notification_id').eq('user_id', userId)
-    ]);
-    assertSupabaseOk(notifsError, 'Failed to load active notifications');
-    assertSupabaseOk(dismissalsError, 'Failed to load dismissed notifications');
+    let localDismissed = new Set<string>();
+    if (typeof window !== 'undefined' && userId) {
+        try {
+            const cached = localStorage.getItem(`dismissed_notifs_${userId}`);
+            if (cached) JSON.parse(cached).forEach((id: string) => localDismissed.add(id));
+        } catch {}
+    }
 
-    const dismissedIds = new Set((dismissals ?? []).map((d: any) => d.notification_id));
+    try {
+        const { data: notifs, error: notifsError } = await supabase
+            .from('notifications')
+            .select('*')
+            .eq('is_active', true)
+            .order('created_at', { ascending: false });
 
-    return (notifs ?? [])
-        .filter((n: any) => !dismissedIds.has(n.id))
-        .map((n: any) => ({
-            id: n.id, message: n.message, createdBy: n.created_by,
-            createdAt: n.created_at, isActive: n.is_active
-        }));
+        if (notifsError) {
+            console.warn('[Notifications] Failed to load active notifications:', notifsError.message);
+            return [];
+        }
+
+        const dismissedIds = new Set<string>(localDismissed);
+        if (userId) {
+            try {
+                const { data: dismissals } = await supabase
+                    .from('notification_dismissals')
+                    .select('notification_id')
+                    .eq('user_id', userId);
+                (dismissals ?? []).forEach((d: any) => dismissedIds.add(d.notification_id));
+            } catch (err) {
+                console.warn('[Notifications] Dismissals lookup notice:', err);
+            }
+        }
+
+        return (notifs ?? [])
+            .filter((n: any) => !dismissedIds.has(n.id))
+            .map((n: any) => ({
+                id: n.id,
+                message: n.message,
+                createdBy: n.created_by,
+                createdAt: n.created_at,
+                isActive: n.is_active,
+            }));
+    } catch (e) {
+        console.error('[Notifications] Error in getActiveNotifications:', e);
+        return [];
+    }
 }
 
 export async function getAllNotifications(): Promise<AppNotification[]> {
@@ -1528,12 +1556,29 @@ export async function createNotification(message: string, adminId: string): Prom
 }
 
 export async function dismissNotification(notificationId: string, userId: string): Promise<void> {
-    const { error } = await supabase.from('notification_dismissals').insert({
-        notification_id: notificationId, user_id: userId
-    }).select().single();
+    if (typeof window !== 'undefined' && userId) {
+        try {
+            const key = `dismissed_notifs_${userId}`;
+            const cached = localStorage.getItem(key);
+            const list = cached ? JSON.parse(cached) : [];
+            if (!list.includes(notificationId)) {
+                list.push(notificationId);
+                localStorage.setItem(key, JSON.stringify(list));
+            }
+        } catch {}
+    }
 
-    // Ignore 23505 (unique violation), it means they already dismissed it
-    if (error && error.code !== '23505') throw error;
+    try {
+        const { error } = await supabase.from('notification_dismissals').insert({
+            notification_id: notificationId,
+            user_id: userId,
+        }).select().single();
+        if (error && error.code !== '23505') {
+            console.warn('[Notifications] Dismiss insert note:', error.message);
+        }
+    } catch (e) {
+        console.warn('[Notifications] Dismiss persistence notice:', e);
+    }
 }
 
 export async function deleteNotification(id: string): Promise<void> {

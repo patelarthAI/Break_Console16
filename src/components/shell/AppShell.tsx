@@ -7,6 +7,7 @@ import type { User } from '@/types';
 import AdminNavbar from '@/components/admin/AdminNavbar';
 import StatusBar, { type StatusCounts } from '@/components/shell/StatusBar';
 import LiveFloor from '@/components/admin/LiveFloor';
+import BroadcastBanner from '@/components/BroadcastBanner';
 
 // Lazy-load heavy views
 const MasterReports = dynamic(() => import('@/components/MasterReports'), {
@@ -49,6 +50,9 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         onViewChange={setActiveView}
         onLogout={onLogout}
       />
+
+      {/* Broadcast Announcement Banner */}
+      <BroadcastBanner user={user} className="max-w-7xl mx-auto px-6 pt-3" />
 
       {/* Status bar (KPI tiles) only on dashboard */}
       {activeView === 'dashboard' && (

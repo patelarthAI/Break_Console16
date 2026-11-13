@@ -8,6 +8,7 @@ import TopBar from './elite/TopBar';
 import ControlCenter from './elite/ControlCenter';
 import Timeline from './elite/Timeline';
 import RightPanel from './elite/RightPanel';
+import BroadcastBanner from './BroadcastBanner';
 import { getWeeklyBreakStats } from '@/lib/store';
 import ConfirmDialog from '@/components/ConfirmDialog';
 
@@ -492,6 +493,9 @@ export default function EliteDashboard({
       <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
       {/* Top Bar */}
       <TopBar user={user} onLogout={onLogout} />
+
+      {/* Broadcast Announcement Banner */}
+      <BroadcastBanner user={user} />
 
       {/* Main body — 3-col: ControlCenter | Bento Column | RightPanel */}
       <div className="dashboard-grid">
