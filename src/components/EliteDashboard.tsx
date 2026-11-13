@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { motion, useMotionValue, useSpring, AnimatePresence } from 'framer-motion';
-import { LogIn, LogOut, Coffee, RotateCcw, Clock3, Play, SmartphoneOff } from 'lucide-react';
+import { LogIn, LogOut, Coffee, RotateCcw, Clock3, Play, ShieldAlert } from 'lucide-react';
 import { User, TimeLog } from '@/types';
 import TopBar from './elite/TopBar';
 import ControlCenter from './elite/ControlCenter';
@@ -192,7 +192,7 @@ function ActionTiles({ status, onAction, onClockOutClick, isMobile }: { status: 
             flexShrink: 0,
             color: '#F87171',
           }}>
-            <SmartphoneOff size={18} />
+            <ShieldAlert size={18} />
           </div>
           <div>
             <div style={{
@@ -247,7 +247,7 @@ function ActionTiles({ status, onAction, onClockOutClick, isMobile }: { status: 
           flexShrink: 0,
           color: '#F87171',
         }}>
-          <SmartphoneOff size={18} />
+          <ShieldAlert size={18} />
         </div>
         <div>
           <div style={{
