@@ -10,6 +10,7 @@ import Timeline from './elite/Timeline';
 import RightPanel from './elite/RightPanel';
 import BroadcastBanner from './BroadcastBanner';
 import StatusActionModal, { StatusModalType } from './elite/StatusActionModal';
+import MonthlyPulse from './elite/MonthlyPulse';
 import { getWeeklyBreakStats } from '@/lib/store';
 import ConfirmDialog from '@/components/ConfirmDialog';
 
@@ -430,25 +431,26 @@ export default function EliteDashboard({
           animation: star-twinkle 6s ease-in-out infinite;
         }
 
-        /* Locked Laptop-Only Bento Layout */
+        /* Locked Laptop-Only Bento Layout with Smooth Lower Deck Scroll */
         .dashboard-container {
-          height: 100vh;
-          min-height: 650px;
+          min-height: 100vh;
           min-width: 1024px;
-          overflow: auto;
+          overflow-y: auto;
+          overflow-x: hidden;
           display: flex;
           flex-direction: column;
         }
         
         .dashboard-grid {
-          flex: 1;
+          height: calc(100vh - 110px);
+          min-height: 620px;
           display: grid;
           grid-template-columns: 420px minmax(0, 1fr) 250px;
           grid-template-rows: minmax(0, 1fr);
           gap: 12px;
           padding: 8px 12px 10px;
-          min-height: 0;
           overflow: hidden;
+          flex-shrink: 0;
         }
 
         @media (max-width: 1366px) {
@@ -510,7 +512,7 @@ export default function EliteDashboard({
       />
 
       {/* ═══ CONTENT LAYER ═══ */}
-      <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+      <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       {/* Top Bar */}
       <TopBar user={user} onLogout={onLogout} />
 
@@ -553,6 +555,12 @@ export default function EliteDashboard({
         </div>
 
       </div>
+
+      {/* ── LOWER DECK: Recruiter Monthly Telemetry Cockpit ── */}
+      <div style={{ padding: '0 12px 28px', flexShrink: 0 }}>
+        <MonthlyPulse user={user} />
+      </div>
+
       </div>{/* end content layer */}
       <ConfirmDialog
         open={showConfirmModal}
