@@ -1,19 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Megaphone, Sparkles, Users } from 'lucide-react';
+import { Megaphone, Sparkles } from 'lucide-react';
 import { User, AppNotification } from '@/types';
 import { getActiveNotifications } from '@/lib/store';
 import { subscribe } from '@/lib/realtime';
 
 interface BroadcastBannerProps {
   user: User;
-  status?: string;
-  workedMs?: number;
-  breakMs?: number;
-  brbMs?: number;
-  teamStatus?: any[];
   className?: string;
 }
 
@@ -57,27 +51,27 @@ const DAILY_QUOTES: DailyQuote[] = [
   { quote: "You don't have to be great to start, but you have to start to be great.", author: "Zig Ziglar" },
 ];
 
-function getDailyQuote(): DailyQuote {
+function getDailyQuote(): { quote: DailyQuote; dateLabel: string } {
   const now = new Date();
   const start = new Date(now.getFullYear(), 0, 0);
   const diff = now.getTime() - start.getTime();
   const dayOfYear = Math.floor(diff / (1000 * 60 * 60 * 24));
-  return DAILY_QUOTES[dayOfYear % DAILY_QUOTES.length];
+  const quote = DAILY_QUOTES[dayOfYear % DAILY_QUOTES.length];
+  const dateLabel = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return { quote, dateLabel };
 }
 
 export default function BroadcastBanner({
   user,
-  teamStatus = [],
   className = '',
 }: BroadcastBannerProps) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [activeTab, setActiveTab] = useState<'quote' | 'team'>('quote');
   const [isPaused, setIsPaused] = useState(false);
   const prevCountRef = useRef(0);
   const [hasNewArrival, setHasNewArrival] = useState(false);
 
   // 1 Curated Daily Quote (deterministic for today)
-  const todayQuote = useMemo(() => getDailyQuote(), []);
+  const { quote: todayQuote, dateLabel } = useMemo(() => getDailyQuote(), []);
 
   // Fetch admin broadcast notifications
   const loadNotifications = useCallback(async () => {
@@ -109,45 +103,6 @@ export default function BroadcastBanner({
 
   const hasBroadcast = notifications.length > 0;
 
-  // Compile clean Team Status Changes
-  const teamStatusText = useMemo(() => {
-    if (!teamStatus || !Array.isArray(teamStatus) || teamStatus.length === 0) {
-      return 'All teammates active on the floor';
-    }
-
-    // Filter by client if available
-    const relevant = teamStatus.filter(t => !user?.clientName || t.user?.clientName === user?.clientName);
-    const onBreak = relevant.filter(t => t.status === 'on_break');
-    const onBrb = relevant.filter(t => t.status === 'on_brb');
-    const working = relevant.filter(t => t.status === 'working');
-
-    const parts: string[] = [];
-    if (onBreak.length > 0) {
-      const names = onBreak.map(t => t.user?.name || 'Teammate').join(', ');
-      parts.push(`☕ Break: ${names}`);
-    }
-    if (onBrb.length > 0) {
-      const names = onBrb.map(t => t.user?.name || 'Teammate').join(', ');
-      parts.push(`⏱ BRB: ${names}`);
-    }
-
-    if (parts.length > 0) {
-      return `${parts.join('   •   ')}   •   🟢 ${working.length} active at desks`;
-    }
-
-    const clientPrefix = user?.clientName ? `${user.clientName} ` : '';
-    return `🟢 All ${relevant.length > 0 ? relevant.length + ' ' : ''}${clientPrefix}teammates are active on the floor`;
-  }, [teamStatus, user?.clientName]);
-
-  // Alternate smoothly between the Quote and Team Status every 8 seconds
-  useEffect(() => {
-    if (hasBroadcast || isPaused) return;
-    const timer = setInterval(() => {
-      setActiveTab(prev => (prev === 'quote' ? 'team' : 'quote'));
-    }, 8000);
-    return () => clearInterval(timer);
-  }, [hasBroadcast, isPaused]);
-
   // Broadcast Marquee Items (clean, NO timestamps)
   const broadcastMessages = useMemo(() => {
     return notifications.map(n => n.message.trim()).filter(Boolean);
@@ -164,7 +119,7 @@ export default function BroadcastBanner({
 
   return (
     <aside
-      aria-label="Daily Quote & Team Status Strip"
+      aria-label="Daily Directive & Broadcast Strip"
       className={`w-full px-3 pt-2 pb-1.5 flex-shrink-0 relative z-40 select-none ${className}`}
     >
       <style>{`
@@ -188,7 +143,7 @@ export default function BroadcastBanner({
         }
       `}</style>
 
-      {/* Clean Glassmorphic Chassis (No Clutter) */}
+      {/* Clean Glassmorphic Chassis */}
       <div
         onMouseEnter={() => setIsPaused(true)}
         onMouseLeave={() => setIsPaused(false)}
@@ -206,9 +161,7 @@ export default function BroadcastBanner({
           style={{
             background: hasBroadcast
               ? 'linear-gradient(90deg, transparent 0%, rgba(245, 158, 11, 0.9) 30%, rgba(168, 85, 247, 0.9) 70%, transparent 100%)'
-              : activeTab === 'quote'
-              ? 'linear-gradient(90deg, transparent 0%, rgba(245, 158, 11, 0.7) 40%, rgba(255, 255, 255, 0.6) 50%, rgba(245, 158, 11, 0.7) 60%, transparent 100%)'
-              : 'linear-gradient(90deg, transparent 0%, rgba(56, 189, 248, 0.7) 40%, rgba(0, 245, 160, 0.7) 60%, transparent 100%)',
+              : 'linear-gradient(90deg, transparent 0%, rgba(245, 158, 11, 0.6) 40%, rgba(255, 255, 255, 0.6) 50%, rgba(245, 158, 11, 0.6) 60%, transparent 100%)',
             backgroundSize: '200% 100%',
             animation: 'laser-sweep 7s ease infinite',
           }}
@@ -227,7 +180,7 @@ export default function BroadcastBanner({
                   Broadcast
                 </span>
               </div>
-            ) : activeTab === 'quote' ? (
+            ) : (
               <div className="flex items-center gap-1.5">
                 <div className="flex items-center justify-center w-7 h-7 rounded-xl bg-amber-500/15 border border-amber-500/35 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.2)]">
                   <Sparkles size={13} />
@@ -236,19 +189,10 @@ export default function BroadcastBanner({
                   Daily Directive
                 </span>
               </div>
-            ) : (
-              <div className="flex items-center gap-1.5">
-                <div className="flex items-center justify-center w-7 h-7 rounded-xl bg-sky-500/15 border border-sky-500/35 text-sky-300 shadow-[0_0_12px_rgba(56,189,248,0.2)]">
-                  <Users size={13} />
-                </div>
-                <span className="px-2.5 py-0.5 rounded-full bg-sky-500/15 border border-sky-500/35 text-[9px] font-black uppercase tracking-widest text-sky-300">
-                  Team Status
-                </span>
-              </div>
             )}
           </div>
 
-          {/* ═════════ CENTER CONTENT (ELEGANT & SPACIOUS) ═════════ */}
+          {/* ═════════ CENTER CONTENT (THE BEST QUOTES OR BROADCAST) ═════════ */}
           {hasBroadcast ? (
             /* Admin Broadcast Ticker */
             <div
@@ -274,56 +218,41 @@ export default function BroadcastBanner({
               </div>
             </div>
           ) : (
-            /* Clean Alternation: The Best Quote OR Team Status */
+            /* 1 Curated Daily Quote (Spacious, Elegant, Centered) */
             <div className="flex-1 overflow-hidden flex items-center justify-center px-4">
-              <AnimatePresence mode="wait">
-                {activeTab === 'quote' ? (
-                  <motion.div
-                    key="quote-card"
-                    initial={{ opacity: 0, y: 5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -5 }}
-                    transition={{ duration: 0.35, ease: 'easeOut' }}
-                    className="flex items-center justify-center gap-2 truncate text-center max-w-full"
-                  >
-                    <span className="text-amber-400 text-sm font-serif select-none">“</span>
-                    <span className="text-xs sm:text-[13px] font-medium text-slate-100 tracking-wide truncate">
-                      {todayQuote.quote}
-                    </span>
-                    <span className="text-amber-400 text-sm font-serif select-none">”</span>
-                    <span className="text-[11px] font-semibold text-amber-300/90 pl-1 shrink-0 font-mono">
-                      — {todayQuote.author}
-                    </span>
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    key="team-card"
-                    initial={{ opacity: 0, y: 5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -5 }}
-                    transition={{ duration: 0.35, ease: 'easeOut' }}
-                    className="flex items-center justify-center gap-2 truncate text-center max-w-full"
-                  >
-                    <span className="text-xs sm:text-[13px] font-medium text-slate-100 tracking-wide truncate">
-                      {teamStatusText}
-                    </span>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              <div className="flex items-center justify-center gap-2 truncate text-center max-w-full">
+                <span className="text-amber-400 text-sm font-serif select-none">“</span>
+                <span className="text-xs sm:text-[13px] font-medium text-slate-100 tracking-wide truncate">
+                  {todayQuote.quote}
+                </span>
+                <span className="text-amber-400 text-sm font-serif select-none">”</span>
+                <span className="text-[11px] font-semibold text-amber-300/90 pl-1 shrink-0 font-mono">
+                  — {todayQuote.author}
+                </span>
+              </div>
             </div>
           )}
 
-          {/* ═════════ RIGHT BADGE: MINIMALIST LIVE SIGNAL ═════════ */}
+          {/* ═════════ RIGHT BADGE ═════════ */}
           <div className="flex items-center gap-2 shrink-0 z-10 pl-3 border-l border-white/10">
-            <button
-              type="button"
-              onClick={() => setActiveTab(prev => (prev === 'quote' ? 'team' : 'quote'))}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-[9px] font-black uppercase tracking-wider text-slate-300 transition-colors cursor-pointer"
-              title="Click to toggle between Daily Quote & Team Status"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-              <span>LIVE</span>
-            </button>
+            {hasBroadcast ? (
+              <div
+                className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[9px] font-black uppercase tracking-wider"
+                style={{
+                  backgroundColor: isPaused ? 'rgba(245, 158, 11, 0.15)' : 'rgba(245, 158, 11, 0.25)',
+                  borderColor: 'rgba(245, 158, 11, 0.5)',
+                  color: '#F59E0B',
+                }}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${isPaused ? 'bg-amber-400' : 'animate-ping bg-amber-400'}`} />
+                <span>{isPaused ? 'PAUSED' : 'DISPATCH'}</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/10 text-[9px] font-mono font-bold text-slate-300">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span>{dateLabel}</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
