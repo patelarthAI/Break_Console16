@@ -494,8 +494,8 @@ export default function EliteDashboard({
       {/* Top Bar */}
       <TopBar user={user} onLogout={onLogout} />
 
-      {/* Broadcast Announcement Banner */}
-      <BroadcastBanner user={user} />
+      {/* Broadcast / Dynamic Intelligence Strip */}
+      <BroadcastBanner user={user} status={status} workedMs={workedMs} breakMs={breakMs} />
 
       {/* Main body — 3-col: ControlCenter | Bento Column | RightPanel */}
       <div className="dashboard-grid">
