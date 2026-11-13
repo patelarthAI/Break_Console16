@@ -9,7 +9,6 @@ import ControlCenter from './elite/ControlCenter';
 import Timeline from './elite/Timeline';
 import RightPanel from './elite/RightPanel';
 import BroadcastBanner from './BroadcastBanner';
-import StatusActionModal, { StatusModalType } from './elite/StatusActionModal';
 import MonthlyPulse from './elite/MonthlyPulse';
 import { getWeeklyBreakStats } from '@/lib/store';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -242,7 +241,7 @@ export default function EliteDashboard({
   const [weeklyStats, setWeeklyStats] = useState<any[]>([]);
 
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [statusModalType, setStatusModalType] = useState<StatusModalType | null>(null);
+  const [centerTab, setCenterTab] = useState<'timeline' | 'monthly'>('timeline');
 
   const handleActionWithFeedback = (action: string) => {
     // Guard against invalid status transitions
@@ -252,13 +251,6 @@ export default function EliteDashboard({
     if (action === 'brb_end' && status !== 'on_brb') return;
     if (action === 'punch_in' && status !== 'idle' && status !== 'punched_out') return;
 
-    if (action === 'break_start') {
-      setStatusModalType('break');
-    } else if (action === 'brb_start') {
-      setStatusModalType('brb');
-    } else if (action === 'break_end' || action === 'brb_end' || action === 'punch_in') {
-      setStatusModalType('resume');
-    }
     onAction(action);
   };
 
@@ -544,8 +536,59 @@ export default function EliteDashboard({
         }}>
           <ActionTiles status={status} onAction={handleActionWithFeedback} onClockOutClick={() => setShowConfirmModal(true)} />
           <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent)', margin: '0 16px', flexShrink: 0 }} />
+          
+          {/* Segmented Mode Switcher */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 14px', background: 'rgba(255,255,255,0.015)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px', borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+              <button
+                type="button"
+                onClick={() => setCenterTab('timeline')}
+                style={{
+                  padding: '3px 10px',
+                  borderRadius: 8,
+                  fontSize: 10,
+                  fontWeight: 800,
+                  fontFamily: "'Satoshi', sans-serif",
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  cursor: 'pointer',
+                  background: centerTab === 'timeline' ? 'rgba(0, 245, 160, 0.15)' : 'transparent',
+                  color: centerTab === 'timeline' ? '#00F5A0' : 'rgba(255,255,255,0.4)',
+                  border: centerTab === 'timeline' ? '1px solid rgba(0, 245, 160, 0.35)' : '1px solid transparent',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                Activity ({logs.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setCenterTab('monthly')}
+                style={{
+                  padding: '3px 10px',
+                  borderRadius: 8,
+                  fontSize: 10,
+                  fontWeight: 800,
+                  fontFamily: "'Satoshi', sans-serif",
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  cursor: 'pointer',
+                  background: centerTab === 'monthly' ? 'rgba(167, 139, 250, 0.18)' : 'transparent',
+                  color: centerTab === 'monthly' ? '#A78BFA' : 'rgba(255,255,255,0.4)',
+                  border: centerTab === 'monthly' ? '1px solid rgba(167, 139, 250, 0.4)' : '1px solid transparent',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                Monthly Telemetry
+              </button>
+            </div>
+          </div>
+
           <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-            <Timeline logs={logs} />
+            {centerTab === 'timeline' ? (
+              <Timeline logs={logs} />
+            ) : (
+              <MonthlyPulse user={user} compact={true} />
+            )}
           </div>
         </div>
 
@@ -574,13 +617,6 @@ export default function EliteDashboard({
           setShowConfirmModal(false);
         }}
         onCancel={() => setShowConfirmModal(false)}
-      />
-
-      {/* 2026 Futuristic Holographic Status Action Popup */}
-      <StatusActionModal
-        type={statusModalType || 'break'}
-        isOpen={statusModalType !== null}
-        onClose={() => setStatusModalType(null)}
       />
     </div>
   );

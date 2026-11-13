@@ -20,6 +20,7 @@ import { checkViolations, getRealDate, dateStr, isWorkDay } from '@/lib/timeUtil
 
 interface MonthlyPulseProps {
   user: User;
+  compact?: boolean;
 }
 
 interface MonthMetrics {
@@ -40,7 +41,7 @@ interface MonthMetrics {
   complianceRate: number;
 }
 
-export default function MonthlyPulse({ user }: MonthlyPulseProps) {
+export default function MonthlyPulse({ user, compact = false }: MonthlyPulseProps) {
   const [loading, setLoading] = useState(true);
   const [metrics, setMetrics] = useState<MonthMetrics | null>(null);
 
@@ -229,6 +230,73 @@ export default function MonthlyPulse({ user }: MonthlyPulseProps) {
   }
 
   if (!metrics) return null;
+
+  if (compact) {
+    return (
+      <div className="w-full h-full flex flex-col p-3.5 overflow-y-auto">
+        {/* Compact Header */}
+        <div className="flex items-center justify-between pb-2 mb-2 border-b border-white/[0.06]">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-black uppercase tracking-wider text-white font-mono">
+              {metrics.monthName} Performance
+            </span>
+            <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-[8.5px] font-black text-emerald-400 font-mono">
+              {metrics.complianceRate}% COMPLIANCE
+            </span>
+          </div>
+          <span className="text-[10px] font-mono text-slate-400">
+            {metrics.daysPresent}/{metrics.weekdaysElapsed} Days Present
+          </span>
+        </div>
+
+        {/* 2x3 Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 flex-1">
+          {/* Card 1: Leaves */}
+          <div className="p-2.5 rounded-xl border border-white/10 bg-white/[0.02] flex flex-col justify-between">
+            <span className="text-[8.5px] font-black uppercase text-slate-400 font-mono">Total Leaves</span>
+            <div className="text-base font-black text-white font-mono">{metrics.totalLeaves}d</div>
+            <div className="text-[8.5px] text-slate-500 font-mono">{metrics.totalLeaves === 0 ? 'Zero leaves' : 'Approved'}</div>
+          </div>
+          {/* Card 2: Late Logins */}
+          <div className={`p-2.5 rounded-xl border flex flex-col justify-between ${metrics.lateInDays > 0 ? 'border-rose-500/30 bg-rose-500/[0.04]' : 'border-white/10 bg-white/[0.02]'}`}>
+            <span className="text-[8.5px] font-black uppercase text-slate-400 font-mono">Late Logins</span>
+            <div className={`text-base font-black font-mono ${metrics.lateInDays > 0 ? 'text-rose-400' : 'text-white'}`}>{metrics.lateInDays}d</div>
+            <div className="text-[8.5px] text-slate-500 font-mono">{metrics.lateInDays === 0 ? 'Zero tardy' : 'Past grace'}</div>
+          </div>
+          {/* Card 3: Avg Late */}
+          <div className={`p-2.5 rounded-xl border flex flex-col justify-between ${metrics.avgLateMinutes > 0 ? 'border-amber-500/30 bg-amber-500/[0.04]' : 'border-white/10 bg-white/[0.02]'}`}>
+            <span className="text-[8.5px] font-black uppercase text-slate-400 font-mono">Avg Delay</span>
+            <div className={`text-base font-black font-mono ${metrics.avgLateMinutes > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>{metrics.avgLateMinutes > 0 ? `${metrics.avgLateMinutes}m` : '0m'}</div>
+            <div className="text-[8.5px] text-slate-500 font-mono">When late</div>
+          </div>
+          {/* Card 4: Break Violations */}
+          <div className={`p-2.5 rounded-xl border flex flex-col justify-between ${metrics.breakViolDays > 0 ? 'border-rose-500/30 bg-rose-500/[0.04]' : 'border-white/10 bg-white/[0.02]'}`}>
+            <span className="text-[8.5px] font-black uppercase text-slate-400 font-mono">Break Violations</span>
+            <div className={`text-base font-black font-mono ${metrics.breakViolDays > 0 ? 'text-rose-400' : 'text-white'}`}>{metrics.breakViolDays}d</div>
+            <div className="text-[8.5px] text-slate-500 font-mono">&gt; 85m total</div>
+          </div>
+          {/* Card 5: Total Overtime */}
+          <div className={`p-2.5 rounded-xl border flex flex-col justify-between ${metrics.totalBreakExceedMinutes > 0 ? 'border-amber-500/30 bg-amber-500/[0.04]' : 'border-white/10 bg-white/[0.02]'}`}>
+            <span className="text-[8.5px] font-black uppercase text-slate-400 font-mono">Overtime Excess</span>
+            <div className={`text-base font-black font-mono ${metrics.totalBreakExceedMinutes > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>{metrics.totalBreakExceedMinutes > 0 ? `${metrics.totalBreakExceedMinutes}m` : '0m'}</div>
+            <div className="text-[8.5px] text-slate-500 font-mono">Past 85m limit</div>
+          </div>
+          {/* Card 6: Avg When Exceeded */}
+          <div className="p-2.5 rounded-xl border border-white/10 bg-white/[0.02] flex flex-col justify-between">
+            <span className="text-[8.5px] font-black uppercase text-slate-400 font-mono">Avg Exceeded</span>
+            <div className="text-base font-black font-mono text-purple-300">{metrics.avgBreakWhenExceededMinutes > 0 ? `${metrics.avgBreakWhenExceededMinutes}m` : 'None'}</div>
+            <div className="text-[8.5px] text-slate-500 font-mono">On viol days</div>
+          </div>
+        </div>
+
+        {/* Footnote */}
+        <div className="mt-2 pt-2 flex items-center justify-between text-[9px] font-mono text-slate-400 border-t border-white/[0.04]">
+          <span>Daily Avg: <strong className="text-white">{metrics.avgDailyBreakMinutes}m/d</strong></span>
+          <span className="text-emerald-400">{metrics.cleanDays} Perfect Shifts</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <section
