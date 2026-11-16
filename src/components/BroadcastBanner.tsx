@@ -10,6 +10,7 @@ interface BroadcastBannerProps {
   user: User;
   status?: string;
   className?: string;
+  hideDirective?: boolean;
 }
 
 interface DailyQuote {
@@ -81,6 +82,7 @@ export default function BroadcastBanner({
   user,
   status = 'working',
   className = '',
+  hideDirective = false,
 }: BroadcastBannerProps) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [quoteIndex, setQuoteIndex] = useState(getInitialQuoteIndex());
@@ -178,6 +180,10 @@ export default function BroadcastBanner({
   const handleNextQuote = () => {
     setQuoteIndex(prev => (prev + 1) % DAILY_QUOTES.length);
   };
+
+  if (hideDirective && !hasBroadcast) {
+    return null;
+  }
 
   return (
     <aside

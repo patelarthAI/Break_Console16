@@ -55,6 +55,7 @@ export interface Summary {
     totalBreakEventsSum: number;
     totalBrbEventsSum: number;
     totalBreakViolMsSum: number;
+    totalLateInMsSum: number;
     breakViolDays: number;
     brbViolDays: number;
     totalBreakViolDays: number;
@@ -236,6 +237,7 @@ export function summarizeRows(rows: DayRow[]): Summary {
             totalBreakEventsSum: s.totalBreakEventsSum + r.breakCount,
             totalBrbEventsSum: s.totalBrbEventsSum + r.brbCount,
             totalBreakViolMsSum: s.totalBreakViolMsSum + r.totalBreakViolMs,
+            totalLateInMsSum: s.totalLateInMsSum + (r.lateIn ? r.lateInMs : 0),
             breakViolDays: s.breakViolDays + (r.breakViol ? 1 : 0),
             brbViolDays: s.brbViolDays + (r.brbViol ? 1 : 0),
             totalBreakViolDays: s.totalBreakViolDays + (r.totalBreakViol ? 1 : 0),
@@ -255,6 +257,7 @@ export function summarizeRows(rows: DayRow[]): Summary {
             totalBreakEventsSum: 0,
             totalBrbEventsSum: 0,
             totalBreakViolMsSum: 0,
+            totalLateInMsSum: 0,
             breakViolDays: 0,
             brbViolDays: 0,
             totalBreakViolDays: 0,

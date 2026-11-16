@@ -18,6 +18,7 @@ import {
     Clock,
     Coffee,
     Clock3,
+    LogIn,
     LogOut,
     GitCompare,
     Flame,
@@ -644,8 +645,6 @@ export default function MasterReports() {
                 'Name',
                 'Client',
                 'Days Active',
-                'Net Active',
-                'Avg Worked/Day',
                 'Total Breaks #',
                 'Breaks #',
                 'Break Time',
@@ -668,8 +667,6 @@ export default function MasterReports() {
                 r.name,
                 r.clientName,
                 r.activeDays,
-                formatDurationHM(r.totalWorkedMs),
-                formatDurationHM(r.avgWorkedPerDayMs),
                 r.totalBreakCount,
                 r.breakCount,
                 formatDurationHM(r.totalBreakMs),
@@ -708,7 +705,6 @@ export default function MasterReports() {
             ...(isMultiDayExport ? ['Date', 'Day'] : []),
             'Arrival',
             'Departure',
-            'Net Active',
             'Total Breaks #',
             'Breaks #',
             'Break Time',
@@ -730,7 +726,6 @@ export default function MasterReports() {
             ...(isMultiDayExport ? [r.date, dayName(r.date)] : []),
             r.punchIn ? formatTimeNoSec(r.punchIn) : '',
             r.punchOut ? formatTimeNoSec(r.punchOut) : r.punchIn ? 'ACTIVE' : '',
-            formatDurationHM(r.workedMs),
             r.totalBreakCount,
             r.breakCount,
             formatDurationHM(r.breakMs),
@@ -754,7 +749,6 @@ export default function MasterReports() {
             ...(isMultiDayExport ? ['', ''] : []),
             '',
             '',
-            formatDurationHM(s.totalWorked),
             s.totalBreakCountSum,
             s.totalBreakEventsSum,
             formatDurationHM(s.totalBreak),
@@ -1092,30 +1086,40 @@ export default function MasterReports() {
             {!loading && baseS.activeDays > 0 && (
                 <div className="space-y-2.5">
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                        {/* 1. Team Output */}
-                        <div className="panel-3d border border-indigo-500/20 border-t-2 border-t-indigo-500 bg-[#0b0c14]/70 p-3.5 rounded-2xl flex flex-col justify-between min-h-[90px]">
-                            <div className="flex items-center justify-between">
+                        {/* 1. Shift Arrivals & Punctuality */}
+                        <button
+                            type="button"
+                            onClick={() => toggleViolFilter('late_in')}
+                            className={`panel-3d text-left p-3.5 rounded-2xl flex flex-col justify-between min-h-[90px] border transition-all cursor-pointer ${
+                                violationFilter === 'late_in'
+                                    ? 'border-indigo-500/80 bg-indigo-500/15 ring-1 ring-indigo-500/50'
+                                    : baseS.lateInDays > 0
+                                        ? 'border-indigo-500/25 border-t-2 border-t-indigo-500 bg-[#0b0c14]/70 hover:border-indigo-500/50'
+                                        : 'border-emerald-500/20 border-t-2 border-t-emerald-500 bg-[#0b0c14]/70'
+                            }`}
+                        >
+                            <div className="flex items-center justify-between w-full">
                                 <p className="text-[10px] font-black tracking-widest uppercase text-slate-400">
-                                    Net Active &amp; Production
+                                    Shift Arrivals &amp; Logins
                                 </p>
-                                <span className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400">
-                                    <Users size={12} />
+                                <span className={`p-1.5 rounded-lg ${baseS.lateInDays > 0 ? 'bg-amber-500/15 text-amber-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                                    <LogIn size={12} />
                                 </span>
                             </div>
                             <div className="mt-1.5">
                                 <div className="flex items-baseline gap-2">
-                                    <p className="text-xl lg:text-2xl font-black font-mono tracking-tight text-indigo-400">
-                                        {formatDurationHM(baseS.totalWorked)}
+                                    <p className={`text-xl lg:text-2xl font-black font-mono tracking-tight ${baseS.lateInDays > 0 ? 'text-amber-300' : 'text-emerald-400'}`}>
+                                        {baseS.lateInDays > 0 ? `${baseS.lateInDays} Late` : '100% On-Time'}
                                     </p>
-                                    <span className={`text-[11px] font-mono font-bold ${baseS.workedVarianceMs >= 0 ? 'text-emerald-400' : 'text-slate-400'}`}>
-                                        {baseS.workedVarianceMs >= 0 ? `+${formatDurationHM(baseS.workedVarianceMs)}` : `-${formatDurationHM(Math.abs(baseS.workedVarianceMs))}`}
+                                    <span className="text-[11px] font-mono text-slate-300">
+                                        {baseS.punctualityRate}% on-time
                                     </span>
                                 </div>
                                 <p className="text-[10px] font-medium text-slate-500 mt-1 truncate">
-                                    {uniqueUserCount} {uniqueUserCount === 1 ? 'recruiter' : 'recruiters'} · {baseS.activeDays}d active · Avg {formatDurationHM(avgWorkedMs)}/p
+                                    {baseS.activeDays - baseS.lateInDays} of {baseS.activeDays} on-time · {baseS.lateInDays > 0 ? `Avg late +${formatExceedHM(Math.round((baseS.totalLateInMsSum || 0) / (baseS.lateInDays || 1)))}` : 'Zero late arrivals'}
                                 </p>
                             </div>
-                        </div>
+                        </button>
 
                         {/* 2. Total Breaks & Daily Avg */}
                         <div className="panel-3d border border-cyan-500/20 border-t-2 border-t-cyan-500 bg-[#0b0c14]/70 p-3.5 rounded-2xl flex flex-col justify-between min-h-[90px]">

@@ -51,8 +51,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         onLogout={onLogout}
       />
 
-      {/* Broadcast Announcement Banner */}
-      <BroadcastBanner user={user} className="max-w-7xl mx-auto px-6 pt-3" />
+      {/* Broadcast Announcement Banner (only shows real management announcements, never daily directive quotes) */}
+      <BroadcastBanner user={user} hideDirective={true} className="max-w-7xl mx-auto px-6 pt-3" />
 
       {/* Status bar (KPI tiles) only on dashboard */}
       {activeView === 'dashboard' && (

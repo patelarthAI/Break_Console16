@@ -132,8 +132,8 @@ export function DailyReportTable({
     }
 
     const gridCols = showDate
-        ? 'minmax(180px, 1.35fr) minmax(115px, 0.85fr) 82px 86px 115px minmax(165px, 1.25fr) minmax(145px, 1.1fr) minmax(185px, 1.4fr) 36px'
-        : 'minmax(190px, 1.45fr) 82px 86px 115px minmax(175px, 1.35fr) minmax(155px, 1.2fr) minmax(195px, 1.5fr) 36px';
+        ? 'minmax(190px, 1.4fr) minmax(115px, 0.85fr) 105px 100px minmax(180px, 1.3fr) minmax(150px, 1.1fr) minmax(195px, 1.4fr) 36px'
+        : 'minmax(210px, 1.5fr) 115px 110px minmax(200px, 1.4fr) minmax(160px, 1.2fr) minmax(210px, 1.5fr) 36px';
 
     const SortHdr = ({
         k,
@@ -184,7 +184,6 @@ export function DailyReportTable({
                     <div className="text-[10px] font-mono font-bold tracking-widest uppercase text-zinc-300">
                         Departure
                     </div>
-                    <SortHdr k="workedMs" label="Net Active" className="text-emerald-400" />
                     <SortHdr k="totalBreakCount" label="Breaks Taken" className="text-zinc-300" />
                     <SortHdr k="totalBreakMs" label="Brk+BRB / Exceed" className="text-fuchsia-300" />
                     <div className="text-[10px] font-mono font-bold tracking-widest uppercase text-zinc-300">
@@ -197,11 +196,6 @@ export function DailyReportTable({
 
                 {/* Data Rows (click anywhere to audit/edit logs) */}
                 {rows.map((r, i) => {
-                    const shiftTarget = 8 * 3600000;
-                    const workedDiff = r.workedMs > 0 ? r.workedMs - shiftTarget : 0;
-                    const workedDiffSign = workedDiff >= 0 ? '+' : '-';
-                    const workedDiffFormatted = workedDiff !== 0 ? `${workedDiffSign}${formatDurationHM(Math.abs(workedDiff))}` : '';
-
                     return (
                         <div
                             key={`${r.userId}-${r.date}-${i}`}
@@ -241,9 +235,22 @@ export function DailyReportTable({
                                 </div>
                             )}
 
-                            {/* Arrival (no seconds) */}
-                            <div className="text-xs font-mono text-zinc-300 font-medium">
-                                {r.punchIn ? formatTimeNoSec(r.punchIn) : <span className="text-zinc-600 font-sans">—</span>}
+                            {/* Arrival (no seconds, with punctuality indicator) */}
+                            <div className="text-xs font-mono text-zinc-300 font-medium flex items-center">
+                                {r.punchIn ? (
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span>{formatTimeNoSec(r.punchIn)}</span>
+                                        {r.lateIn ? (
+                                            <span className="text-[9px] font-bold text-amber-300 bg-amber-500/15 border border-amber-500/30 px-1 py-0.5 rounded leading-none">
+                                                +{formatExceedHM(r.lateInMs)}
+                                            </span>
+                                        ) : (
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" title="On-time arrival" />
+                                        )}
+                                    </div>
+                                ) : (
+                                    <span className="text-zinc-600 font-sans">—</span>
+                                )}
                             </div>
 
                             {/* Departure (no seconds) */}
@@ -253,29 +260,9 @@ export function DailyReportTable({
                                         {formatTimeNoSec(r.punchOut)}
                                     </span>
                                 ) : r.punchIn ? (
-                                    <span className="text-sky-400 font-bold text-[10px] uppercase tracking-wider bg-sky-500/10 px-2 py-0.5 rounded-md border border-sky-500/20">
+                                    <span className="text-emerald-400 font-bold text-[10px] uppercase tracking-wider bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
                                         Active
                                     </span>
-                                ) : (
-                                    <span className="text-zinc-600 font-sans">—</span>
-                                )}
-                            </div>
-
-                            {/* Net Active with Benchmark Variance */}
-                            <div className="text-xs font-mono font-semibold">
-                                {r.workedMs > 0 ? (
-                                    <div className="flex items-baseline gap-1">
-                                        <span className="text-emerald-400">{formatDurationHM(r.workedMs)}</span>
-                                        {workedDiffFormatted && (
-                                            <span
-                                                className={`text-[10px] font-normal ${
-                                                    workedDiff >= 0 ? 'text-emerald-500/80' : 'text-slate-500'
-                                                }`}
-                                            >
-                                                ({workedDiffFormatted})
-                                            </span>
-                                        )}
-                                    </div>
                                 ) : (
                                     <span className="text-zinc-600 font-sans">—</span>
                                 )}
@@ -350,8 +337,10 @@ export function DailyReportTable({
                     </div>
                     <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs font-mono">
                         <div>
-                            <span className="text-[10px] uppercase tracking-wider text-slate-500 mr-1.5">Net Active</span>
-                            <span className="text-emerald-400 font-bold">{formatDurationHM(s.totalWorked)}</span>
+                            <span className="text-[10px] uppercase tracking-wider text-slate-500 mr-1.5">Late Logins</span>
+                            <span className={`font-bold ${s.lateInDays > 0 ? 'text-amber-300' : 'text-emerald-400'}`}>
+                                {s.lateInDays} <span className="text-slate-500 text-[11px] font-normal">({s.punctualityRate}% on-time)</span>
+                            </span>
                         </div>
                         <div>
                             <span className="text-[10px] uppercase tracking-wider text-slate-500 mr-1.5">Total Breaks</span>
@@ -368,6 +357,20 @@ export function DailyReportTable({
                                 {formatDurationHM(avgCombinedMs)}
                             </span>
                         </div>
+                        <div>
+                            <span className="text-[10px] uppercase tracking-wider text-slate-500 mr-1.5">Avg Exceed/d</span>
+                            <span className={avgExceedMs > 0 ? 'text-rose-300 font-bold' : 'text-emerald-400 font-semibold'}>
+                                {avgExceedMs > 0 ? `+${formatExceedHM(avgExceedMs)}` : '0m'}
+                            </span>
+                        </div>
+                        <div>
+                            <span className="text-[10px] uppercase tracking-wider text-slate-500 mr-1.5">Overall Exceed</span>
+                            <span className={s.totalBreakViolMsSum > 0 ? 'text-rose-400 font-black' : 'text-slate-400 font-bold'}>
+                                {s.totalBreakViolMsSum > 0 ? `+${formatExceedHM(s.totalBreakViolMsSum)}` : '0m'}
+                            </span>
+                        </div>
+                    </div>
+                </div>
                         <div>
                             <span className="text-[10px] uppercase tracking-wider text-slate-500 mr-1.5">Avg Exceed/d</span>
                             <span className={avgExceedMs > 0 ? 'text-rose-300 font-bold' : 'text-emerald-400 font-semibold'}>
@@ -424,7 +427,7 @@ export function RecruiterRollupTable({
                 >
                     <span className="text-zinc-300">Recruiter</span>
                     <span>Days</span>
-                    <span className="text-emerald-400">Net Active</span>
+                    <span className="text-amber-300">Arrivals</span>
                     <span>Total Brks</span>
                     <span>Brk+BRB</span>
                     <span>Avg/Day</span>
@@ -457,8 +460,10 @@ export function RecruiterRollupTable({
                         <div className="text-xs font-mono text-zinc-200 font-semibold">{r.activeDays}d</div>
 
                         <div className="text-xs font-mono">
-                            <div className="text-emerald-400 font-semibold">{formatDurationHM(r.totalWorkedMs)}</div>
-                            <div className="text-[10px] text-slate-500">{formatDurationHM(r.avgWorkedPerDayMs)}/d</div>
+                            <div className={`font-semibold ${r.lateInDays > 0 ? 'text-amber-300' : 'text-emerald-400'}`}>
+                                {r.punctualityRate}% on-time
+                            </div>
+                            <div className="text-[10px] text-slate-500">{r.lateInDays > 0 ? `${r.lateInDays} late` : 'All on-time'}</div>
                         </div>
 
                         <div className="text-xs font-mono text-zinc-200">
@@ -535,7 +540,7 @@ export function RecruiterRollupTable({
                         {rollups.length} Recruiters · {totalActiveDays} Active Days
                     </span>
                     <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
-                        <span><span className="text-slate-500 text-[10px] mr-1">NET:</span><strong className="text-emerald-400">{formatDurationHM(totalWorked)}</strong></span>
+                        <span><span className="text-slate-500 text-[10px] mr-1">LATE ARRIVALS:</span><strong className="text-amber-300">{rollups.reduce((a, r) => a + r.lateInDays, 0)}</strong></span>
                         <span><span className="text-slate-500 text-[10px] mr-1">TOTAL BRKS:</span><strong className="text-white">{totalBreaks}</strong></span>
                         <span><span className="text-slate-500 text-[10px] mr-1">BRK+BRB:</span><strong className="text-fuchsia-300">{formatDurationHM(totalCombined)}</strong></span>
                         <span><span className="text-slate-500 text-[10px] mr-1">AVG EXCEED/D:</span><strong className="text-rose-300">+{formatExceedHM(totalExceed / totalActiveDays)}</strong></span>
@@ -574,7 +579,7 @@ export function ClientRollupTable({ rollups, onSelectClient }: ClientRollupTable
                     <span className="text-zinc-300">Client Team</span>
                     <span>Recruiters</span>
                     <span>Days</span>
-                    <span className="text-emerald-400">Net Active</span>
+                    <span className="text-emerald-400">Break Clean</span>
                     <span>Total Brks</span>
                     <span>Brk+BRB</span>
                     <span>Avg/Day</span>
@@ -598,8 +603,8 @@ export function ClientRollupTable({ rollups, onSelectClient }: ClientRollupTable
                         <div className="text-xs font-mono text-zinc-300">{c.recruiterCount}</div>
                         <div className="text-xs font-mono text-zinc-300">{c.activeDays}d</div>
                         <div className="text-xs font-mono">
-                            <div className="text-emerald-400 font-semibold">{formatDurationHM(c.totalWorkedMs)}</div>
-                            <div className="text-[10px] text-slate-500">{formatDurationHM(c.avgWorkedPerDayMs)}/d avg</div>
+                            <div className="text-emerald-400 font-semibold">{c.cleanBreakDays}d clean</div>
+                            <div className="text-[10px] text-slate-500">{c.breakComplianceRate}% clean</div>
                         </div>
                         <div className="text-xs font-mono text-zinc-200 font-semibold">
                             {c.totalBreakCount} <span className="text-[10px] text-slate-500">({c.breakCount}B+{c.brbCount}R)</span>
