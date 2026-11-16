@@ -1,7 +1,7 @@
 'use client';
 
 import { onBroadcast, sendBroadcast } from './realtime';
-import { getSingleUserStatus, getLogs } from './store';
+import { getSingleUserStatus, getLogs, updateTimeLog } from './store';
 import { getTodayKey, getPastDaysZoned } from './timeUtils';
 
 const DEVICE_ID_KEY = 'bp_workstation_device_id';
@@ -58,15 +58,18 @@ export async function checkWorkstationLock(userId: string): Promise<WorkstationL
 
     const punchInLogs = logs.filter(l => l.eventType === 'punch_in');
     const activePunchIn = punchInLogs[punchInLogs.length - 1];
-    let stationCode = 'OTHER-PC';
-    if (activePunchIn && activePunchIn.addedBy && activePunchIn.addedBy.startsWith('device:')) {
-      const boundDeviceId = activePunchIn.addedBy.replace('device:', '');
-      if (boundDeviceId === myDeviceId) {
-        // Device matches the one recorded on punch_in
-        return { isLocked: false };
-      }
-      stationCode = boundDeviceId.replace('dev_', '').slice(0, 8).toUpperCase();
+    
+    // If no active punch in or lock was explicitly released by Captain (addedBy is null or not device:)
+    if (!activePunchIn || !activePunchIn.addedBy || !activePunchIn.addedBy.startsWith('device:')) {
+      return { isLocked: false };
     }
+
+    const boundDeviceId = activePunchIn.addedBy.replace('device:', '');
+    if (boundDeviceId === myDeviceId) {
+      // Device matches the one recorded on punch_in
+      return { isLocked: false };
+    }
+    const stationCode = boundDeviceId.replace('dev_', '').slice(0, 8).toUpperCase();
 
     // Hard block!
     return {
@@ -78,6 +81,66 @@ export async function checkWorkstationLock(userId: string): Promise<WorkstationL
   } catch (err) {
     console.warn('Failed to verify workstation lock:', err);
     return { isLocked: false };
+  }
+}
+
+/**
+ * Transfers the active shift workstation lock to the current machine.
+ * Can be called during Captain override on the login screen or from the Master floor.
+ */
+export async function transferWorkstationLock(userId: string, targetDeviceId?: string): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  const newDeviceId = targetDeviceId || getOrCreateDeviceId();
+  try {
+    const today = getTodayKey();
+    let logs = await getLogs(userId, today);
+    if (!logs.some(l => l.eventType === 'punch_in')) {
+      const yesterday = getPastDaysZoned(1, true)[0];
+      if (yesterday) {
+        const yLogs = await getLogs(userId, yesterday);
+        logs = [...yLogs, ...logs];
+      }
+    }
+    const punchIns = logs.filter(l => l.eventType === 'punch_in');
+    const activePunchIn = punchIns[punchIns.length - 1];
+    if (activePunchIn) {
+      await updateTimeLog(activePunchIn.id, {
+        addedBy: 'device:' + newDeviceId,
+      });
+    }
+    return true;
+  } catch (err) {
+    console.error('Failed to transfer workstation lock:', err);
+    return false;
+  }
+}
+
+/**
+ * Releases the workstation device lock for a user completely,
+ * allowing them to log in from any computer on their next login.
+ */
+export async function releaseWorkstationLockForUser(userId: string): Promise<boolean> {
+  try {
+    const today = getTodayKey();
+    let logs = await getLogs(userId, today);
+    if (!logs.some(l => l.eventType === 'punch_in')) {
+      const yesterday = getPastDaysZoned(1, true)[0];
+      if (yesterday) {
+        const yLogs = await getLogs(userId, yesterday);
+        logs = [...yLogs, ...logs];
+      }
+    }
+    const punchIns = logs.filter(l => l.eventType === 'punch_in');
+    const activePunchIn = punchIns[punchIns.length - 1];
+    if (activePunchIn) {
+      await updateTimeLog(activePunchIn.id, {
+        addedBy: 'manual_released', // Clears the device lock
+      });
+    }
+    return true;
+  } catch (err) {
+    console.error('Failed to release workstation lock for user:', err);
+    return false;
   }
 }
 

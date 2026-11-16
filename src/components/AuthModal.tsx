@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { getUserByNameAndClient, upsertUser, setCurrentUser, getClients } from '@/lib/store';
 import { generateUUID } from '@/lib/timeUtils';
-import { claimWorkstationSession, checkWorkstationLock } from '@/lib/sessionLock';
+import { claimWorkstationSession, checkWorkstationLock, transferWorkstationLock } from '@/lib/sessionLock';
 
 function SpotlightWrapper({ children }: { children: React.ReactNode }) {
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -45,6 +45,10 @@ export default function AuthModal({ onLogin }: { onLogin: (user: any) => void })
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [buttonOffset, setButtonOffset] = useState({ x: 0, y: 0 });
   const [clientOptions, setClientOptions] = useState<string[]>(DEFAULT_CLIENT_OPTIONS);
+  const [lockedUser, setLockedUser]     = useState<any | null>(null);
+  const [overridePin, setOverridePin]   = useState('');
+  const [overrideError, setOverrideError] = useState<string | null>(null);
+  const [loadingOverride, setLoadingOverride] = useState(false);
 
   const isCaptainName  = name.trim().toLowerCase() === 'captain';
   const requiresClient = !isCaptainName;
@@ -80,6 +84,26 @@ export default function AuthModal({ onLogin }: { onLogin: (user: any) => void })
   }, []);
   useEffect(() => { if (isCaptainName) setClient(''); }, [isCaptainName]);
 
+  const handleCaptainOverrideTransfer = async () => {
+    if (!lockedUser) return;
+    if (overridePin.trim() !== '1234') {
+      setOverrideError('Incorrect Captain PIN. Enter 1234 to authorize desk transfer.');
+      return;
+    }
+    setLoadingOverride(true);
+    setOverrideError(null);
+    try {
+      await transferWorkstationLock(lockedUser.id);
+      await claimWorkstationSession(lockedUser.id, lockedUser.name);
+      setCurrentUser(lockedUser);
+      onLogin(lockedUser);
+    } catch (err: any) {
+      setOverrideError(err.message || 'Desk transfer failed');
+    } finally {
+      setLoadingOverride(false);
+    }
+  };
+
   const handleLogin = async () => {
     if (loading) return;
     const n = name.trim();
@@ -89,6 +113,8 @@ export default function AuthModal({ onLogin }: { onLogin: (user: any) => void })
 
     setLoading(true);
     setError(null);
+    setLockedUser(null);
+    setOverrideError(null);
     try {
       const clientForLookup = isCaptainName ? 'General' : client;
       const existingUser    = await getUserByNameAndClient(n, clientForLookup);
@@ -105,10 +131,16 @@ export default function AuthModal({ onLogin }: { onLogin: (user: any) => void })
         if (!existingUser.isMaster && !isCaptainPass) {
           const lockCheck = await checkWorkstationLock(existingUser.id);
           if (lockCheck.isLocked) {
-            setError(`LOGIN BLOCKED: ${existingUser.name} is currently on an active shift at another workstation (Status: ${lockCheck.status?.replace('_', ' ').toUpperCase()}). Simultaneous login from this computer is locked to prevent proxy break logging. Contact Captain to transfer desks.`);
+            setError(`LOGIN BLOCKED: ${existingUser.name} is currently on an active shift at another workstation (Status: ${lockCheck.status?.replace('_', ' ').toUpperCase()}). Simultaneous login from this computer is locked to prevent proxy break logging.`);
+            setLockedUser(existingUser);
             setLoading(false);
             return;
           }
+        }
+
+        // If Captain logged in with 1234, automatically transfer workstation lock to this computer!
+        if (isCaptainPass && !existingUser.isMaster) {
+          await transferWorkstationLock(existingUser.id);
         }
 
         await claimWorkstationSession(existingUser.id, existingUser.name);
@@ -574,6 +606,55 @@ export default function AuthModal({ onLogin }: { onLogin: (user: any) => void })
                       fontWeight: 500, textAlign: 'center', lineHeight: 1.5,
                     }}
                   >{error}</motion.div>
+                )}
+                {lockedUser && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.96 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.96 }}
+                    className="p-3.5 rounded-2xl bg-[#0e101d] border border-indigo-500/35 text-left space-y-2 shadow-2xl"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                        <span className="text-[10px] font-mono font-bold tracking-wider uppercase text-indigo-300">
+                          Captain Desk Transfer Override
+                        </span>
+                      </div>
+                      <span className="text-[9px] font-bold text-slate-500 font-mono">
+                        {lockedUser.name}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-300 leading-normal">
+                      Recruiter shifted desks? Enter Master PIN <span className="font-mono text-amber-300 font-bold">1234</span> to authorize this computer and resume shift.
+                    </p>
+                    <div className="flex items-center gap-2 pt-1">
+                      <input
+                        type="password"
+                        value={overridePin}
+                        onChange={(e) => setOverridePin(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            void handleCaptainOverrideTransfer();
+                          }
+                        }}
+                        placeholder="Enter 1234"
+                        className="flex-1 bg-black/60 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 outline-none font-mono focus:border-indigo-500"
+                      />
+                      <button
+                        type="button"
+                        disabled={loadingOverride}
+                        onClick={handleCaptainOverrideTransfer}
+                        className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white text-[10px] font-bold tracking-wider uppercase transition-all shadow-md cursor-pointer shrink-0 disabled:opacity-50"
+                      >
+                        {loadingOverride ? 'Transferring…' : 'Transfer & Login'}
+                      </button>
+                    </div>
+                    {overrideError && (
+                      <p className="text-[10px] text-rose-400 font-medium">{overrideError}</p>
+                    )}
+                  </motion.div>
                 )}
               </AnimatePresence>
 

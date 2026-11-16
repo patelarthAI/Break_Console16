@@ -386,11 +386,13 @@ export function isWorkDay(dateString: string): boolean {
 }
 
 export function computeSession(logs: TimeLog[]): DaySession {
-    const session: DaySession = { breaks: [], brbs: [], logs };
+    // Always enforce strict chronological order (ascending) to guarantee deterministic pairing
+    const sortedLogs = [...logs].sort((a, b) => a.timestamp - b.timestamp);
+    const session: DaySession = { breaks: [], brbs: [], logs: sortedLogs };
     let breakStart: number | null = null;
     let brbStart: number | null = null;
 
-    for (const log of logs) {
+    for (const log of sortedLogs) {
         switch (log.eventType) {
             case 'punch_in':
                 // Preserve first arrival of the day; clear prior punchOut when resuming on the same day
@@ -430,18 +432,34 @@ export function computeSession(logs: TimeLog[]): DaySession {
                     brbStart = null;
                 }
                 break;
-            case 'break_start': breakStart = log.timestamp; break;
-            case 'break_end':
-                if (breakStart !== null) { session.breaks.push({ start: breakStart, end: log.timestamp }); breakStart = null; }
+            case 'break_start':
+                // State machine idempotency: if already on break, keep earliest start and ignore duplicate!
+                if (breakStart === null) {
+                    breakStart = log.timestamp;
+                }
                 break;
-            case 'brb_start': brbStart = log.timestamp; break;
+            case 'break_end':
+                if (breakStart !== null) {
+                    session.breaks.push({ start: breakStart, end: log.timestamp });
+                    breakStart = null;
+                }
+                break;
+            case 'brb_start':
+                if (brbStart === null) {
+                    brbStart = log.timestamp;
+                }
+                break;
             case 'brb_end':
-                if (brbStart !== null) { session.brbs.push({ start: brbStart, end: log.timestamp }); brbStart = null; }
+                if (brbStart !== null) {
+                    session.brbs.push({ start: brbStart, end: log.timestamp });
+                    brbStart = null;
+                }
                 break;
         }
     }
-    if (breakStart !== null) session.breaks.push({ start: breakStart });
-    if (brbStart !== null) session.brbs.push({ start: brbStart });
+    // Only leave break open if the session is currently active and not punched out
+    if (breakStart !== null && !session.punchOut) session.breaks.push({ start: breakStart });
+    if (brbStart !== null && !session.punchOut) session.brbs.push({ start: brbStart });
     return session;
 }
 
@@ -467,8 +485,9 @@ export function computeWorkedTime(session: DaySession, now: number, date?: strin
     let workedMs = 0;
     let segStart: number | null = null;
     let hasSeenPunchIn = false;
+    const sortedLogs = [...(session.logs || [])].sort((a, b) => a.timestamp - b.timestamp);
 
-    for (const log of session.logs) {
+    for (const log of sortedLogs) {
         if (log.timestamp > end) break;
         switch (log.eventType) {
             case 'punch_in':
@@ -501,11 +520,11 @@ export function computeWorkedTime(session: DaySession, now: number, date?: strin
 }
 
 export function countBreaks(logs: TimeLog[]): number {
-    return logs.filter((l) => l.eventType === 'break_start').length;
+    return computeSession(logs).breaks.length;
 }
 
 export function countBRBs(logs: TimeLog[]): number {
-    return logs.filter((l) => l.eventType === 'brb_start').length;
+    return computeSession(logs).brbs.length;
 }
 
 export function generateUUID(): string {

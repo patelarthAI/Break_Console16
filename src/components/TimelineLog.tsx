@@ -60,7 +60,7 @@ export default function TimelineLog({ logs, isAdmin, onDeleteLog, onEditLog }: {
                         <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                                 <span className="text-[13px] font-black text-white tracking-tight uppercase">{cfg.label}</span>
-                                {log.addedBy && (
+                                {log.addedBy && !log.addedBy.startsWith('device:') && (
                                     <span className="text-[8px] font-black uppercase tracking-[0.2em] text-[var(--amber)] bg-[var(--amber)]/10 px-1.5 py-0.5 rounded border border-[var(--amber)]/20">
                                         MASTER
                                     </span>

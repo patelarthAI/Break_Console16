@@ -13,11 +13,14 @@ import {
   Coffee, 
   LogIn, 
   LogOut,
-  History
+  History,
+  Laptop,
+  Check
 } from 'lucide-react';
 import { TimeLog, User } from '@/types';
 import { getLogs, insertLog, deleteTimeLog, updateTimeLog } from '@/lib/store';
 import { formatTime, generateUUID, computeSession } from '@/lib/timeUtils';
+import { releaseWorkstationLockForUser } from '@/lib/sessionLock';
 import { cn, toTitleCase } from '@/lib/utils';
 import TimelineLog from '@/components/TimelineLog';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -36,6 +39,7 @@ export default function HybridEditDrawer({ user, date, onClose, onSave, currentU
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'visual' | 'raw'>('visual');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deskUnlocked, setDeskUnlocked] = useState(false);
   
   // Form State
   const [showAddForm, setShowAddForm] = useState(false);
@@ -152,14 +156,33 @@ export default function HybridEditDrawer({ user, date, onClose, onSave, currentU
               {toTitleCase(user.name)}
             </h2>
             
-            <div className="flex items-center gap-3 relative z-10">
-              <span style={{ fontSize: '11px', fontWeight: 800, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.15em', fontFamily: 'var(--f-mono)' }}>
-                {date}
-              </span>
-              <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)' }} />
-              <span style={{ fontSize: '10px', fontWeight: 800, color: '#00C8FF', background: 'rgba(0,200,255,0.1)', border: '1px solid rgba(0,200,255,0.2)', padding: '2px 8px', borderRadius: '6px', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                {user.clientName}
-              </span>
+            <div className="flex items-center justify-between gap-3 relative z-10 flex-wrap">
+              <div className="flex items-center gap-3">
+                <span style={{ fontSize: '11px', fontWeight: 800, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.15em', fontFamily: 'var(--f-mono)' }}>
+                  {date}
+                </span>
+                <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)' }} />
+                <span style={{ fontSize: '10px', fontWeight: 800, color: '#00C8FF', background: 'rgba(0,200,255,0.1)', border: '1px solid rgba(0,200,255,0.2)', padding: '2px 8px', borderRadius: '6px', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                  {user.clientName}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  await releaseWorkstationLockForUser(user.id);
+                  setDeskUnlocked(true);
+                  setTimeout(() => setDeskUnlocked(false), 4000);
+                }}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold tracking-wider uppercase transition-all cursor-pointer ${
+                  deskUnlocked
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-[0_0_15px_rgba(16,185,129,0.3)]'
+                    : 'bg-white/5 hover:bg-indigo-500/20 text-slate-300 hover:text-white border border-white/10 hover:border-indigo-500/40'
+                }`}
+                title="Release workstation device binding so recruiter can log in from any computer"
+              >
+                {deskUnlocked ? <Check size={12} className="text-emerald-400" /> : <Laptop size={12} className="text-indigo-400" />}
+                <span>{deskUnlocked ? 'Desk Lock Released' : 'Release Desk Lock'}</span>
+              </button>
             </div>
           </div>
 

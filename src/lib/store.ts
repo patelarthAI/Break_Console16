@@ -966,6 +966,22 @@ export async function getLogs(userId: string, date?: string): Promise<TimeLog[]>
 }
 
 export async function insertLog(userId: string, log: TimeLog): Promise<void> {
+    // State machine idempotency: reject duplicate consecutive events (e.g. double break_start, double brb_start)
+    if (['break_start', 'brb_start', 'break_end', 'brb_end', 'punch_in'].includes(log.eventType)) {
+        const { data: recent } = await supabase
+            .from('time_logs')
+            .select('event_type')
+            .eq('user_id', userId)
+            .eq('date', log.date)
+            .order('timestamp', { ascending: false })
+            .limit(1);
+
+        if (recent?.[0]?.event_type === log.eventType) {
+            console.warn(`[insertLog] Deduplicated redundant '${log.eventType}' for user ${userId}`);
+            return;
+        }
+    }
+
     const { error } = await supabase.from('time_logs').insert({
         id: log.id, user_id: userId, event_type: log.eventType,
         timestamp: log.timestamp, date: log.date, added_by: log.addedBy ?? null,
@@ -1088,6 +1104,7 @@ export async function updateTimeLog(id: string, updates: Partial<TimeLog>): Prom
     if (updates.eventType) payload.event_type = updates.eventType;
     if (updates.timestamp) payload.timestamp = updates.timestamp;
     if (updates.date) payload.date = updates.date;
+    if (updates.addedBy !== undefined) payload.added_by = updates.addedBy;
     
     const { error } = await supabase.from('time_logs').update(payload).eq('id', id);
     if (error) throw error;

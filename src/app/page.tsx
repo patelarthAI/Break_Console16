@@ -214,6 +214,7 @@ export default function Home() {
   } | null>(null);
   const now = useClock();
   const { error: showError } = useToast();
+  const isActionPendingRef = useRef(false);
 
   const loadLogs = useCallback(async (targetUser: User) => {
     setLogsLoading(true);
@@ -333,7 +334,21 @@ export default function Home() {
   }
 
   const addLog = useCallback(async (eventType: TimeLog['eventType']) => {
-    if (!user) return;
+    if (!user || isActionPendingRef.current) return;
+
+    // Check if the latest local log already matches the requested event (prevents rapid double-click duplicate logs)
+    let isRedundant = false;
+    setLogs((prev) => {
+      const last = prev[prev.length - 1];
+      if (last && last.eventType === eventType) {
+        isRedundant = true;
+        return prev;
+      }
+      return prev;
+    });
+    if (isRedundant) return;
+
+    isActionPendingRef.current = true;
     const todayKey = getTodayKey();
     const log: TimeLog = {
       id: generateUUID(),
@@ -357,6 +372,8 @@ export default function Home() {
       setLogs((prev) => prev.filter((l) => l.id !== log.id));
       await loadLogs(user);
       showError('Action not saved', 'Check your connection and try again.');
+    } finally {
+      isActionPendingRef.current = false;
     }
   }, [user, loadTeamStatus, loadLogs, showError]);
 
