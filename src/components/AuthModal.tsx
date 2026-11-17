@@ -17,6 +17,7 @@ import {
   cancelWorkstationTransfer,
   listenForDeskTransferApproval,
   getOrCreateDeviceId,
+  formatStationCode,
 } from '@/lib/sessionLock';
 import { subscribe } from '@/lib/realtime';
 
@@ -494,389 +495,423 @@ export default function AuthModal({ onLogin }: { onLogin: (user: any) => void })
               </motion.div>
             </div>
 
-            {/* ── Form ── */}
-            <form
-              style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}
-              onSubmit={(e) => { e.preventDefault(); handleLogin(); }}
-            >
-              {/* Name */}
-              <motion.div
-                style={{ position: 'relative' }}
-                initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.26, duration: 0.4 }}
-              >
-                <SpotlightWrapper>
-                  <div style={{
-                    position: 'absolute', left: '0.875rem', top: 0, bottom: 0,
-                    display: 'flex', alignItems: 'center', pointerEvents: 'none', zIndex: 2,
-                    color: 'rgba(255,255,255,0.4)',
-                  }}>
-                    <UserRound size={16} strokeWidth={2} />
+            {/* ── Form / Workstation Transfer View ── */}
+            <AnimatePresence mode="wait">
+              {lockedUser ? (
+                <motion.div
+                  key="locked-card"
+                  initial={{ opacity: 0, scale: 0.94, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.94, y: 10 }}
+                  transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+                  className="space-y-4 text-center py-1"
+                >
+                  {/* Recruiter Identity Chip */}
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/10 backdrop-blur-md shadow-inner">
+                    <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-[10px] font-black text-white">
+                      {lockedUser.name[0]?.toUpperCase()}
+                    </div>
+                    <span className="text-xs font-semibold text-white tracking-tight">{lockedUser.name}</span>
+                    <span className="text-[9px] font-mono font-bold text-indigo-300 uppercase px-1.5 py-0.5 rounded-full bg-indigo-500/15 border border-indigo-500/25">
+                      {lockedUser.clientName || client}
+                    </span>
                   </div>
-                  <input
-                    type="text" placeholder="Full Name"
-                    value={name} onChange={e => setName(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleLogin()} autoFocus
-                    className="input-3d input-multicolour"
-                    style={{
-                      width: '100%', padding: '0.875rem 1rem 0.875rem 2.75rem',
-                      fontSize: '0.9rem', outline: 'none',
-                      backdropFilter: 'blur(8px)',
-                      fontFamily: 'inherit',
-                    }}
-                  />
-                </SpotlightWrapper>
-                <AnimatePresence>
-                  {isCaptainName && (
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}
-                      style={{
-                        position: 'absolute', right: '0.875rem', top: '50%', transform: 'translateY(-50%)',
-                        display: 'flex', alignItems: 'center', gap: '0.3rem',
-                        padding: '0.2rem 0.6rem', borderRadius: 20,
-                        background: 'rgba(168,85,247,0.12)',
-                        border: '1px solid rgba(168,85,247,0.3)',
-                      }}
-                    >
-                      <ShieldCheck size={10} style={{ color: '#a855f7' }} />
-                      <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.15em', color: '#a855f7', textTransform: 'uppercase' }}>Captain</span>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.div>
 
-              {/* Client */}
-              <AnimatePresence>
-                {requiresClient && (
+                  {transferApproved ? (
+                    <div className="py-6 space-y-3">
+                      <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shadow-[0_0_35px_rgba(16,185,129,0.4)] animate-bounce">
+                        <CheckCircle2 size={32} />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-bold text-white tracking-tight">Desk Transfer Approved!</h3>
+                        <p className="text-xs text-zinc-400 mt-1">Rebinding shift session to this computer. Launching…</p>
+                      </div>
+                    </div>
+                  ) : isPendingTransfer ? (
+                    <div className="py-2 space-y-4">
+                      {/* Concentric Orbital Radar Pulse */}
+                      <div className="relative w-24 h-24 mx-auto flex items-center justify-center">
+                        <div className="absolute inset-0 rounded-full border border-amber-400/25 animate-ping" style={{ animationDuration: '3s' }} />
+                        <div className="absolute -inset-2.5 rounded-full border border-indigo-500/25 animate-pulse" />
+                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-500/20 via-purple-500/10 to-indigo-500/20 border border-amber-400/40 flex items-center justify-center text-amber-300 shadow-[0_0_35px_rgba(245,158,11,0.3)]">
+                          <ArrowLeftRight size={24} className="animate-pulse" />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5 px-2">
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/25 text-amber-300 text-[10px] font-mono font-bold uppercase tracking-wider">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+                          Awaiting Captain Authorization
+                        </div>
+                        <h3 className="text-sm font-bold text-white tracking-tight">
+                          Transfer Request Dispatched
+                        </h3>
+                        <p className="text-xs text-zinc-400 leading-relaxed max-w-xs mx-auto">
+                          A shift transfer request has been beamed to Captain console for <strong className="text-white">Desk [{formatStationCode(getOrCreateDeviceId())}]</strong>. Keep this tab open — access will initialize automatically once authorized.
+                        </p>
+                      </div>
+
+                      <div className="pt-2">
+                        <button
+                          type="button"
+                          onClick={handleCancelTransfer}
+                          className="text-xs text-zinc-500 hover:text-rose-300 transition-colors font-medium cursor-pointer"
+                        >
+                          Cancel request &amp; return to login
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="py-2 space-y-4">
+                      {/* Workstation Lock Graphic */}
+                      <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-tr from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-300 shadow-[0_0_30px_rgba(99,102,241,0.25)]">
+                        <ArrowLeftRight size={26} />
+                      </div>
+
+                      <div className="space-y-1.5 px-2">
+                        <h3 className="text-sm font-bold text-white tracking-tight">
+                          Active Shift on Another Workstation
+                        </h3>
+                        <p className="text-xs text-zinc-400 leading-relaxed max-w-xs mx-auto">
+                          You are currently on an active shift on another desk computer. To continue working from this computer, request a workstation transfer.
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <button
+                          type="button"
+                          disabled={requestingTransfer}
+                          onClick={handleRequestTransfer}
+                          className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-500 via-indigo-600 to-purple-600 hover:from-indigo-400 hover:to-purple-500 active:scale-[0.99] text-white text-xs font-bold tracking-wider uppercase transition-all shadow-[0_0_24px_rgba(99,102,241,0.4)] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                        >
+                          {requestingTransfer ? (
+                            <><Loader2 size={13} className="animate-spin" /> Beaming to Captain…</>
+                          ) : (
+                            <><ArrowLeftRight size={13} /> Request Desk Transfer</>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => { setLockedUser(null); setError(null); }}
+                          className="w-full py-2.5 px-4 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/5 text-zinc-400 hover:text-white text-xs font-semibold tracking-wider transition-all cursor-pointer"
+                        >
+                          Cancel &amp; Return to Login
+                        </button>
+                      </div>
+
+                      {/* Discreet In-Person Captain Override */}
+                      <div className="pt-2 border-t border-white/5">
+                        {!showInPerson ? (
+                          <button
+                            type="button"
+                            onClick={() => setShowInPerson(true)}
+                            className="text-[10px] text-zinc-600 hover:text-indigo-300 transition-colors font-mono cursor-pointer"
+                          >
+                            Captain in-person unlock ▸
+                          </button>
+                        ) : (
+                          <div className="space-y-2 pt-1 max-w-xs mx-auto">
+                            <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400">
+                              <span className="font-bold uppercase tracking-wider">Captain Authorization PIN</span>
+                              <button
+                                type="button"
+                                onClick={() => setShowInPerson(false)}
+                                className="text-zinc-600 hover:text-zinc-400"
+                              >
+                                Close
+                              </button>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="password"
+                                value={overridePin}
+                                onChange={(e) => setOverridePin(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    void handleCaptainInPersonAuthorize();
+                                  }
+                                }}
+                                placeholder="••••"
+                                className="flex-1 bg-black/60 border border-white/10 rounded-xl px-3 py-1.5 text-center text-sm tracking-widest text-white placeholder-zinc-700 outline-none font-mono focus:border-indigo-500"
+                              />
+                              <button
+                                type="button"
+                                disabled={loadingOverride}
+                                onClick={handleCaptainInPersonAuthorize}
+                                className="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-[10px] font-bold tracking-wider uppercase transition-all cursor-pointer disabled:opacity-50"
+                              >
+                                {loadingOverride ? '…' : 'Unlock'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {overrideError && (
+                    <p className="text-[10px] text-rose-400 font-medium pt-1">{overrideError}</p>
+                  )}
+                </motion.div>
+              ) : (
+                <form
+                  style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}
+                  onSubmit={(e) => { e.preventDefault(); handleLogin(); }}
+                >
+                  {/* Name */}
                   <motion.div
-                    key="client"
-                    initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-                    style={{ position: 'relative', overflow: 'visible' }}
+                    style={{ position: 'relative' }}
+                    initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.26, duration: 0.4 }}
                   >
                     <SpotlightWrapper>
                       <div style={{
                         position: 'absolute', left: '0.875rem', top: 0, bottom: 0,
                         display: 'flex', alignItems: 'center', pointerEvents: 'none', zIndex: 2,
-                        color: isDropdownOpen ? '#a855f7' : 'rgba(255,255,255,0.4)',
-                        transition: 'color 0.2s',
+                        color: 'rgba(255,255,255,0.4)',
                       }}>
-                        <Briefcase size={16} strokeWidth={2} />
+                        <UserRound size={16} strokeWidth={2} />
                       </div>
-                      <div
-                        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                      <input
+                        type="text" placeholder="Full Name"
+                        value={name} onChange={e => setName(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleLogin()} autoFocus
                         className="input-3d input-multicolour"
                         style={{
-                          width: '100%', padding: '0.875rem 2.5rem 0.875rem 2.75rem',
-                          borderRadius: 14,
-                          color: client ? '#fff' : 'rgba(255,255,255,0.35)',
-                          fontSize: '0.9375rem', cursor: 'pointer',
-                          transition: 'all 0.22s', userSelect: 'none',
-                          fontFamily: 'inherit',
+                          width: '100%', padding: '0.875rem 1rem 0.875rem 2.75rem',
+                          fontSize: '0.9rem', outline: 'none',
                           backdropFilter: 'blur(8px)',
+                          fontFamily: 'inherit',
                         }}
-                      >
-                        {client || <span>Select client <span style={{ color: 'rgba(239,68,68,0.7)', marginLeft: 2 }}>*</span></span>}
-                      </div>
+                      />
                     </SpotlightWrapper>
-                    <div style={{
-                      position: 'absolute', right: '1rem', top: '50%',
-                      transform: `translateY(-50%) rotate(${isDropdownOpen ? 180 : 0}deg)`,
-                      pointerEvents: 'none',
-                      color: isDropdownOpen ? '#a855f7' : 'rgba(255,255,255,0.3)',
-                      transition: 'all 0.25s cubic-bezier(0.16,1,0.3,1)',
-                    }}>
-                      <ChevronDown size={15} />
-                    </div>
                     <AnimatePresence>
-                      {isDropdownOpen && (
+                      {isCaptainName && (
                         <motion.div
-                          initial={{ opacity: 0, y: -8, scale: 0.97 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: -8, scale: 0.97 }}
-                          transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-                          className="drop-scroll input-multicolour"
+                          initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}
                           style={{
-                            position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0,
-                            background: 'rgba(8, 5, 18, 0.65)',
-                            backdropFilter: 'blur(20px) saturate(180%)',
-                            borderRadius: 14,
-                            padding: '0.35rem',
-                            maxHeight: 210, overflowY: 'auto',
-                            zIndex: 50,
+                            position: 'absolute', right: '0.875rem', top: '50%', transform: 'translateY(-50%)',
+                            display: 'flex', alignItems: 'center', gap: '0.3rem',
+                            padding: '0.2rem 0.6rem', borderRadius: 20,
+                            background: 'rgba(168,85,247,0.12)',
+                            border: '1px solid rgba(168,85,247,0.3)',
                           }}
                         >
-                          {clientOptions.map(opt => (
-                            <div key={opt}
-                              onClick={() => { setClient(opt); setIsDropdownOpen(false); }}
-                              style={{
-                                padding: '0.625rem 0.875rem', borderRadius: 10,
-                                cursor: 'pointer', fontSize: '0.875rem',
-                                color: client === opt ? '#fff' : 'rgba(255,255,255,0.5)',
-                                background: client === opt ? 'rgba(168,85,247,0.15)' : 'transparent',
-                                fontWeight: client === opt ? 600 : 400,
-                                display: 'flex', alignItems: 'center', gap: 8,
-                                transition: 'all 0.14s', fontFamily: 'inherit',
-                              }}
-                              onMouseEnter={e => { if (client !== opt) { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = '#fff'; }}}
-                              onMouseLeave={e => { if (client !== opt) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.5)'; }}}
-                            >
-                              {client === opt && <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#a855f7', flexShrink: 0 }} />}
-                              {opt}
-                            </div>
-                          ))}
+                          <ShieldCheck size={10} style={{ color: '#a855f7' }} />
+                          <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.15em', color: '#a855f7', textTransform: 'uppercase' }}>Captain</span>
                         </motion.div>
                       )}
                     </AnimatePresence>
                   </motion.div>
-                )}
-              </AnimatePresence>
 
-              {/* Password */}
-              <motion.div
-                style={{ position: 'relative' }}
-                initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.34, duration: 0.4 }}
-              >
-                <SpotlightWrapper>
-                  <div style={{
-                    position: 'absolute', left: '0.875rem', top: 0, bottom: 0,
-                    display: 'flex', alignItems: 'center', pointerEvents: 'none', zIndex: 2,
-                    color: 'rgba(255,255,255,0.4)',
-                  }}>
-                    <LockKeyhole size={16} strokeWidth={2} />
-                  </div>
-                  <input
-                    type={showPass ? 'text' : 'password'} placeholder="Password"
-                    value={password} onChange={e => setPassword(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleLogin()}
-                    className="input-3d input-multicolour"
-                    style={{
-                      width: '100%', padding: '0.875rem 2.75rem 0.875rem 2.75rem',
-                      fontSize: '0.9rem', outline: 'none',
-                      backdropFilter: 'blur(8px)',
-                      fontFamily: 'inherit',
-                    }}
-                  />
-                  <button
-                    type="button" aria-label={showPass ? 'Hide' : 'Show'}
-                    onClick={() => setShowPass(!showPass)}
-                    style={{
-                      position: 'absolute', right: '0.875rem', top: '50%', transform: 'translateY(-50%)',
-                      background: 'none', border: 'none', cursor: 'pointer', zIndex: 2,
-                      color: 'rgba(255,255,255,0.3)', padding: 4, transition: 'color 0.2s',
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.75)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.3)'; }}
-                  >
-                    {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </SpotlightWrapper>
-              </motion.div>
-
-              {/* Error */}
-              <AnimatePresence>
-                {error && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-                    style={{
-                      padding: '0.7rem 1rem', borderRadius: 12,
-                      background: 'rgba(239,68,68,0.07)',
-                      border: '1px solid rgba(239,68,68,0.2)',
-                      color: '#f87171', fontSize: '0.75rem',
-                      fontWeight: 500, textAlign: 'center', lineHeight: 1.5,
-                    }}
-                  >{error}</motion.div>
-                )}
-                {lockedUser && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.96 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.96 }}
-                    className="p-3.5 rounded-2xl bg-[#0b0d18] border border-indigo-500/30 text-left space-y-2.5 shadow-2xl overflow-hidden relative"
-                  >
-                    {transferApproved ? (
-                      <div className="py-2 text-center space-y-1">
-                        <div className="flex items-center justify-center gap-2 text-emerald-400 font-bold text-xs uppercase tracking-wider font-mono">
-                          <CheckCircle2 size={16} /> Transfer Approved by Captain
-                        </div>
-                        <p className="text-[11px] text-zinc-300">
-                          Rebinding session to this workstation. Initializing access…
-                        </p>
-                      </div>
-                    ) : isPendingTransfer ? (
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="flex h-2 w-2 relative">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-                            </span>
-                            <span className="text-[10px] font-mono font-bold tracking-wider uppercase text-amber-300">
-                              Transfer Request Dispatched
-                            </span>
+                  {/* Client */}
+                  <AnimatePresence>
+                    {requiresClient && (
+                      <motion.div
+                        key="client"
+                        initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+                        style={{ position: 'relative', overflow: 'visible' }}
+                      >
+                        <SpotlightWrapper>
+                          <div style={{
+                            position: 'absolute', left: '0.875rem', top: 0, bottom: 0,
+                            display: 'flex', alignItems: 'center', pointerEvents: 'none', zIndex: 2,
+                            color: isDropdownOpen ? '#a855f7' : 'rgba(255,255,255,0.4)',
+                            transition: 'color 0.2s',
+                          }}>
+                            <Briefcase size={16} strokeWidth={2} />
                           </div>
-                          <span className="text-[9px] font-mono text-zinc-500 font-bold">
-                            {lockedUser.name}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-zinc-300 leading-relaxed">
-                          Awaiting authorization on Captain's console. Your session will initialize automatically once approved.
-                        </p>
-                        <div className="flex items-center justify-between pt-1 border-t border-white/5">
-                          <span className="text-[10px] text-zinc-500 font-mono">Keep tab open</span>
-                          <button
-                            type="button"
-                            onClick={handleCancelTransfer}
-                            className="text-[10px] text-zinc-400 hover:text-rose-300 font-mono underline cursor-pointer transition-colors"
+                          <div
+                            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                            className="input-3d input-multicolour"
+                            style={{
+                              width: '100%', padding: '0.875rem 2.5rem 0.875rem 2.75rem',
+                              borderRadius: 14,
+                              color: client ? '#fff' : 'rgba(255,255,255,0.35)',
+                              fontSize: '0.9375rem', cursor: 'pointer',
+                              transition: 'all 0.22s', userSelect: 'none',
+                              fontFamily: 'inherit',
+                              backdropFilter: 'blur(8px)',
+                            }}
                           >
-                            Cancel Request
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5">
-                            <ArrowLeftRight size={12} className="text-indigo-400" />
-                            <span className="text-[10px] font-mono font-bold tracking-wider uppercase text-indigo-300">
-                              Workstation Shift Request
-                            </span>
+                            {client || <span>Select client <span style={{ color: 'rgba(239,68,68,0.7)', marginLeft: 2 }}>*</span></span>}
                           </div>
-                          <span className="text-[9px] font-mono text-zinc-500 font-bold">
-                            {lockedUser.name}
-                          </span>
+                        </SpotlightWrapper>
+                        <div style={{
+                          position: 'absolute', right: '1rem', top: '50%',
+                          transform: `translateY(-50%) rotate(${isDropdownOpen ? 180 : 0}deg)`,
+                          pointerEvents: 'none',
+                          color: isDropdownOpen ? '#a855f7' : 'rgba(255,255,255,0.3)',
+                          transition: 'all 0.25s cubic-bezier(0.16,1,0.3,1)',
+                        }}>
+                          <ChevronDown size={15} />
                         </div>
-                        <p className="text-[11px] text-zinc-300 leading-normal">
-                          Shifted physical computers? Send a transfer request to the Captain console to authorize this desk.
-                        </p>
-                        <button
-                          type="button"
-                          disabled={requestingTransfer}
-                          onClick={handleRequestTransfer}
-                          className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-indigo-500 via-indigo-600 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white text-[10px] font-bold tracking-wider uppercase transition-all shadow-[0_0_16px_rgba(99,102,241,0.35)] flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                        >
-                          {requestingTransfer ? (
-                            <><Loader2 size={12} className="animate-spin" /> Dispatching to Captain…</>
-                          ) : (
-                            <><ArrowLeftRight size={12} /> Request Desk Transfer</>
-                          )}
-                        </button>
-
-                        {/* Collapsed In-Person Captain Override */}
-                        <div className="pt-1 border-t border-white/5">
-                          {!showInPerson ? (
-                            <button
-                              type="button"
-                              onClick={() => setShowInPerson(true)}
-                              className="text-[9px] text-zinc-500 hover:text-indigo-300 transition-colors font-mono cursor-pointer flex items-center gap-1"
+                        <AnimatePresence>
+                          {isDropdownOpen && (
+                            <motion.div
+                              initial={{ opacity: 0, y: -8, scale: 0.97 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: -8, scale: 0.97 }}
+                              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                              className="drop-scroll input-multicolour"
+                              style={{
+                                position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0,
+                                zIndex: 50, borderRadius: 14,
+                                background: 'rgba(10, 8, 20, 0.95)',
+                                border: '1px solid rgba(168,85,247,0.3)',
+                                backdropFilter: 'blur(20px)',
+                                maxHeight: 180, overflowY: 'auto',
+                                boxShadow: '0 12px 32px rgba(0,0,0,0.6)',
+                              }}
                             >
-                              Captain in-person override ▸
-                            </button>
-                          ) : (
-                            <div className="space-y-2 pt-1">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[9px] font-mono text-zinc-400 uppercase font-bold">
-                                  Captain Authorization PIN
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => setShowInPerson(false)}
-                                  className="text-[9px] text-zinc-500 hover:text-zinc-400 font-mono cursor-pointer"
-                                >
-                                  Close
-                                </button>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="password"
-                                  value={overridePin}
-                                  onChange={(e) => setOverridePin(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                      e.preventDefault();
-                                      void handleCaptainInPersonAuthorize();
-                                    }
+                              {clientOptions.map((c) => (
+                                <div
+                                  key={c}
+                                  onClick={() => { setClient(c); setIsDropdownOpen(false); }}
+                                  style={{
+                                    padding: '0.75rem 1.25rem',
+                                    fontSize: '0.85rem',
+                                    color: client === c ? '#c084fc' : '#e2e8f0',
+                                    fontWeight: client === c ? 700 : 500,
+                                    background: client === c ? 'rgba(168,85,247,0.15)' : 'transparent',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.15s',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                                   }}
-                                  placeholder="Enter Master PIN"
-                                  className="flex-1 bg-black/60 border border-white/10 rounded-xl px-2.5 py-1.5 text-xs text-white placeholder-zinc-600 outline-none font-mono focus:border-indigo-500"
-                                />
-                                <button
-                                  type="button"
-                                  disabled={loadingOverride}
-                                  onClick={handleCaptainInPersonAuthorize}
-                                  className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-[9px] font-bold tracking-wider uppercase transition-all cursor-pointer shrink-0 disabled:opacity-50"
+                                  onMouseEnter={(e) => {
+                                    if (client !== c) e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    if (client !== c) e.currentTarget.style.background = 'transparent';
+                                  }}
                                 >
-                                  {loadingOverride ? 'Verifying…' : 'Authorize'}
-                                </button>
-                              </div>
-                            </div>
+                                  <span>{c}</span>
+                                  {client === c && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#c084fc' }} />}
+                                </div>
+                              ))}
+                            </motion.div>
                           )}
-                        </div>
+                        </AnimatePresence>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Password */}
+                  <motion.div
+                    style={{ position: 'relative' }}
+                    initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.34, duration: 0.4 }}
+                  >
+                    <SpotlightWrapper>
+                      <div style={{
+                        position: 'absolute', left: '0.875rem', top: 0, bottom: 0,
+                        display: 'flex', alignItems: 'center', pointerEvents: 'none', zIndex: 2,
+                        color: 'rgba(255,255,255,0.4)',
+                      }}>
+                        <LockKeyhole size={16} strokeWidth={2} />
                       </div>
-                    )}
-                    {overrideError && (
-                      <p className="text-[10px] text-rose-400 font-medium pt-0.5">{overrideError}</p>
-                    )}
+                      <input
+                        type={showPass ? 'text' : 'password'}
+                        placeholder="Master password"
+                        value={password} onChange={e => setPassword(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleLogin()}
+                        className="input-3d input-multicolour"
+                        style={{
+                          width: '100%', padding: '0.875rem 2.75rem 0.875rem 2.75rem',
+                          fontSize: '0.9rem', outline: 'none',
+                          backdropFilter: 'blur(8px)',
+                          fontFamily: 'inherit',
+                        }}
+                      />
+                      <button
+                        type="button" onClick={() => setShowPass(!showPass)}
+                        style={{
+                          position: 'absolute', right: '0.875rem', top: 0, bottom: 0,
+                          display: 'flex', alignItems: 'center', background: 'none', border: 'none',
+                          cursor: 'pointer', color: 'rgba(255,255,255,0.3)', zIndex: 2,
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.color = '#c084fc'; }}
+                        onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.3)'; }}
+                      >
+                        {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </SpotlightWrapper>
                   </motion.div>
-                )}
-              </AnimatePresence>
 
-              {/* Submit */}
-              <motion.button
-                type="submit" disabled={loading}
-                className="btn-colour-shift"
-                style={{
-                  width: '100%', padding: '1.0625rem',
-                  borderRadius: 14, color: '#fff',
-                  fontWeight: 800, fontSize: '0.7rem',
-                  textTransform: 'uppercase', letterSpacing: '0.22em',
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  opacity: loading ? 0.7 : 1,
-                  fontFamily: "'Satoshi', system-ui, sans-serif",
-                  marginTop: '0.25rem',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
-                  position: 'relative', overflow: 'hidden',
-                }}
-                initial={{ opacity: 0, y: 14 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.42, duration: 0.4 }}
-                whileHover={!loading ? { scale: 1.015 } : {}}
-                whileTap={!loading ? { scale: 0.975 } : {}}
-                onMouseMove={!loading ? handleButtonMouseMove : undefined}
-                onMouseLeave={!loading ? handleButtonMouseLeave : undefined}
-              >
-                {/* Inner shimmer sweep */}
-                {!loading && (
-                  <div style={{
-                    position: 'absolute', inset: 0,
-                    background: 'linear-gradient(105deg, transparent 35%, rgba(255,255,255,0.08) 50%, transparent 65%)',
-                    backgroundSize: '200% 100%',
-                    animation: 'luminous-sweep 3.5s ease-in-out infinite',
-                    pointerEvents: 'none',
-                  }} />
-                )}
-                <motion.span 
-                  style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', width: '100%' }}
-                  animate={{ x: buttonOffset.x, y: buttonOffset.y }}
-                  transition={{ type: 'spring', stiffness: 200, damping: 18 }}
-                >
-                  {loading
-                    ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />Verifying...</>
-                    : <><Zap size={13} strokeWidth={2.5} />Initialize Access</>
-                  }
-                </motion.span>
-              </motion.button>
+                  {/* Error Notification (Only for standard password / client validation errors) */}
+                  <AnimatePresence>
+                    {error && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+                        style={{
+                          padding: '0.7rem 1rem', borderRadius: 12,
+                          background: 'rgba(239,68,68,0.07)',
+                          border: '1px solid rgba(239,68,68,0.2)',
+                          color: '#f87171', fontSize: '0.75rem',
+                          fontWeight: 500, textAlign: 'center', lineHeight: 1.5,
+                        }}
+                      >{error}</motion.div>
+                    )}
+                  </AnimatePresence>
 
-              {!requiresClient && (
-                <motion.p
-                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5, duration: 0.4 }}
-                  style={{ textAlign: 'center', fontSize: '0.65rem', color: 'rgba(255,255,255,0.18)', lineHeight: 1.6 }}
-                >
-                  Authorized personnel only.
-                </motion.p>
+                  {/* Submit Button */}
+                  <motion.button
+                    type="submit" disabled={loading}
+                    className="btn-colour-shift"
+                    style={{
+                      width: '100%', padding: '1.0625rem',
+                      borderRadius: 14, color: '#fff',
+                      fontWeight: 800, fontSize: '0.7rem',
+                      textTransform: 'uppercase', letterSpacing: '0.22em',
+                      cursor: loading ? 'not-allowed' : 'pointer',
+                      opacity: loading ? 0.7 : 1,
+                      fontFamily: "'Satoshi', system-ui, sans-serif",
+                      marginTop: '0.25rem',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+                      position: 'relative', overflow: 'hidden',
+                    }}
+                    initial={{ opacity: 0, y: 14 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.42, duration: 0.4 }}
+                    whileHover={!loading ? { scale: 1.015 } : {}}
+                    whileTap={!loading ? { scale: 0.975 } : {}}
+                    onMouseMove={!loading ? handleButtonMouseMove : undefined}
+                    onMouseLeave={!loading ? handleButtonMouseLeave : undefined}
+                  >
+                    {!loading && (
+                      <div style={{
+                        position: 'absolute', inset: 0,
+                        background: 'linear-gradient(105deg, transparent 35%, rgba(255,255,255,0.08) 50%, transparent 65%)',
+                        backgroundSize: '200% 100%',
+                        animation: 'luminous-sweep 3.5s ease-in-out infinite',
+                        pointerEvents: 'none',
+                      }} />
+                    )}
+                    <motion.span 
+                      style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', width: '100%' }}
+                      animate={{ x: buttonOffset.x, y: buttonOffset.y }}
+                      transition={{ type: 'spring', stiffness: 200, damping: 18 }}
+                    >
+                      {loading
+                        ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />Verifying...</>
+                        : <><Zap size={13} strokeWidth={2.5} />Initialize Access</>
+                      }
+                    </motion.span>
+                  </motion.button>
+
+                  {!requiresClient && (
+                    <motion.p
+                      initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5, duration: 0.4 }}
+                      style={{ textAlign: 'center', fontSize: '0.65rem', color: 'rgba(255,255,255,0.18)', lineHeight: 1.6 }}
+                    >
+                      Authorized personnel only.
+                    </motion.p>
+                  )}
+                </form>
               )}
-            </form>
+            </AnimatePresence>
 
             {/* Footer inside card */}
             <motion.p

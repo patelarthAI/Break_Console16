@@ -17,6 +17,7 @@ import {
   approveWorkstationTransfer,
   rejectWorkstationTransfer,
   listenForDeskTransferRequests,
+  formatStationCode,
   type DeskTransferRequest,
 } from '@/lib/sessionLock';
 
@@ -127,64 +128,71 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 
   return (
     <div className="min-h-screen bg-[var(--surface-0)]">
-      {/* ── Captain Live Desk Transfer Approval HUD ────────────────────────────── */}
+      {/* ── 2026 Captain Dynamic Island Floating HUD ───────────────────────────── */}
       <AnimatePresence>
         {user.isMaster && pendingTransfers.length > 0 && (
-          <motion.aside
-            initial={{ y: -60, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: -60, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 350, damping: 28 }}
-            className="sticky top-0 z-50 px-4 py-2.5 bg-gradient-to-r from-[#170e28]/95 via-[#1a1438]/95 to-[#0b172a]/95 border-b border-indigo-500/40 backdrop-blur-xl shadow-[0_12px_36px_rgba(0,0,0,0.85)]"
+          <motion.div
+            initial={{ y: -80, opacity: 0, scale: 0.94 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: -80, opacity: 0, scale: 0.94 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+            className="fixed top-3 left-1/2 -translate-x-1/2 z-[200] w-[92%] max-w-xl pointer-events-auto"
           >
-            <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <span className="flex h-3 w-3 relative shrink-0">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
-                </span>
-                <div>
+            <div className="p-3 pl-3.5 rounded-2xl bg-[#090b14]/94 border border-amber-500/35 backdrop-blur-2xl shadow-[0_24px_60px_rgba(0,0,0,0.9),0_0_35px_rgba(245,158,11,0.2)] flex items-center justify-between gap-3 text-left">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="relative shrink-0">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500/20 to-purple-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 shadow-[0_0_16px_rgba(245,158,11,0.25)]">
+                    <ArrowLeftRight size={15} className="animate-pulse" />
+                  </div>
+                  <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                  </span>
+                </div>
+
+                <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-amber-300 font-mono flex items-center gap-1">
-                      <ArrowLeftRight size={11} /> Desk Transfer Approval ({pendingTransfers.length})
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-amber-300">
+                      Desk Transfer Request {pendingTransfers.length > 1 ? `(${pendingTransfers.length})` : ''}
                     </span>
-                    <span className="text-xs text-white font-bold">
-                      {pendingTransfers[0].userName}
-                    </span>
-                    <span className="text-[10px] text-zinc-400 font-mono px-1.5 py-0.5 rounded bg-white/5 border border-white/10">
+                    <span className="text-[10px] font-mono text-zinc-400 px-1.5 py-0.2 rounded bg-white/5 border border-white/10">
                       {pendingTransfers[0].clientName}
                     </span>
                   </div>
-                  <p className="text-[11px] text-zinc-300 mt-0.5">
-                    Recruiter shifted desks and requests to transfer active shift to Station <span className="font-mono text-amber-200 font-bold bg-amber-500/10 px-1 py-0.5 rounded border border-amber-500/20">[{pendingTransfers[0].stationCode}]</span>.
-                  </p>
+                  <div className="text-xs font-semibold text-white truncate mt-0.5">
+                    {pendingTransfers[0].userName}
+                    <span className="text-zinc-400 font-normal ml-1.5 font-mono text-[11px]">
+                      requests shift bind to <span className="text-amber-200 font-bold font-mono">[{formatStationCode(pendingTransfers[0].targetDeviceId)}]</span>
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   type="button"
                   disabled={processingUserId === pendingTransfers[0].userId}
                   onClick={() => handleApproveTransfer(pendingTransfers[0])}
-                  className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 active:scale-[0.98] text-white text-xs font-bold tracking-wider uppercase transition-all shadow-[0_0_16px_rgba(16,185,129,0.35)] cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 active:scale-[0.98] text-white text-[10px] font-bold tracking-wider uppercase transition-all shadow-[0_0_16px_rgba(16,185,129,0.35)] cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
                 >
                   {processingUserId === pendingTransfers[0].userId ? (
-                    <><Loader2 size={13} className="animate-spin" /> Authorizing…</>
+                    <><Loader2 size={12} className="animate-spin" /> Authorizing…</>
                   ) : (
-                    <><Check size={13} strokeWidth={2.5} /> Approve &amp; Bind Desk</>
+                    <><Check size={12} strokeWidth={2.5} /> Authorize</>
                   )}
                 </button>
                 <button
                   type="button"
                   disabled={processingUserId === pendingTransfers[0].userId}
                   onClick={() => handleRejectTransfer(pendingTransfers[0])}
-                  className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-rose-500/20 hover:border-rose-500/30 hover:text-rose-300 text-zinc-400 text-xs font-semibold tracking-wider uppercase transition-all border border-white/10 cursor-pointer disabled:opacity-50"
+                  className="p-2 rounded-xl bg-white/5 hover:bg-rose-500/20 hover:text-rose-300 text-zinc-400 text-xs transition-all border border-white/10 cursor-pointer disabled:opacity-50"
+                  title="Decline Request"
                 >
-                  Decline
+                  <X size={14} />
                 </button>
               </div>
             </div>
-          </motion.aside>
+          </motion.div>
         )}
       </AnimatePresence>
 

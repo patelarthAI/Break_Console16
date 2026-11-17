@@ -521,3 +521,10 @@ export function listenForDeskTransferApproval(
     unsubRej();
   };
 }
+
+
+export function formatStationCode(deviceId?: string): string {
+  if (!deviceId) return 'DESK-01';
+  const clean = deviceId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase();
+  return clean || 'DESK-01';
+}
