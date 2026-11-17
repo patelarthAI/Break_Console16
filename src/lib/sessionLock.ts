@@ -1,7 +1,7 @@
 'use client';
 
 import { onBroadcast, sendBroadcast } from './realtime';
-import { getSingleUserStatus, getLogs, updateTimeLog } from './store';
+import { getSingleUserStatus, getLogs, updateTimeLog, getAllUsers } from './store';
 import { getTodayKey, getPastDaysZoned } from './timeUtils';
 
 const DEVICE_ID_KEY = 'bp_workstation_device_id';
@@ -12,6 +12,19 @@ export interface WorkstationLockResult {
   status?: string;
   stationCode?: string;
   reason?: string;
+  isPendingTransfer?: boolean;
+  targetDeviceId?: string;
+}
+
+export interface DeskTransferRequest {
+  userId: string;
+  userName: string;
+  clientName: string;
+  targetDeviceId: string;
+  originalDeviceId?: string;
+  stationCode: string;
+  logId: string;
+  requestedAt: number;
 }
 
 /**
@@ -59,8 +72,30 @@ export async function checkWorkstationLock(userId: string): Promise<WorkstationL
     const punchInLogs = logs.filter(l => l.eventType === 'punch_in');
     const activePunchIn = punchInLogs[punchInLogs.length - 1];
     
-    // If no active punch in or lock was explicitly released by Captain (addedBy is null or not device:)
-    if (!activePunchIn || !activePunchIn.addedBy || !activePunchIn.addedBy.startsWith('device:')) {
+    // If no active punch in or lock was explicitly released by Captain (addedBy is null or manual_released)
+    if (!activePunchIn || !activePunchIn.addedBy) {
+      return { isLocked: false };
+    }
+
+    // Check if there is an active transfer request in progress
+    if (activePunchIn.addedBy.startsWith('transfer_pending:')) {
+      const parts = activePunchIn.addedBy.replace('transfer_pending:', '').split('|from:');
+      const targetDev = parts[0];
+      const isTarget = targetDev === myDeviceId;
+      const stationCode = targetDev.replace('dev_', '').slice(0, 8).toUpperCase();
+      return {
+        isLocked: true,
+        isPendingTransfer: isTarget,
+        targetDeviceId: targetDev,
+        status: statusRecord.status,
+        stationCode,
+        reason: isTarget
+          ? 'Desk transfer request sent to Captain. Awaiting authorization.'
+          : `Active shift in progress on another workstation (Status: ${statusRecord.status.replace('_', ' ').toUpperCase()}).`,
+      };
+    }
+
+    if (!activePunchIn.addedBy.startsWith('device:')) {
       return { isLocked: false };
     }
 
@@ -74,6 +109,7 @@ export async function checkWorkstationLock(userId: string): Promise<WorkstationL
     // Hard block!
     return {
       isLocked: true,
+      isPendingTransfer: false,
       status: statusRecord.status,
       stationCode,
       reason: `Active shift in progress on another workstation (Status: ${statusRecord.status.replace('_', ' ').toUpperCase()}).`,
@@ -85,12 +121,18 @@ export async function checkWorkstationLock(userId: string): Promise<WorkstationL
 }
 
 /**
- * Transfers the active shift workstation lock to the current machine.
- * Can be called during Captain override on the login screen or from the Master floor.
+ * Recruiter requests a desk transfer from their blocked login screen.
+ * Tags the active punch_in record with transfer_pending:<myDeviceId>|from:<oldDeviceId>
+ * and broadcasts DESK_TRANSFER_REQUEST to Captain console in realtime.
  */
-export async function transferWorkstationLock(userId: string, targetDeviceId?: string): Promise<boolean> {
-  if (typeof window === 'undefined') return false;
-  const newDeviceId = targetDeviceId || getOrCreateDeviceId();
+export async function requestWorkstationTransfer(
+  userId: string,
+  userName?: string,
+  clientName?: string
+): Promise<{ success: boolean; targetDeviceId: string; error?: string }> {
+  if (typeof window === 'undefined') return { success: false, targetDeviceId: '', error: 'Window undefined' };
+  const targetDeviceId = getOrCreateDeviceId();
+
   try {
     const today = getTodayKey();
     let logs = await getLogs(userId, today);
@@ -103,16 +145,185 @@ export async function transferWorkstationLock(userId: string, targetDeviceId?: s
     }
     const punchIns = logs.filter(l => l.eventType === 'punch_in');
     const activePunchIn = punchIns[punchIns.length - 1];
+
+    if (!activePunchIn) {
+      return { success: false, targetDeviceId, error: 'No active shift found' };
+    }
+
+    let originalDev = '';
+    if (activePunchIn.addedBy?.startsWith('device:')) {
+      originalDev = activePunchIn.addedBy.replace('device:', '');
+    } else if (activePunchIn.addedBy?.startsWith('transfer_pending:')) {
+      const parts = activePunchIn.addedBy.replace('transfer_pending:', '').split('|from:');
+      originalDev = parts[1] || parts[0];
+    }
+
+    // Persist request in the active punch_in record (0 new DB rows, 0 storage growth)
+    await updateTimeLog(activePunchIn.id, {
+      addedBy: `transfer_pending:${targetDeviceId}|from:${originalDev}`,
+    });
+
+    // Broadcast instant notification to active Captain consoles
+    await sendBroadcast('DESK_TRANSFER_REQUEST', {
+      userId,
+      userName: userName || 'Recruiter',
+      clientName: clientName || '',
+      targetDeviceId,
+      originalDeviceId: originalDev,
+      logId: activePunchIn.id,
+      requestedAt: Date.now(),
+    });
+
+    return { success: true, targetDeviceId };
+  } catch (err: any) {
+    console.error('Failed to request workstation transfer:', err);
+    return { success: false, targetDeviceId, error: err?.message || 'Request failed' };
+  }
+}
+
+/**
+ * Captain approves a pending desk transfer.
+ * Rebinds the punch_in lock to targetDeviceId and broadcasts DESK_TRANSFER_APPROVED.
+ */
+export async function approveWorkstationTransfer(
+  userId: string,
+  targetDeviceId: string
+): Promise<boolean> {
+  try {
+    const today = getTodayKey();
+    let logs = await getLogs(userId, today);
+    if (!logs.some(l => l.eventType === 'punch_in')) {
+      const yesterday = getPastDaysZoned(1, true)[0];
+      if (yesterday) {
+        const yLogs = await getLogs(userId, yesterday);
+        logs = [...yLogs, ...logs];
+      }
+    }
+    const punchIns = logs.filter(l => l.eventType === 'punch_in');
+    const activePunchIn = punchIns[punchIns.length - 1];
+
     if (activePunchIn) {
       await updateTimeLog(activePunchIn.id, {
-        addedBy: 'device:' + newDeviceId,
+        addedBy: 'device:' + targetDeviceId,
       });
     }
+
+    // Broadcast instant approval so recruiter's screen logs in automatically
+    await sendBroadcast('DESK_TRANSFER_APPROVED', {
+      userId,
+      targetDeviceId,
+      approvedAt: Date.now(),
+    });
+
     return true;
   } catch (err) {
-    console.error('Failed to transfer workstation lock:', err);
+    console.error('Failed to approve desk transfer:', err);
     return false;
   }
+}
+
+/**
+ * Captain declines a pending desk transfer.
+ * Reverts the punch_in lock back to the original workstation device.
+ */
+export async function rejectWorkstationTransfer(userId: string): Promise<boolean> {
+  try {
+    const today = getTodayKey();
+    let logs = await getLogs(userId, today);
+    if (!logs.some(l => l.eventType === 'punch_in')) {
+      const yesterday = getPastDaysZoned(1, true)[0];
+      if (yesterday) {
+        const yLogs = await getLogs(userId, yesterday);
+        logs = [...yLogs, ...logs];
+      }
+    }
+    const punchIns = logs.filter(l => l.eventType === 'punch_in');
+    const activePunchIn = punchIns[punchIns.length - 1];
+
+    if (activePunchIn && activePunchIn.addedBy?.startsWith('transfer_pending:')) {
+      const parts = activePunchIn.addedBy.replace('transfer_pending:', '').split('|from:');
+      const fallbackDev = parts[1] || parts[0];
+      await updateTimeLog(activePunchIn.id, {
+        addedBy: 'device:' + fallbackDev,
+      });
+    }
+
+    await sendBroadcast('DESK_TRANSFER_REJECTED', {
+      userId,
+      rejectedAt: Date.now(),
+    });
+
+    return true;
+  } catch (err) {
+    console.error('Failed to reject desk transfer:', err);
+    return false;
+  }
+}
+
+/**
+ * Recruiter cancels their pending desk transfer request.
+ */
+export async function cancelWorkstationTransfer(userId: string): Promise<boolean> {
+  return rejectWorkstationTransfer(userId);
+}
+
+/**
+ * Fetches all currently pending desk transfer requests across active shifts today.
+ * Used by Captain console on mount and reload.
+ */
+export async function getPendingDeskTransfers(): Promise<DeskTransferRequest[]> {
+  try {
+    const today = getTodayKey();
+    const users = await getAllUsers();
+    const pending: DeskTransferRequest[] = [];
+
+    await Promise.all(
+      users.filter(u => !u.isMaster).map(async (u) => {
+        try {
+          let logs = await getLogs(u.id, today);
+          if (!logs.some(l => l.eventType === 'punch_in')) {
+            const yesterday = getPastDaysZoned(1, true)[0];
+            if (yesterday) {
+              const yLogs = await getLogs(u.id, yesterday);
+              logs = [...yLogs, ...logs];
+            }
+          }
+          const punchIns = logs.filter(l => l.eventType === 'punch_in');
+          const activePunchIn = punchIns[punchIns.length - 1];
+          if (activePunchIn && activePunchIn.addedBy?.startsWith('transfer_pending:')) {
+            const parts = activePunchIn.addedBy.replace('transfer_pending:', '').split('|from:');
+            const targetDev = parts[0];
+            const originalDev = parts[1];
+            pending.push({
+              userId: u.id,
+              userName: u.name,
+              clientName: u.clientName,
+              targetDeviceId: targetDev,
+              originalDeviceId: originalDev,
+              stationCode: targetDev.replace('dev_', '').slice(0, 8).toUpperCase(),
+              logId: activePunchIn.id,
+              requestedAt: activePunchIn.timestamp,
+            });
+          }
+        } catch {}
+      })
+    );
+
+    return pending;
+  } catch (err) {
+    console.error('Failed to fetch pending desk transfers:', err);
+    return [];
+  }
+}
+
+/**
+ * In-person direct transfer (used when Captain is physically standing at recruiter's desk
+ * and enters the Master PIN in a private masked field).
+ */
+export async function transferWorkstationLock(userId: string, targetDeviceId?: string): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  const newDeviceId = targetDeviceId || getOrCreateDeviceId();
+  return approveWorkstationTransfer(userId, newDeviceId);
 }
 
 /**
@@ -134,7 +345,7 @@ export async function releaseWorkstationLockForUser(userId: string): Promise<boo
     const activePunchIn = punchIns[punchIns.length - 1];
     if (activePunchIn) {
       await updateTimeLog(activePunchIn.id, {
-        addedBy: 'manual_released', // Clears the device lock
+        addedBy: 'manual_released',
       });
     }
     return true;
@@ -219,7 +430,6 @@ export function listenForSessionOverride(
   const unsubBroadcast = onBroadcast('SESSION_CLAIMED', (payload: any) => {
     if (!payload || !payload.userId) return;
 
-    // Same user ID, but different physical workstation / device ID
     if (payload.userId === currentUserId && payload.deviceId && payload.deviceId !== myDeviceId) {
       const timeStr = new Date(payload.timestamp || Date.now()).toLocaleTimeString([], {
         hour: '2-digit',
@@ -241,5 +451,73 @@ export function listenForSessionOverride(
 
   return () => {
     unsubBroadcast();
+  };
+}
+
+/**
+ * Subscribes to Realtime broadcast events for Captain console
+ * to receive live desk transfer requests from recruiters.
+ */
+export function listenForDeskTransferRequests(
+  onRequest: (req: DeskTransferRequest) => void,
+  onResolved: (userId: string) => void
+): () => void {
+  if (typeof window === 'undefined') return () => {};
+
+  const unsubReq = onBroadcast('DESK_TRANSFER_REQUEST', (payload: any) => {
+    if (!payload || !payload.userId) return;
+    onRequest({
+      userId: payload.userId,
+      userName: payload.userName || 'Recruiter',
+      clientName: payload.clientName || '',
+      targetDeviceId: payload.targetDeviceId || '',
+      originalDeviceId: payload.originalDeviceId || '',
+      stationCode: (payload.targetDeviceId || '').replace('dev_', '').slice(0, 8).toUpperCase(),
+      logId: payload.logId || '',
+      requestedAt: payload.requestedAt || Date.now(),
+    });
+  });
+
+  const unsubApp = onBroadcast('DESK_TRANSFER_APPROVED', (payload: any) => {
+    if (payload?.userId) onResolved(payload.userId);
+  });
+
+  const unsubRej = onBroadcast('DESK_TRANSFER_REJECTED', (payload: any) => {
+    if (payload?.userId) onResolved(payload.userId);
+  });
+
+  return () => {
+    unsubReq();
+    unsubApp();
+    unsubRej();
+  };
+}
+
+/**
+ * Subscribes to Realtime broadcast events for recruiter waiting on desk transfer.
+ */
+export function listenForDeskTransferApproval(
+  userId: string,
+  myDeviceId: string,
+  onApproved: () => void,
+  onRejected: () => void
+): () => void {
+  if (typeof window === 'undefined') return () => {};
+
+  const unsubApp = onBroadcast('DESK_TRANSFER_APPROVED', (payload: any) => {
+    if (payload?.userId === userId && payload?.targetDeviceId === myDeviceId) {
+      onApproved();
+    }
+  });
+
+  const unsubRej = onBroadcast('DESK_TRANSFER_REJECTED', (payload: any) => {
+    if (payload?.userId === userId) {
+      onRejected();
+    }
+  });
+
+  return () => {
+    unsubApp();
+    unsubRej();
   };
 }

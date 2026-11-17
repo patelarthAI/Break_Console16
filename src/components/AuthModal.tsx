@@ -5,10 +5,20 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LockKeyhole, UserRound, Eye, EyeOff,
   ChevronDown, Loader2, Briefcase, ShieldCheck, Zap,
+  ArrowLeftRight, CheckCircle2, ShieldAlert,
 } from 'lucide-react';
 import { getUserByNameAndClient, upsertUser, setCurrentUser, getClients } from '@/lib/store';
 import { generateUUID } from '@/lib/timeUtils';
-import { claimWorkstationSession, checkWorkstationLock, transferWorkstationLock } from '@/lib/sessionLock';
+import {
+  claimWorkstationSession,
+  checkWorkstationLock,
+  transferWorkstationLock,
+  requestWorkstationTransfer,
+  cancelWorkstationTransfer,
+  listenForDeskTransferApproval,
+  getOrCreateDeviceId,
+} from '@/lib/sessionLock';
+import { subscribe } from '@/lib/realtime';
 
 function SpotlightWrapper({ children }: { children: React.ReactNode }) {
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -45,10 +55,14 @@ export default function AuthModal({ onLogin }: { onLogin: (user: any) => void })
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [buttonOffset, setButtonOffset] = useState({ x: 0, y: 0 });
   const [clientOptions, setClientOptions] = useState<string[]>(DEFAULT_CLIENT_OPTIONS);
-  const [lockedUser, setLockedUser]     = useState<any | null>(null);
-  const [overridePin, setOverridePin]   = useState('');
-  const [overrideError, setOverrideError] = useState<string | null>(null);
+  const [lockedUser, setLockedUser]           = useState<any | null>(null);
+  const [isPendingTransfer, setIsPendingTransfer] = useState(false);
+  const [requestingTransfer, setRequestingTransfer] = useState(false);
+  const [showInPerson, setShowInPerson]       = useState(false);
+  const [overridePin, setOverridePin]         = useState('');
+  const [overrideError, setOverrideError]     = useState<string | null>(null);
   const [loadingOverride, setLoadingOverride] = useState(false);
+  const [transferApproved, setTransferApproved] = useState(false);
 
   const isCaptainName  = name.trim().toLowerCase() === 'captain';
   const requiresClient = !isCaptainName;
@@ -84,10 +98,77 @@ export default function AuthModal({ onLogin }: { onLogin: (user: any) => void })
   }, []);
   useEffect(() => { if (isCaptainName) setClient(''); }, [isCaptainName]);
 
-  const handleCaptainOverrideTransfer = async () => {
+  // Listen for realtime Captain approval while waiting on this workstation
+  useEffect(() => {
+    if (!lockedUser || !isPendingTransfer) return;
+    const myDev = getOrCreateDeviceId();
+
+    const handleApproved = async () => {
+      setTransferApproved(true);
+      try {
+        await claimWorkstationSession(lockedUser.id, lockedUser.name);
+        setCurrentUser(lockedUser);
+        setTimeout(() => {
+          onLogin(lockedUser);
+        }, 600);
+      } catch (e) {
+        console.warn('Auto-login on approval failed:', e);
+      }
+    };
+
+    const handleRejected = () => {
+      setIsPendingTransfer(false);
+      setOverrideError('Captain declined the desk transfer request.');
+    };
+
+    const unsubBroadcast = listenForDeskTransferApproval(lockedUser.id, myDev, handleApproved, handleRejected);
+
+    // Also listen to time_logs changes in case Captain approved via DB directly
+    const unsubLogs = subscribe('time_logs', '*', async (payload: any) => {
+      if (payload?.new?.user_id === lockedUser.id && payload?.new?.event_type === 'punch_in') {
+        const addedBy = payload.new.added_by || '';
+        if (addedBy === 'device:' + myDev) {
+          await handleApproved();
+        }
+      }
+    });
+
+    return () => {
+      unsubBroadcast();
+      unsubLogs();
+    };
+  }, [lockedUser, isPendingTransfer, onLogin]);
+
+  const handleRequestTransfer = async () => {
+    if (!lockedUser) return;
+    setRequestingTransfer(true);
+    setOverrideError(null);
+    try {
+      const res = await requestWorkstationTransfer(lockedUser.id, lockedUser.name, lockedUser.clientName || client);
+      if (res.success) {
+        setIsPendingTransfer(true);
+      } else {
+        setOverrideError(res.error || 'Failed to dispatch request.');
+      }
+    } catch (err: any) {
+      setOverrideError(err?.message || 'Error dispatching transfer request.');
+    } finally {
+      setRequestingTransfer(false);
+    }
+  };
+
+  const handleCancelTransfer = async () => {
+    if (!lockedUser) return;
+    try {
+      await cancelWorkstationTransfer(lockedUser.id);
+      setIsPendingTransfer(false);
+    } catch {}
+  };
+
+  const handleCaptainInPersonAuthorize = async () => {
     if (!lockedUser) return;
     if (overridePin.trim() !== '1234') {
-      setOverrideError('Incorrect Captain PIN. Enter 1234 to authorize desk transfer.');
+      setOverrideError('Incorrect Captain PIN.');
       return;
     }
     setLoadingOverride(true);
@@ -98,7 +179,7 @@ export default function AuthModal({ onLogin }: { onLogin: (user: any) => void })
       setCurrentUser(lockedUser);
       onLogin(lockedUser);
     } catch (err: any) {
-      setOverrideError(err.message || 'Desk transfer failed');
+      setOverrideError(err.message || 'Desk authorization failed');
     } finally {
       setLoadingOverride(false);
     }
@@ -612,47 +693,130 @@ export default function AuthModal({ onLogin }: { onLogin: (user: any) => void })
                     initial={{ opacity: 0, scale: 0.96 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.96 }}
-                    className="p-3.5 rounded-2xl bg-[#0e101d] border border-indigo-500/35 text-left space-y-2 shadow-2xl"
+                    className="p-3.5 rounded-2xl bg-[#0b0d18] border border-indigo-500/30 text-left space-y-2.5 shadow-2xl overflow-hidden relative"
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                        <span className="text-[10px] font-mono font-bold tracking-wider uppercase text-indigo-300">
-                          Captain Desk Transfer Override
-                        </span>
+                    {transferApproved ? (
+                      <div className="py-2 text-center space-y-1">
+                        <div className="flex items-center justify-center gap-2 text-emerald-400 font-bold text-xs uppercase tracking-wider font-mono">
+                          <CheckCircle2 size={16} /> Transfer Approved by Captain
+                        </div>
+                        <p className="text-[11px] text-zinc-300">
+                          Rebinding session to this workstation. Initializing access…
+                        </p>
                       </div>
-                      <span className="text-[9px] font-bold text-slate-500 font-mono">
-                        {lockedUser.name}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-zinc-300 leading-normal">
-                      Recruiter shifted desks? Enter Master PIN <span className="font-mono text-amber-300 font-bold">1234</span> to authorize this computer and resume shift.
-                    </p>
-                    <div className="flex items-center gap-2 pt-1">
-                      <input
-                        type="password"
-                        value={overridePin}
-                        onChange={(e) => setOverridePin(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            void handleCaptainOverrideTransfer();
-                          }
-                        }}
-                        placeholder="Enter 1234"
-                        className="flex-1 bg-black/60 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 outline-none font-mono focus:border-indigo-500"
-                      />
-                      <button
-                        type="button"
-                        disabled={loadingOverride}
-                        onClick={handleCaptainOverrideTransfer}
-                        className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white text-[10px] font-bold tracking-wider uppercase transition-all shadow-md cursor-pointer shrink-0 disabled:opacity-50"
-                      >
-                        {loadingOverride ? 'Transferring…' : 'Transfer & Login'}
-                      </button>
-                    </div>
+                    ) : isPendingTransfer ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="flex h-2 w-2 relative">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                            </span>
+                            <span className="text-[10px] font-mono font-bold tracking-wider uppercase text-amber-300">
+                              Transfer Request Dispatched
+                            </span>
+                          </div>
+                          <span className="text-[9px] font-mono text-zinc-500 font-bold">
+                            {lockedUser.name}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-zinc-300 leading-relaxed">
+                          Awaiting authorization on Captain's console. Your session will initialize automatically once approved.
+                        </p>
+                        <div className="flex items-center justify-between pt-1 border-t border-white/5">
+                          <span className="text-[10px] text-zinc-500 font-mono">Keep tab open</span>
+                          <button
+                            type="button"
+                            onClick={handleCancelTransfer}
+                            className="text-[10px] text-zinc-400 hover:text-rose-300 font-mono underline cursor-pointer transition-colors"
+                          >
+                            Cancel Request
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <ArrowLeftRight size={12} className="text-indigo-400" />
+                            <span className="text-[10px] font-mono font-bold tracking-wider uppercase text-indigo-300">
+                              Workstation Shift Request
+                            </span>
+                          </div>
+                          <span className="text-[9px] font-mono text-zinc-500 font-bold">
+                            {lockedUser.name}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-zinc-300 leading-normal">
+                          Shifted physical computers? Send a transfer request to the Captain console to authorize this desk.
+                        </p>
+                        <button
+                          type="button"
+                          disabled={requestingTransfer}
+                          onClick={handleRequestTransfer}
+                          className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-indigo-500 via-indigo-600 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white text-[10px] font-bold tracking-wider uppercase transition-all shadow-[0_0_16px_rgba(99,102,241,0.35)] flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        >
+                          {requestingTransfer ? (
+                            <><Loader2 size={12} className="animate-spin" /> Dispatching to Captain…</>
+                          ) : (
+                            <><ArrowLeftRight size={12} /> Request Desk Transfer</>
+                          )}
+                        </button>
+
+                        {/* Collapsed In-Person Captain Override */}
+                        <div className="pt-1 border-t border-white/5">
+                          {!showInPerson ? (
+                            <button
+                              type="button"
+                              onClick={() => setShowInPerson(true)}
+                              className="text-[9px] text-zinc-500 hover:text-indigo-300 transition-colors font-mono cursor-pointer flex items-center gap-1"
+                            >
+                              Captain in-person override ▸
+                            </button>
+                          ) : (
+                            <div className="space-y-2 pt-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[9px] font-mono text-zinc-400 uppercase font-bold">
+                                  Captain Authorization PIN
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowInPerson(false)}
+                                  className="text-[9px] text-zinc-500 hover:text-zinc-400 font-mono cursor-pointer"
+                                >
+                                  Close
+                                </button>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="password"
+                                  value={overridePin}
+                                  onChange={(e) => setOverridePin(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      void handleCaptainInPersonAuthorize();
+                                    }
+                                  }}
+                                  placeholder="Enter Master PIN"
+                                  className="flex-1 bg-black/60 border border-white/10 rounded-xl px-2.5 py-1.5 text-xs text-white placeholder-zinc-600 outline-none font-mono focus:border-indigo-500"
+                                />
+                                <button
+                                  type="button"
+                                  disabled={loadingOverride}
+                                  onClick={handleCaptainInPersonAuthorize}
+                                  className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-[9px] font-bold tracking-wider uppercase transition-all cursor-pointer shrink-0 disabled:opacity-50"
+                                >
+                                  {loadingOverride ? 'Verifying…' : 'Authorize'}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                     {overrideError && (
-                      <p className="text-[10px] text-rose-400 font-medium">{overrideError}</p>
+                      <p className="text-[10px] text-rose-400 font-medium pt-0.5">{overrideError}</p>
                     )}
                   </motion.div>
                 )}

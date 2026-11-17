@@ -67,7 +67,7 @@ function buildAndSubscribeChannel(): void {
     });
 
     // Listen for named broadcast events across shared channel (zero DB writes)
-    const BROADCAST_EVENTS = ['SESSION_CLAIMED', 'FORCE_LOGOUT', 'PRESENCE_PING'];
+    const BROADCAST_EVENTS = ['SESSION_CLAIMED', 'FORCE_LOGOUT', 'PRESENCE_PING', 'DESK_TRANSFER_REQUEST', 'DESK_TRANSFER_APPROVED', 'DESK_TRANSFER_REJECTED', 'DESK_TRANSFER_CANCELLED', 'DESK_TRANSFER_SYNC'];
     for (const ev of BROADCAST_EVENTS) {
         channel = channel.on(
             'broadcast' as any,
