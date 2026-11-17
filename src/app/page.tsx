@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LogOut, Check, ShieldAlert } from 'lucide-react';
 import AuthModal from '@/components/AuthModal';

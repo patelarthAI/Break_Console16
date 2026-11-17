@@ -371,20 +371,6 @@ export function DailyReportTable({
                         </div>
                     </div>
                 </div>
-                        <div>
-                            <span className="text-[10px] uppercase tracking-wider text-slate-500 mr-1.5">Avg Exceed/d</span>
-                            <span className={avgExceedMs > 0 ? 'text-rose-300 font-bold' : 'text-emerald-400 font-semibold'}>
-                                {avgExceedMs > 0 ? `+${formatExceedHM(avgExceedMs)}` : '0m'}
-                            </span>
-                        </div>
-                        <div>
-                            <span className="text-[10px] uppercase tracking-wider text-slate-500 mr-1.5">Overall Exceed</span>
-                            <span className={s.totalBreakViolMsSum > 0 ? 'text-rose-400 font-black' : 'text-emerald-400 font-bold'}>
-                                {s.totalBreakViolMsSum > 0 ? `+${formatExceedHM(s.totalBreakViolMsSum)}` : '0m'}
-                            </span>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
     );
