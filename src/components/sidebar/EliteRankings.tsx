@@ -36,6 +36,7 @@ export default function EliteRankings({ currentUserId }: Props) {
                 s.user.workMode !== 'WFH' &&
                 s.lateInDays === 0 && 
                 s.daysChecked > 0 &&
+                (s.totalBreakMs + s.totalBrbMs) > 0 &&
                 (s.totalBreakMs + s.totalBrbMs) / s.daysChecked <= BREAK_THRESHOLD_MS
             )
             .sort((a, b) => {

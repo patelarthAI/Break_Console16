@@ -24,12 +24,16 @@ export default function HallOfFame({ stats }: HallOfFameProps) {
   const ranked = stats
     .filter((r) => {
       const isWfo = r.user.workMode === 'WFO';
-      const fullAttendance = r.daysChecked === r.expectedDays;
+      const fullAttendance = r.daysChecked === r.expectedDays && r.daysChecked > 0;
       const onTime = r.lateInDays === 0;
       const breakCompliant = r.breakViolDays === 0;
       const brbCompliant = r.brbViolDays === 0;
       const combinedCompliant = r.combinedViolDays === 0;
-      return isWfo && fullAttendance && onTime && breakCompliant && brbCompliant && combinedCompliant;
+      const avgTotalBreak = r.avgBreakMs + r.avgBrbMs;
+      // Recruiters must actively take healthy, compliant breaks (> 0 and <= 85m).
+      // 0m breaks indicate untracked breaks or non-participation, NOT break discipline!
+      const hasActiveBreaks = avgTotalBreak > 0 && avgTotalBreak <= 85 * 60 * 1000;
+      return isWfo && fullAttendance && onTime && breakCompliant && brbCompliant && combinedCompliant && hasActiveBreaks;
     })
     .sort((a, b) => (a.avgBreakMs + a.avgBrbMs) - (b.avgBreakMs + b.avgBrbMs))
     .slice(0, 3);
@@ -103,6 +107,9 @@ export default function HallOfFame({ stats }: HallOfFameProps) {
                   <span className="font-mono text-[13px] font-semibold tracking-tight text-[#f59e0b] drop-shadow-[0_0_8px_rgba(245,158,11,0.25)]">
                     {formatMinutes(row.avgBreakMs + row.avgBrbMs)}
                   </span>
+                  <div className="text-[8px] font-bold text-amber-400/60 uppercase tracking-wider mt-0.5">
+                    Compliant
+                  </div>
                 </div>
               </motion.div>
             );

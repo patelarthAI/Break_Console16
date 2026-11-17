@@ -426,12 +426,15 @@ export default function EliteDashboard({
     return [...weeklyStats]
       .filter(s => {
         const isWfo = s.user.workMode === 'WFO';
-        const fullAttendance = s.daysChecked === s.expectedDays;
+        const fullAttendance = s.daysChecked === s.expectedDays && s.daysChecked > 0;
         const onTime = s.lateInDays === 0;
         const breakCompliant = s.breakViolDays === 0;
         const brbCompliant = s.brbViolDays === 0;
         const combinedCompliant = s.combinedViolDays === 0;
-        return isWfo && fullAttendance && onTime && breakCompliant && brbCompliant && combinedCompliant;
+        const avgTotal = s.avgBreakMs + s.avgBrbMs;
+        // Require active logged breaks (> 0 and <= 85m)
+        const hasActiveBreaks = avgTotal > 0 && avgTotal <= 85 * 60 * 1000;
+        return isWfo && fullAttendance && onTime && breakCompliant && brbCompliant && combinedCompliant && hasActiveBreaks;
       })
       .sort((a, b) => (a.avgBreakMs + a.avgBrbMs) - (b.avgBreakMs + b.avgBrbMs))
       .slice(0, 3);

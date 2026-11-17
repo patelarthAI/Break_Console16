@@ -100,6 +100,9 @@ export default function BreakViolators({ stats }: BreakViolatorsProps) {
                 <span className="font-mono text-[13px] font-semibold tracking-tight text-[#ef4444] drop-shadow-[0_0_8px_rgba(239,68,68,0.25)]">
                   {formatMinutes(row.avgBreakMs + row.avgBrbMs)}
                 </span>
+                <div className="text-[8px] font-bold text-rose-400/75 uppercase tracking-wider mt-0.5">
+                  +{Math.max(1, Math.round(((row.avgBreakMs + row.avgBrbMs) - 85 * 60 * 1000) / 60000))}m exceed
+                </div>
               </div>
             </motion.div>
           ))}

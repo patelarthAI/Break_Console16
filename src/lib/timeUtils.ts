@@ -412,11 +412,16 @@ export function computeSession(logs: TimeLog[]): DaySession {
                 session.punchOut = log.timestamp;
                 session.isAutoLogout = false;
                 if (breakStart !== null) {
-                    session.breaks.push({ start: breakStart, end: log.timestamp });
+                    // An unclosed break terminating in punch_out was not resumed; cap to policy limit (60m)
+                    const maxPolicyBreakMs = 60 * 60 * 1000;
+                    const breakEnd = Math.min(log.timestamp, breakStart + maxPolicyBreakMs);
+                    session.breaks.push({ start: breakStart, end: breakEnd });
                     breakStart = null;
                 }
                 if (brbStart !== null) {
-                    session.brbs.push({ start: brbStart, end: log.timestamp });
+                    const maxPolicyBrbMs = 15 * 60 * 1000;
+                    const brbEnd = Math.min(log.timestamp, brbStart + maxPolicyBrbMs);
+                    session.brbs.push({ start: brbStart, end: brbEnd });
                     brbStart = null;
                 }
                 break;
@@ -424,11 +429,16 @@ export function computeSession(logs: TimeLog[]): DaySession {
                 session.punchOut = log.timestamp;
                 session.isAutoLogout = true;
                 if (breakStart !== null) {
-                    session.breaks.push({ start: breakStart, end: log.timestamp });
+                    // An unclosed break terminating in auto_logout was abandoned/unclosed; cap to policy limit (60m)
+                    const maxPolicyBreakMs = 60 * 60 * 1000;
+                    const breakEnd = Math.min(log.timestamp, breakStart + maxPolicyBreakMs);
+                    session.breaks.push({ start: breakStart, end: breakEnd });
                     breakStart = null;
                 }
                 if (brbStart !== null) {
-                    session.brbs.push({ start: brbStart, end: log.timestamp });
+                    const maxPolicyBrbMs = 15 * 60 * 1000;
+                    const brbEnd = Math.min(log.timestamp, brbStart + maxPolicyBrbMs);
+                    session.brbs.push({ start: brbStart, end: brbEnd });
                     brbStart = null;
                 }
                 break;
@@ -440,7 +450,10 @@ export function computeSession(logs: TimeLog[]): DaySession {
                 break;
             case 'break_end':
                 if (breakStart !== null) {
-                    session.breaks.push({ start: breakStart, end: log.timestamp });
+                    // Hard cap single break segment to 120m (2 hours) to prevent forgotten resume clicks from showing 4+ hours
+                    const MAX_SINGLE_BREAK_MS = 120 * 60 * 1000;
+                    const breakEnd = Math.min(log.timestamp, breakStart + MAX_SINGLE_BREAK_MS);
+                    session.breaks.push({ start: breakStart, end: breakEnd });
                     breakStart = null;
                 }
                 break;
@@ -451,7 +464,9 @@ export function computeSession(logs: TimeLog[]): DaySession {
                 break;
             case 'brb_end':
                 if (brbStart !== null) {
-                    session.brbs.push({ start: brbStart, end: log.timestamp });
+                    const MAX_SINGLE_BRB_MS = 30 * 60 * 1000;
+                    const brbEnd = Math.min(log.timestamp, brbStart + MAX_SINGLE_BRB_MS);
+                    session.brbs.push({ start: brbStart, end: brbEnd });
                     brbStart = null;
                 }
                 break;
@@ -464,7 +479,11 @@ export function computeSession(logs: TimeLog[]): DaySession {
 }
 
 export function computeTotalTime(records: (BreakRecord | BRBRecord)[], now: number): number {
-    return records.reduce((acc, r) => acc + Math.max(0, (r.end ?? now) - r.start), 0);
+    const MAX_OPEN_SPAN_MS = 120 * 60 * 1000; // 2 hours ceiling for active live calculation
+    return records.reduce((acc, r) => {
+        const raw = Math.max(0, (r.end ?? now) - r.start);
+        return acc + Math.min(raw, MAX_OPEN_SPAN_MS);
+    }, 0);
 }
 
 export function computeWorkedTime(session: DaySession, now: number, date?: string, shiftEnd = '17:00', timezone = 'America/Chicago'): number {

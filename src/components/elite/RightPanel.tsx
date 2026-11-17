@@ -107,7 +107,7 @@ function ScrollBox({ children, maxH }: { children: React.ReactNode; maxH: number
 }
 
 /* ─── Interfaces ──────────────────────────────────────── */
-interface Leader { name: string; clientName?: string; }
+interface Leader { name: string; clientName?: string; avgBreakMs?: number; }
 interface Camper { name: string; clientName?: string; avgBreakMin?: number; }
 interface RightPanelProps { user: User; leaders?: Leader[]; campers?: Camper[]; }
 
@@ -349,6 +349,11 @@ export default function RightPanel({ user, leaders, campers }: RightPanelProps) 
                   <div style={{ fontSize: isChamp ? 12.5 : 11, fontWeight: isChamp ? 800 : 600, color: isChamp ? '#fff' : 'rgba(255,255,255,0.75)', fontFamily:"'Satoshi', system-ui, -apple-system, sans-serif", overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', lineHeight:1.2 }}>{m.name}</div>
                   {m.clientName && <div style={{ fontSize:10, color:`${r.color}65`, fontFamily:"'Satoshi', system-ui, -apple-system, sans-serif", marginTop:2, lineHeight:1 }}>{m.clientName}</div>}
                 </div>
+                {m.avgBreakMs !== undefined && (
+                  <div style={{ fontSize:10, fontWeight:700, fontFamily:"monospace", color:r.color, flexShrink:0, padding:'2px 6px', borderRadius:6, background:`${r.color}15`, border:`1px solid ${r.color}30` }}>
+                    {Math.round(m.avgBreakMs / 60000)}m
+                  </div>
+                )}
                 {isChamp && <div style={{ width:6, height:6, borderRadius:'50%', background:r.color, boxShadow:`0 0 8px ${r.color}`, flexShrink:0, animation:'statusPulse 2s ease-in-out infinite' }} />}
               </motion.div>
             );
@@ -424,6 +429,11 @@ export default function RightPanel({ user, leaders, campers }: RightPanelProps) 
                   color={s.color} bg={s.bg} border={s.border}
                   name={c.name} sub={c.clientName}
                   left={leftIcon}
+                  right={c.avgBreakMin !== undefined ? (
+                    <div style={{ fontSize:10, fontWeight:700, fontFamily:"monospace", color:s.color, flexShrink:0, padding:'2px 6px', borderRadius:6, background:`${s.color}15`, border:`1px solid ${s.color}30` }}>
+                      {c.avgBreakMin}m
+                    </div>
+                  ) : undefined}
                 />
               </motion.div>
             );

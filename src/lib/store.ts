@@ -4,6 +4,7 @@ import {
     getTodayKey, generateUUID, getPastDaysZoned, getElapsedWeekdays, checkViolations,
     toZonedMinutes, getRealNow, parseShiftMins,
     getRelativeDate, isSessionWindowStillOpen, computeAutoLogoutTs,
+    computeSession, computeTotalTime,
 } from './timeUtils';
 import { toTitleCase } from './utils';
 
@@ -1456,23 +1457,18 @@ export async function getWeeklyBreakStats(clientName?: string, force = false): P
 
                 const dayLogs = getLogsForUserDate(logsByUserDate, row.id, day);
                 if (!dayLogs.length) continue;
+
+                // Deterministically compute session using robust pairing, deduplication, and clamping
+                const session = computeSession(dayLogs);
+                if (!session.punchIn) continue; // Only count days where employee actually punched in!
                 daysChecked++;
 
-                let breakStart: number | null = null;
-                let brbStart: number | null = null;
-                let dayPunchIn: number | undefined;
-                let dayPunchOut: number | undefined;
-                let dayBreakMs = 0;
-                let dayBrbMs = 0;
-
-                for (const log of dayLogs) {
-                    if (log.eventType === 'punch_in' && !dayPunchIn) dayPunchIn = log.timestamp;
-                    if (log.eventType === 'punch_out') dayPunchOut = log.timestamp;
-                    if (log.eventType === 'break_start') breakStart = log.timestamp;
-                    if (log.eventType === 'break_end' && breakStart) { dayBreakMs += (log.timestamp - breakStart); breakStart = null; }
-                    if (log.eventType === 'brb_start') brbStart = log.timestamp;
-                    if (log.eventType === 'brb_end' && brbStart) { dayBrbMs += (log.timestamp - brbStart); brbStart = null; }
-                }
+                const now = getRealNow();
+                const dayEndTime = session.punchOut ?? (session.punchIn ? session.punchIn + 9 * 3600 * 1000 : now);
+                const dayBreakMs = computeTotalTime(session.breaks, dayEndTime);
+                const dayBrbMs = computeTotalTime(session.brbs, dayEndTime);
+                const dayPunchIn = session.punchIn;
+                const dayPunchOut = session.punchOut;
 
                 const violations = checkViolations(dayBreakMs, dayBrbMs, dayPunchIn, dayPunchOut, user.shiftStart, user.shiftEnd, user.timezone);
 
