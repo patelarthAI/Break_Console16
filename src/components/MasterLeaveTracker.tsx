@@ -8,7 +8,7 @@ import {
     ChevronLeft, ChevronRight,
     CheckSquare, Square, MinusSquare, Sliders, CalendarRange, Sparkles, Check,
     Activity, Clock, User as UserIcon, Building2, Tag, Calendar as CalendarIcon,
-    Flame, ShieldCheck, HeartPulse
+    Flame, ShieldCheck, HeartPulse, Zap, Compass, CalendarDays, ArrowUpRight
 } from 'lucide-react';
 import {
     getAllUsers, getClients, ClientRow,
@@ -16,7 +16,7 @@ import {
     bulkUpdateLeaves, bulkDeleteLeaves, bulkAddLeaves
 } from '@/lib/store';
 import { User, LeaveRecord } from '@/types';
-import { dateStr, exportExcel } from '@/lib/timeUtils';
+import { dateStr, exportExcel, getTodayKey } from '@/lib/timeUtils';
 import { useToast } from '@/components/Toast';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import CustomSelect from '@/components/ui/CustomSelect';
@@ -59,6 +59,80 @@ function getDatesInRange(start: string, end: string, excludeWeekends: boolean): 
         cur.setDate(cur.getDate() + 1);
     }
     return dates;
+}
+
+export type HorizonMode = 'upcoming_14' | 'today' | 'next_month' | 'all';
+
+function getHorizonBounds(mode: HorizonMode, todayStr: string): { startDate?: string; endDate?: string; defaultDir: 'asc' | 'desc' } {
+    if (mode === 'all') {
+        return { startDate: undefined, endDate: undefined, defaultDir: 'desc' };
+    }
+    const [y, m, d] = todayStr.split('-').map(Number);
+    const today = new Date(y, m - 1, d);
+
+    if (mode === 'today') {
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const y2 = tomorrow.getFullYear();
+        const m2 = String(tomorrow.getMonth() + 1).padStart(2, '0');
+        const d2 = String(tomorrow.getDate()).padStart(2, '0');
+        return { startDate: todayStr, endDate: `${y2}-${m2}-${d2}`, defaultDir: 'asc' };
+    }
+
+    if (mode === 'upcoming_14') {
+        const d14 = new Date(today);
+        d14.setDate(d14.getDate() + 14);
+        const y2 = d14.getFullYear();
+        const m2 = String(d14.getMonth() + 1).padStart(2, '0');
+        const d2 = String(d14.getDate()).padStart(2, '0');
+        return { startDate: todayStr, endDate: `${y2}-${m2}-${d2}`, defaultDir: 'asc' };
+    }
+
+    if (mode === 'next_month') {
+        const nextMonthDate = new Date(y, m, 1);
+        const nmYear = nextMonthDate.getFullYear();
+        const nmMonth = String(nextMonthDate.getMonth() + 1).padStart(2, '0');
+        const lastDay = new Date(nmYear, nextMonthDate.getMonth() + 1, 0).getDate();
+        return {
+            startDate: `${nmYear}-${nmMonth}-01`,
+            endDate: `${nmYear}-${nmMonth}-${String(lastDay).padStart(2, '0')}`,
+            defaultDir: 'asc',
+        };
+    }
+
+    return { startDate: undefined, endDate: undefined, defaultDir: 'desc' };
+}
+
+function getNextMonthInfo(todayStr: string) {
+    if (!todayStr) return { label: 'Next Month', fullLabel: 'Next Month', monthNum: '12', yearNum: '2026' };
+    const [y, m] = todayStr.split('-').map(Number);
+    const nextMonthDate = new Date(y, m, 1);
+    return {
+        label: nextMonthDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+        fullLabel: nextMonthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+        monthNum: String(nextMonthDate.getMonth() + 1).padStart(2, '0'),
+        yearNum: String(nextMonthDate.getFullYear()),
+    };
+}
+
+function getRelativeDateLabel(dateStr: string, todayStr: string): { label: string; isToday: boolean; isTomorrow: boolean; isFuture: boolean } {
+    if (!dateStr || !todayStr) return { label: '', isToday: false, isTomorrow: false, isFuture: false };
+    if (dateStr === todayStr) {
+        return { label: 'Today', isToday: true, isTomorrow: false, isFuture: false };
+    }
+    const [y1, m1, d1] = todayStr.split('-').map(Number);
+    const [y2, m2, d2] = dateStr.split('-').map(Number);
+    const t1 = new Date(y1, m1 - 1, d1).getTime();
+    const t2 = new Date(y2, m2 - 1, d2).getTime();
+    const diffDays = Math.round((t2 - t1) / (24 * 3600 * 1000));
+
+    if (diffDays === 1) {
+        return { label: 'Tomorrow', isToday: false, isTomorrow: true, isFuture: true };
+    }
+    if (diffDays > 1) {
+        return { label: `In ${diffDays}d`, isToday: false, isTomorrow: false, isFuture: true };
+    }
+    return { label: '', isToday: false, isTomorrow: false, isFuture: false };
 }
 
 const LEAVE_TYPES = [
@@ -247,7 +321,57 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
     const [search, setSearch] = useState('');
     const [filterYear, setFilterYear] = useState('');
     const [filterMonth, setFilterMonth] = useState('');
-    const [sortConfig, setSortConfig] = useState<{ key: string, dir: 'asc' | 'desc' }>({ key: 'Date', dir: 'desc' });
+    
+    // Delivery Horizon & Chronological Anchoring
+    const todayKey = useMemo(() => getTodayKey(), []);
+    const nextMonthInfo = useMemo(() => getNextMonthInfo(todayKey), [todayKey]);
+    const [horizon, setHorizon] = useState<HorizonMode>('upcoming_14');
+    const [horizonCounts, setHorizonCounts] = useState<{ today: number; upcoming14: number; nextMonth: number }>({
+        today: 0,
+        upcoming14: 0,
+        nextMonth: 0,
+    });
+    const [sortConfig, setSortConfig] = useState<{ key: string, dir: 'asc' | 'desc' }>({ key: 'Date', dir: 'asc' });
+
+    function handleHorizonChange(newHorizon: HorizonMode) {
+        setHorizon(newHorizon);
+        setCurrentPage(1);
+        const bounds = getHorizonBounds(newHorizon, todayKey);
+        setSortConfig({ key: 'Date', dir: bounds.defaultDir });
+        if (newHorizon !== 'all') {
+            setFilterYear('');
+            setFilterMonth('');
+        }
+    }
+
+    // Load lightweight counts for the Horizon tabs
+    useEffect(() => {
+        let mounted = true;
+        async function fetchCounts() {
+            try {
+                const todayBounds = getHorizonBounds('today', todayKey);
+                const upBounds = getHorizonBounds('upcoming_14', todayKey);
+                const nmBounds = getHorizonBounds('next_month', todayKey);
+                
+                const [todaySum, upSum, nmSum] = await Promise.all([
+                    getLeaveSummary({ startDate: todayBounds.startDate, endDate: todayBounds.endDate }),
+                    getLeaveSummary({ startDate: upBounds.startDate, endDate: upBounds.endDate }),
+                    getLeaveSummary({ startDate: nmBounds.startDate, endDate: nmBounds.endDate }),
+                ]);
+                
+                if (!mounted) return;
+                setHorizonCounts({
+                    today: todaySum.totalEntries,
+                    upcoming14: upSum.totalEntries,
+                    nextMonth: nmSum.totalEntries,
+                });
+            } catch (e) {
+                console.error('Failed to load horizon counts:', e);
+            }
+        }
+        fetchCounts();
+        return () => { mounted = false; };
+    }, [todayKey, leaves]);
 
     // Available years
     const availableYears = useMemo(() => {
@@ -319,6 +443,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
         async function fetchData() {
             try {
+                const bounds = getHorizonBounds(horizon, todayKey);
                 const filters = {
                     clientName: filterClient.length > 0 ? filterClient : undefined,
                     employeeName: filterEmployee.length > 0 ? filterEmployee : undefined,
@@ -326,6 +451,8 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                     search: debouncedSearch || undefined,
                     year: filterYear || undefined,
                     month: filterMonth || undefined,
+                    startDate: bounds.startDate,
+                    endDate: bounds.endDate,
                     force: false,
                 };
 
@@ -356,12 +483,13 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
         fetchData();
         return () => { active = false; };
-    }, [currentPage, filterClient, filterEmployee, filterLeaveType, debouncedSearch, filterYear, filterMonth, sortConfig]);
+    }, [currentPage, filterClient, filterEmployee, filterLeaveType, debouncedSearch, filterYear, filterMonth, sortConfig, horizon, todayKey]);
 
     async function loadLeavesPage(force = false, targetPage = currentPage) {
         setLoading(true);
         try {
             const page = force ? 1 : targetPage;
+            const bounds = getHorizonBounds(horizon, todayKey);
             const filters = {
                 clientName: filterClient.length > 0 ? filterClient : undefined,
                 employeeName: filterEmployee.length > 0 ? filterEmployee : undefined,
@@ -369,6 +497,8 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                 search: debouncedSearch || undefined,
                 year: filterYear || undefined,
                 month: filterMonth || undefined,
+                startDate: bounds.startDate,
+                endDate: bounds.endDate,
                 force,
             };
 
@@ -788,13 +918,61 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                 </div>
             </div>
 
+            {/* ── 2026 Delivery Horizon Selector ─────────────────────────── */}
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center p-1 rounded-xl bg-[#0f1220] border border-white/[0.08] shadow-inner">
+                    {[
+                        { id: 'upcoming_14', label: 'Next 14 Days (Today First)', icon: CalendarDays, count: horizonCounts.upcoming14, badgeColor: 'bg-sky-500/20 text-sky-300 border-sky-500/30' },
+                        { id: 'today', label: 'Today & Tomorrow', icon: Zap, count: horizonCounts.today, badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
+                        { id: 'next_month', label: `Next Month (${nextMonthInfo.label})`, icon: CalendarRange, count: horizonCounts.nextMonth, badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/30' },
+                        { id: 'all', label: 'All Records', icon: Compass, count: undefined, badgeColor: 'bg-white/10 text-zinc-300 border-white/10' },
+                    ].map((tab) => {
+                        const isActive = horizon === tab.id;
+                        const Icon = tab.icon;
+                        return (
+                            <button
+                                key={tab.id}
+                                type="button"
+                                onClick={() => handleHorizonChange(tab.id as HorizonMode)}
+                                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                    isActive
+                                        ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-[0_0_16px_rgba(99,102,241,0.4)] border border-indigo-400/30'
+                                        : 'text-zinc-400 hover:text-white hover:bg-white/[0.04]'
+                                }`}
+                            >
+                                <Icon size={13} className={isActive ? 'text-indigo-200' : 'text-zinc-500'} />
+                                <span>{tab.label}</span>
+                                {tab.count !== undefined && (
+                                    <span className={`text-[10px] font-black px-1.5 py-0.2 rounded-full border ${tab.badgeColor}`}>
+                                        {tab.count}
+                                    </span>
+                                )}
+                            </button>
+                        );
+                    })}
+                </div>
+
+                {/* Quick Today Jump if viewing other horizons and someone is absent today */}
+                {horizon !== 'today' && horizonCounts.today > 0 && (
+                    <button
+                        type="button"
+                        onClick={() => handleHorizonChange('today')}
+                        className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 transition-all text-emerald-300 text-xs font-bold shadow-[0_0_12px_rgba(16,185,129,0.15)] group cursor-pointer"
+                    >
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                        <span>{horizonCounts.today} Recruiter(s) on Leave Today</span>
+                        <ArrowUpRight size={13} className="text-emerald-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                    </button>
+                )}
+            </div>
+
             {/* ── Interactive KPI Stat Ribbon ─────────────────────────────── */}
             <div className="grid grid-cols-5 gap-3.5">
                 <StatCard 
                     label="Total Leaves" 
                     value={totalDays.toFixed(1)} 
                     accent="bg-emerald-500" 
-                    sub="All approved days" 
+                    sub={horizon === 'today' ? "Today & Tomorrow" : horizon === 'upcoming_14' ? "Next 14 Days" : horizon === 'next_month' ? `${nextMonthInfo.label} Forward Bookings` : "All approved days"} 
                     icon={Activity}
                     active={filterLeaveType.length === 0}
                     onClick={() => setFilterLeaveType([])}
@@ -834,6 +1012,42 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                     icon={AlertCircle}
                 />
             </div>
+
+            {/* ── Active Horizon Forward Capacity Radar Banner ─────────────── */}
+            {horizon === 'next_month' && (
+                <div className="p-4 rounded-xl bg-gradient-to-r from-indigo-950/40 via-purple-950/20 to-[#0f1220] border border-indigo-500/30 shadow-[0_0_30px_rgba(99,102,241,0.12)] flex items-center justify-between gap-4 flex-wrap">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-300 shadow-[0_0_16px_rgba(99,102,241,0.25)]">
+                            <CalendarRange size={18} />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-black uppercase tracking-wider text-indigo-400">Forward Capacity Radar</span>
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                                    {nextMonthInfo.fullLabel}
+                                </span>
+                            </div>
+                            <p className="text-xs text-zinc-300 mt-0.5 font-medium">
+                                Forward PTO capacity audit: inspect leave clustering by client pod to protect submittal velocity, prevent SLA breaches, and confirm cross-team backups.
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <div className="px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-right">
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Planned Absences</div>
+                            <div className="text-sm font-black text-white">{summary.totalDays.toFixed(1)} Days</div>
+                        </div>
+                        <div className="px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-right">
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Recruiters Out</div>
+                            <div className="text-sm font-black text-indigo-300">{summary.uniqueEmployees} Reps</div>
+                        </div>
+                        <div className="px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-right">
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Client Pods</div>
+                            <div className="text-sm font-black text-emerald-300">{summary.uniqueClients} Clients</div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* ── Command & Filter Bar ─────────────────────────────────────── */}
             <div className="rounded-xl bg-[#0f1220] border border-white/[0.08] p-3 shadow-lg z-20 relative flex flex-col gap-2.5">
@@ -1072,6 +1286,9 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                         const initials = formattedName.split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2).toUpperCase();
                                         const isUnplanned = !l.is_planned;
 
+                                        const rel = getRelativeDateLabel(l.date, todayKey);
+                                        const isRowToday = rel.isToday;
+
                                         return (
                                             <motion.div 
                                                 key={l.id}
@@ -1084,6 +1301,8 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                                         ? 'bg-amber-500/[0.12] border-amber-500/40 border-l-4 border-l-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.15)]' 
                                                         : isSelected 
                                                         ? 'bg-gradient-to-r from-indigo-500/[0.14] to-indigo-500/[0.02] border-indigo-500/40 border-l-4 border-l-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.18)]' 
+                                                        : isRowToday
+                                                        ? 'bg-gradient-to-r from-emerald-500/[0.14] to-emerald-500/[0.02] border-emerald-500/40 border-l-4 border-l-emerald-400 shadow-[0_0_24px_rgba(16,185,129,0.16)] hover:bg-emerald-500/[0.18]'
                                                         : isUnplanned
                                                         ? 'bg-gradient-to-r from-rose-500/[0.03] to-transparent border-rose-500/20 border-l-4 border-l-rose-500 shadow-[0_4px_16px_rgba(244,63,94,0.05)] hover:bg-rose-500/[0.06]'
                                                         : 'bg-white/[0.005] border-white/[0.03] hover:bg-white/[0.015] hover:border-white/[0.06] hover:shadow-[0_8px_20px_rgba(0,0,0,0.25)]'}`}
@@ -1103,10 +1322,30 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                                     </button>
                                                 </div>
 
-                                                {/* Date */}
+                                                {/* Date with Relative Temporal Badge */}
                                                 <div>
-                                                    <p className="text-[11px] font-mono font-bold text-slate-300 uppercase tracking-widest">{fmtDate(l.date)}</p>
-                                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{getWeekday(l.date)}</p>
+                                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                                        <p className={`text-[11px] font-mono font-bold uppercase tracking-widest ${isRowToday ? 'text-emerald-300 font-extrabold' : 'text-slate-300'}`}>
+                                                            {fmtDate(l.date)}
+                                                        </p>
+                                                        {isRowToday ? (
+                                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 shadow-[0_0_8px_rgba(16,185,129,0.4)]">
+                                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                                                Today
+                                                            </span>
+                                                        ) : rel.isTomorrow ? (
+                                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/35">
+                                                                Tomorrow
+                                                            </span>
+                                                        ) : rel.isFuture ? (
+                                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold text-sky-400/90 bg-sky-500/10 border border-sky-500/25">
+                                                                {rel.label}
+                                                            </span>
+                                                        ) : null}
+                                                    </div>
+                                                    <p className={`text-[10px] font-bold uppercase tracking-widest ${isRowToday ? 'text-emerald-400/80 font-extrabold' : 'text-slate-500'}`}>
+                                                        {getWeekday(l.date)}
+                                                    </p>
                                                 </div>
                                                 
                                                 {/* Employee */}
@@ -1160,8 +1399,8 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                                             <CheckCircle size={11} /> Yes
                                                         </span>
                                                     ) : (
-                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold text-slate-500 bg-white/[0.03] border border-white/10">
-                                                            No
+                                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold text-rose-400/90 bg-rose-500/10 border border-rose-500/25 shadow-[0_0_6px_rgba(244,63,94,0.12)]">
+                                                            <AlertCircle size={10} /> None
                                                         </span>
                                                     )}
                                                 </div>

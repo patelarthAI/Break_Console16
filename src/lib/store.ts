@@ -45,6 +45,8 @@ export interface LeavePageOptions {
     page?: number;
     pageSize?: number;
     force?: boolean;
+    startDate?: string;
+    endDate?: string;
 }
 
 function assertSupabaseOk(error: unknown, action: string): void {
@@ -405,6 +407,8 @@ export async function getLeavesPage(options?: LeavePageOptions): Promise<Paginat
         page = 1,
         pageSize = 25,
         force = false,
+        startDate,
+        endDate,
     } = options ?? {};
 
     const safePage = Math.max(1, Math.floor(page));
@@ -414,7 +418,7 @@ export async function getLeavesPage(options?: LeavePageOptions): Promise<Paginat
     const normalizedSearch = search ? sanitizeSearchTerm(search) : '';
     const clientKey = Array.isArray(clientName) ? clientName.sort().join(',') : (clientName ?? '*');
     const employeeKey = Array.isArray(employeeName) ? employeeName.sort().join(',') : (employeeName ?? '*');
-    const cacheKey = `leaves:page:${clientKey}:${employeeKey}:${leaveType ?? '*'}:${year ?? '*'}:${month ?? '*'}:${sortKey ?? 'Date'}:${sortDir}:${normalizedSearch || '*'}:${safePage}:${safePageSize}`;
+    const cacheKey = `leaves:page:${clientKey}:${employeeKey}:${leaveType ?? '*'}:${year ?? '*'}:${month ?? '*'}:${startDate ?? '*'}:${endDate ?? '*'}:${sortKey ?? 'Date'}:${sortDir}:${normalizedSearch || '*'}:${safePage}:${safePageSize}`;
 
     return withCachedQuery(cacheKey, LEAVES_CACHE_TTL_MS, async () => {
         let query = supabase
@@ -437,6 +441,8 @@ export async function getLeavesPage(options?: LeavePageOptions): Promise<Paginat
             else query = query.ilike('leave_type', leaveType);
         }
         query = applyLeaveDateFilter(query, year, month);
+        if (startDate) query = query.gte('date', startDate);
+        if (endDate) query = query.lte('date', endDate);
         if (normalizedSearch) {
             query = query.or(`employee_name.ilike."%${normalizedSearch}%",client_name.ilike."%${normalizedSearch}%",leave_type.ilike."%${normalizedSearch}%"`);
         }
@@ -468,12 +474,14 @@ export async function getLeaveSummary(options?: LeavePageOptions): Promise<Leave
         year,
         month,
         force = false,
+        startDate,
+        endDate,
     } = options ?? {};
 
     const normalizedSearch = search ? sanitizeSearchTerm(search) : '';
     const clientKey = Array.isArray(clientName) ? clientName.sort().join(',') : (clientName ?? '*');
     const employeeKey = Array.isArray(employeeName) ? employeeName.sort().join(',') : (employeeName ?? '*');
-    const cacheKey = `leaves:summary:${clientKey}:${employeeKey}:${leaveType ?? '*'}:${year ?? '*'}:${month ?? '*'}:${normalizedSearch || '*'}`;
+    const cacheKey = `leaves:summary:${clientKey}:${employeeKey}:${leaveType ?? '*'}:${year ?? '*'}:${month ?? '*'}:${startDate ?? '*'}:${endDate ?? '*'}:${normalizedSearch || '*'}`;
 
     return withCachedQuery(cacheKey, LEAVES_CACHE_TTL_MS, async () => {
         let query = supabase
@@ -495,6 +503,8 @@ export async function getLeaveSummary(options?: LeavePageOptions): Promise<Leave
             else query = query.ilike('leave_type', leaveType);
         }
         query = applyLeaveDateFilter(query, year, month);
+        if (startDate) query = query.gte('date', startDate);
+        if (endDate) query = query.lte('date', endDate);
         if (normalizedSearch) {
             query = query.or(`employee_name.ilike."%${normalizedSearch}%",client_name.ilike."%${normalizedSearch}%",leave_type.ilike."%${normalizedSearch}%"`);
         }
