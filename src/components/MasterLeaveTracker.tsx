@@ -8,7 +8,7 @@ import {
     ChevronLeft, ChevronRight,
     CheckSquare, Square, MinusSquare, Sliders, CalendarRange, Sparkles, Check,
     Activity, Clock, User as UserIcon, Building2, Tag, Calendar as CalendarIcon,
-    Flame, ShieldCheck, HeartPulse, Zap, Compass, CalendarDays, ArrowUpRight
+    Flame, ShieldCheck, HeartPulse, Zap, Compass, CalendarDays, ArrowUpRight, History
 } from 'lucide-react';
 import {
     getAllUsers, getClients, ClientRow,
@@ -61,7 +61,47 @@ function getDatesInRange(start: string, end: string, excludeWeekends: boolean): 
     return dates;
 }
 
-export type HorizonMode = 'upcoming_14' | 'today' | 'next_month' | 'all';
+export type HorizonMode = 'this_week' | 'today' | 'yesterday' | 'upcoming_14' | 'next_month' | 'all';
+
+function toISODate(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+function getYesterdayStr(todayStr: string): string {
+    if (!todayStr) return '';
+    const [y, m, d] = todayStr.split('-').map(Number);
+    const today = new Date(y, m - 1, d);
+    const yest = new Date(today);
+    yest.setDate(yest.getDate() - 1);
+    return toISODate(yest);
+}
+
+function getWeekRange(todayStr: string) {
+    if (!todayStr) return { startDate: '', endDate: '', label: 'This Week' };
+    const [y, m, d] = todayStr.split('-').map(Number);
+    const today = new Date(y, m - 1, d);
+    const dayOfWeek = today.getDay(); // 0 is Sun, 1 is Mon...
+    const diffToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const mon = new Date(today);
+    mon.setDate(mon.getDate() + diffToMon);
+    const sun = new Date(mon);
+    sun.setDate(sun.getDate() + 6);
+
+    const monStr = toISODate(mon);
+    const sunStr = toISODate(sun);
+
+    const monFmt = mon.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const sunFmt = sun.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+    return {
+        startDate: monStr,
+        endDate: sunStr,
+        label: `${monFmt} – ${sunFmt}`,
+    };
+}
 
 function getHorizonBounds(mode: HorizonMode, todayStr: string): { startDate?: string; endDate?: string; defaultDir: 'asc' | 'desc' } {
     if (mode === 'all') {
@@ -70,22 +110,26 @@ function getHorizonBounds(mode: HorizonMode, todayStr: string): { startDate?: st
     const [y, m, d] = todayStr.split('-').map(Number);
     const today = new Date(y, m - 1, d);
 
+    if (mode === 'yesterday') {
+        const yestStr = getYesterdayStr(todayStr);
+        return { startDate: yestStr, endDate: yestStr, defaultDir: 'desc' };
+    }
+
     if (mode === 'today') {
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
-        const y2 = tomorrow.getFullYear();
-        const m2 = String(tomorrow.getMonth() + 1).padStart(2, '0');
-        const d2 = String(tomorrow.getDate()).padStart(2, '0');
-        return { startDate: todayStr, endDate: `${y2}-${m2}-${d2}`, defaultDir: 'asc' };
+        return { startDate: todayStr, endDate: toISODate(tomorrow), defaultDir: 'asc' };
+    }
+
+    if (mode === 'this_week') {
+        const wr = getWeekRange(todayStr);
+        return { startDate: wr.startDate, endDate: wr.endDate, defaultDir: 'asc' };
     }
 
     if (mode === 'upcoming_14') {
         const d14 = new Date(today);
         d14.setDate(d14.getDate() + 14);
-        const y2 = d14.getFullYear();
-        const m2 = String(d14.getMonth() + 1).padStart(2, '0');
-        const d2 = String(d14.getDate()).padStart(2, '0');
-        return { startDate: todayStr, endDate: `${y2}-${m2}-${d2}`, defaultDir: 'asc' };
+        return { startDate: todayStr, endDate: toISODate(d14), defaultDir: 'asc' };
     }
 
     if (mode === 'next_month') {
@@ -115,10 +159,17 @@ function getNextMonthInfo(todayStr: string) {
     };
 }
 
-function getRelativeDateLabel(dateStr: string, todayStr: string): { label: string; isToday: boolean; isTomorrow: boolean; isFuture: boolean } {
-    if (!dateStr || !todayStr) return { label: '', isToday: false, isTomorrow: false, isFuture: false };
+function getRelativeDateLabel(dateStr: string, todayStr: string): { 
+    label: string; 
+    isToday: boolean; 
+    isYesterday: boolean; 
+    isTomorrow: boolean; 
+    isPast: boolean; 
+    isFuture: boolean; 
+} {
+    if (!dateStr || !todayStr) return { label: '', isToday: false, isYesterday: false, isTomorrow: false, isPast: false, isFuture: false };
     if (dateStr === todayStr) {
-        return { label: 'Today', isToday: true, isTomorrow: false, isFuture: false };
+        return { label: 'Today', isToday: true, isYesterday: false, isTomorrow: false, isPast: false, isFuture: false };
     }
     const [y1, m1, d1] = todayStr.split('-').map(Number);
     const [y2, m2, d2] = dateStr.split('-').map(Number);
@@ -126,13 +177,19 @@ function getRelativeDateLabel(dateStr: string, todayStr: string): { label: strin
     const t2 = new Date(y2, m2 - 1, d2).getTime();
     const diffDays = Math.round((t2 - t1) / (24 * 3600 * 1000));
 
+    if (diffDays === -1) {
+        return { label: 'Yesterday', isToday: false, isYesterday: true, isTomorrow: false, isPast: true, isFuture: false };
+    }
+    if (diffDays < -1) {
+        return { label: `${Math.abs(diffDays)}d ago`, isToday: false, isYesterday: false, isTomorrow: false, isPast: true, isFuture: false };
+    }
     if (diffDays === 1) {
-        return { label: 'Tomorrow', isToday: false, isTomorrow: true, isFuture: true };
+        return { label: 'Tomorrow', isToday: false, isYesterday: false, isTomorrow: true, isPast: false, isFuture: true };
     }
     if (diffDays > 1) {
-        return { label: `In ${diffDays}d`, isToday: false, isTomorrow: false, isFuture: true };
+        return { label: `In ${diffDays}d`, isToday: false, isYesterday: false, isTomorrow: false, isPast: false, isFuture: true };
     }
-    return { label: '', isToday: false, isTomorrow: false, isFuture: false };
+    return { label: '', isToday: false, isYesterday: false, isTomorrow: false, isPast: false, isFuture: false };
 }
 
 const LEAVE_TYPES = [
@@ -325,9 +382,19 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
     // Delivery Horizon & Chronological Anchoring
     const todayKey = useMemo(() => getTodayKey(), []);
     const nextMonthInfo = useMemo(() => getNextMonthInfo(todayKey), [todayKey]);
-    const [horizon, setHorizon] = useState<HorizonMode>('upcoming_14');
-    const [horizonCounts, setHorizonCounts] = useState<{ today: number; upcoming14: number; nextMonth: number }>({
+    const weekInfo = useMemo(() => getWeekRange(todayKey), [todayKey]);
+    const yesterdayKey = useMemo(() => getYesterdayStr(todayKey), [todayKey]);
+    const [horizon, setHorizon] = useState<HorizonMode>('this_week');
+    const [horizonCounts, setHorizonCounts] = useState<{
+        thisWeek: number;
+        today: number;
+        yesterday: number;
+        upcoming14: number;
+        nextMonth: number;
+    }>({
+        thisWeek: 0,
         today: 0,
+        yesterday: 0,
         upcoming14: 0,
         nextMonth: 0,
     });
@@ -349,11 +416,15 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
         let mounted = true;
         async function fetchCounts() {
             try {
+                const twBounds = getHorizonBounds('this_week', todayKey);
+                const yestBounds = getHorizonBounds('yesterday', todayKey);
                 const todayBounds = getHorizonBounds('today', todayKey);
                 const upBounds = getHorizonBounds('upcoming_14', todayKey);
                 const nmBounds = getHorizonBounds('next_month', todayKey);
                 
-                const [todaySum, upSum, nmSum] = await Promise.all([
+                const [twSum, yestSum, todaySum, upSum, nmSum] = await Promise.all([
+                    getLeaveSummary({ startDate: twBounds.startDate, endDate: twBounds.endDate }),
+                    getLeaveSummary({ startDate: yestBounds.startDate, endDate: yestBounds.endDate }),
                     getLeaveSummary({ startDate: todayBounds.startDate, endDate: todayBounds.endDate }),
                     getLeaveSummary({ startDate: upBounds.startDate, endDate: upBounds.endDate }),
                     getLeaveSummary({ startDate: nmBounds.startDate, endDate: nmBounds.endDate }),
@@ -361,6 +432,8 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                 
                 if (!mounted) return;
                 setHorizonCounts({
+                    thisWeek: twSum.totalEntries,
+                    yesterday: yestSum.totalEntries,
                     today: todaySum.totalEntries,
                     upcoming14: upSum.totalEntries,
                     nextMonth: nmSum.totalEntries,
@@ -920,12 +993,14 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
             {/* ── 2026 Delivery Horizon Selector ─────────────────────────── */}
             <div className="flex items-center justify-between gap-3 flex-wrap">
-                <div className="flex items-center p-1 rounded-xl bg-[#0f1220] border border-white/[0.08] shadow-inner">
+                <div className="flex items-center p-1 rounded-xl bg-[#0f1220] border border-white/[0.08] shadow-inner flex-wrap gap-1">
                     {[
-                        { id: 'upcoming_14', label: 'Next 14 Days (Today First)', icon: CalendarDays, count: horizonCounts.upcoming14, badgeColor: 'bg-sky-500/20 text-sky-300 border-sky-500/30' },
+                        { id: 'this_week', label: 'This Week', icon: CalendarDays, count: horizonCounts.thisWeek, badgeColor: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' },
                         { id: 'today', label: 'Today & Tomorrow', icon: Zap, count: horizonCounts.today, badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
+                        { id: 'yesterday', label: 'Yesterday', icon: History, count: horizonCounts.yesterday, badgeColor: horizonCounts.yesterday > 0 ? 'bg-amber-500/25 text-amber-300 border-amber-500/40' : 'bg-white/10 text-zinc-400 border-white/10' },
+                        { id: 'upcoming_14', label: 'Next 14 Days', icon: ArrowUpRight, count: horizonCounts.upcoming14, badgeColor: 'bg-sky-500/20 text-sky-300 border-sky-500/30' },
                         { id: 'next_month', label: `Next Month (${nextMonthInfo.label})`, icon: CalendarRange, count: horizonCounts.nextMonth, badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/30' },
-                        { id: 'all', label: 'All Records', icon: Compass, count: undefined, badgeColor: 'bg-white/10 text-zinc-300 border-white/10' },
+                        { id: 'all', label: 'All Archive', icon: Compass, count: undefined, badgeColor: 'bg-white/10 text-zinc-300 border-white/10' },
                     ].map((tab) => {
                         const isActive = horizon === tab.id;
                         const Icon = tab.icon;
@@ -952,18 +1027,34 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                     })}
                 </div>
 
-                {/* Quick Today Jump if viewing other horizons and someone is absent today */}
-                {horizon !== 'today' && horizonCounts.today > 0 && (
-                    <button
-                        type="button"
-                        onClick={() => handleHorizonChange('today')}
-                        className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 transition-all text-emerald-300 text-xs font-bold shadow-[0_0_12px_rgba(16,185,129,0.15)] group cursor-pointer"
-                    >
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                        <span>{horizonCounts.today} Recruiter(s) on Leave Today</span>
-                        <ArrowUpRight size={13} className="text-emerald-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-                    </button>
-                )}
+                {/* Quick Action Alerts */}
+                <div className="flex items-center gap-2 flex-wrap">
+                    {/* Yesterday Reconciliation Quick Jump if viewing another horizon and yesterday has leaves */}
+                    {horizon !== 'yesterday' && horizonCounts.yesterday > 0 && (
+                        <button
+                            type="button"
+                            onClick={() => handleHorizonChange('yesterday')}
+                            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 transition-all text-amber-300 text-xs font-bold shadow-[0_0_14px_rgba(245,158,11,0.15)] group cursor-pointer"
+                        >
+                            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                            <span>{horizonCounts.yesterday} Yesterday Absence(s)</span>
+                            <History size={13} className="text-amber-400 group-hover:rotate-45 transition-transform" />
+                        </button>
+                    )}
+
+                    {/* Quick Today Jump if viewing other horizons and someone is absent today */}
+                    {horizon !== 'today' && horizonCounts.today > 0 && (
+                        <button
+                            type="button"
+                            onClick={() => handleHorizonChange('today')}
+                            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 transition-all text-emerald-300 text-xs font-bold shadow-[0_0_12px_rgba(16,185,129,0.15)] group cursor-pointer"
+                        >
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                            <span>{horizonCounts.today} on Leave Today</span>
+                            <ArrowUpRight size={13} className="text-emerald-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* ── Interactive KPI Stat Ribbon ─────────────────────────────── */}
@@ -972,7 +1063,14 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                     label="Total Leaves" 
                     value={totalDays.toFixed(1)} 
                     accent="bg-emerald-500" 
-                    sub={horizon === 'today' ? "Today & Tomorrow" : horizon === 'upcoming_14' ? "Next 14 Days" : horizon === 'next_month' ? `${nextMonthInfo.label} Forward Bookings` : "All approved days"} 
+                    sub={
+                        horizon === 'yesterday' ? "Yesterday's Absences" :
+                        horizon === 'today' ? "Today & Tomorrow" :
+                        horizon === 'this_week' ? `Sprint (${weekInfo.label})` :
+                        horizon === 'upcoming_14' ? "Next 14 Days" :
+                        horizon === 'next_month' ? `${nextMonthInfo.label} Bookings` :
+                        "All approved days"
+                    } 
                     icon={Activity}
                     active={filterLeaveType.length === 0}
                     onClick={() => setFilterLeaveType([])}
@@ -1013,7 +1111,77 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                 />
             </div>
 
-            {/* ── Active Horizon Forward Capacity Radar Banner ─────────────── */}
+            {/* ── Active Horizon Dynamic Contextual Cockpit Banners ─────────── */}
+            {horizon === 'yesterday' && (
+                <div className="p-4 rounded-xl bg-gradient-to-r from-amber-950/40 via-amber-900/15 to-[#0f1220] border border-amber-500/30 shadow-[0_0_30px_rgba(245,158,11,0.12)] flex items-center justify-between gap-4 flex-wrap">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-300 shadow-[0_0_16px_rgba(245,158,11,0.25)]">
+                            <History size={18} />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-black uppercase tracking-wider text-amber-400">Yesterday Reconciliation Desk</span>
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                    {fmtDate(yesterdayKey)}
+                                </span>
+                            </div>
+                            <p className="text-xs text-zinc-300 mt-0.5 font-medium">
+                                Retrospective attendance audit: verify auto-generated system absents, retroactively classify unnotified missed shifts, and confirm client backup handoffs before daily payroll locking.
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <div className="px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-right">
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Total Absences</div>
+                            <div className="text-sm font-black text-amber-300">{summary.totalDays.toFixed(1)} Days</div>
+                        </div>
+                        <div className="px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-right">
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Unplanned / Auto</div>
+                            <div className="text-sm font-black text-rose-300">{summary.unplannedEntries} Records</div>
+                        </div>
+                        <div className="px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-right">
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Recruiters Out</div>
+                            <div className="text-sm font-black text-white">{summary.uniqueEmployees} Reps</div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {horizon === 'this_week' && (
+                <div className="p-4 rounded-xl bg-gradient-to-r from-indigo-950/40 via-blue-950/20 to-[#0f1220] border border-indigo-500/30 shadow-[0_0_30px_rgba(99,102,241,0.12)] flex items-center justify-between gap-4 flex-wrap">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-300 shadow-[0_0_16px_rgba(99,102,241,0.25)]">
+                            <CalendarDays size={18} />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-black uppercase tracking-wider text-indigo-400">Active Sprint Horizon</span>
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                                    {weekInfo.label}
+                                </span>
+                            </div>
+                            <p className="text-xs text-zinc-300 mt-0.5 font-medium">
+                                Unified weekly operational cycle: reconciles past missed shifts and system absents (Monday to yesterday) alongside today's live floor status and upcoming booked leaves.
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <div className="px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-right">
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Sprint Absence</div>
+                            <div className="text-sm font-black text-white">{summary.totalDays.toFixed(1)} Days</div>
+                        </div>
+                        <div className="px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-right">
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Impacted Reps</div>
+                            <div className="text-sm font-black text-indigo-300">{summary.uniqueEmployees} Reps</div>
+                        </div>
+                        <div className="px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-right">
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Client Pods</div>
+                            <div className="text-sm font-black text-emerald-300">{summary.uniqueClients} Clients</div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {horizon === 'next_month' && (
                 <div className="p-4 rounded-xl bg-gradient-to-r from-indigo-950/40 via-purple-950/20 to-[#0f1220] border border-indigo-500/30 shadow-[0_0_30px_rgba(99,102,241,0.12)] flex items-center justify-between gap-4 flex-wrap">
                     <div className="flex items-center gap-3">
@@ -1288,6 +1456,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
                                         const rel = getRelativeDateLabel(l.date, todayKey);
                                         const isRowToday = rel.isToday;
+                                        const isRowYesterday = rel.isYesterday;
 
                                         return (
                                             <motion.div 
@@ -1303,6 +1472,8 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                                         ? 'bg-gradient-to-r from-indigo-500/[0.14] to-indigo-500/[0.02] border-indigo-500/40 border-l-4 border-l-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.18)]' 
                                                         : isRowToday
                                                         ? 'bg-gradient-to-r from-emerald-500/[0.14] to-emerald-500/[0.02] border-emerald-500/40 border-l-4 border-l-emerald-400 shadow-[0_0_24px_rgba(16,185,129,0.16)] hover:bg-emerald-500/[0.18]'
+                                                        : isRowYesterday
+                                                        ? 'bg-gradient-to-r from-amber-500/[0.12] to-amber-500/[0.02] border-amber-500/35 border-l-4 border-l-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.14)] hover:bg-amber-500/[0.16]'
                                                         : isUnplanned
                                                         ? 'bg-gradient-to-r from-rose-500/[0.03] to-transparent border-rose-500/20 border-l-4 border-l-rose-500 shadow-[0_4px_16px_rgba(244,63,94,0.05)] hover:bg-rose-500/[0.06]'
                                                         : 'bg-white/[0.005] border-white/[0.03] hover:bg-white/[0.015] hover:border-white/[0.06] hover:shadow-[0_8px_20px_rgba(0,0,0,0.25)]'}`}
@@ -1325,7 +1496,11 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                                 {/* Date with Relative Temporal Badge */}
                                                 <div>
                                                     <div className="flex items-center gap-1.5 flex-wrap">
-                                                        <p className={`text-[11px] font-mono font-bold uppercase tracking-widest ${isRowToday ? 'text-emerald-300 font-extrabold' : 'text-slate-300'}`}>
+                                                        <p className={`text-[11px] font-mono font-bold uppercase tracking-widest ${
+                                                            isRowToday ? 'text-emerald-300 font-extrabold' :
+                                                            isRowYesterday ? 'text-amber-300 font-extrabold' :
+                                                            'text-slate-300'
+                                                        }`}>
                                                             {fmtDate(l.date)}
                                                         </p>
                                                         {isRowToday ? (
@@ -1333,9 +1508,18 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                                                                 Today
                                                             </span>
+                                                        ) : isRowYesterday ? (
+                                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-amber-500/25 text-amber-300 border border-amber-500/40 shadow-[0_0_8px_rgba(245,158,11,0.3)]">
+                                                                <History size={10} className="text-amber-300" />
+                                                                Yesterday
+                                                            </span>
                                                         ) : rel.isTomorrow ? (
                                                             <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/35">
                                                                 Tomorrow
+                                                            </span>
+                                                        ) : rel.isPast ? (
+                                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold text-slate-400 bg-white/[0.04] border border-white/10">
+                                                                {rel.label}
                                                             </span>
                                                         ) : rel.isFuture ? (
                                                             <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold text-sky-400/90 bg-sky-500/10 border border-sky-500/25">
@@ -1343,7 +1527,11 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                                             </span>
                                                         ) : null}
                                                     </div>
-                                                    <p className={`text-[10px] font-bold uppercase tracking-widest ${isRowToday ? 'text-emerald-400/80 font-extrabold' : 'text-slate-500'}`}>
+                                                    <p className={`text-[10px] font-bold uppercase tracking-widest ${
+                                                        isRowToday ? 'text-emerald-400/80 font-extrabold' :
+                                                        isRowYesterday ? 'text-amber-400/80 font-extrabold' :
+                                                        'text-slate-500'
+                                                    }`}>
                                                         {getWeekday(l.date)}
                                                     </p>
                                                 </div>
