@@ -465,6 +465,59 @@ export async function getLeavesPage(options?: LeavePageOptions): Promise<Paginat
     }, force);
 }
 
+export async function getAllLeavesForExport(options?: LeavePageOptions): Promise<LeaveRecord[]> {
+    const {
+        clientName,
+        employeeName,
+        leaveType,
+        search,
+        year,
+        month,
+        startDate,
+        endDate,
+        sortKey = 'Date',
+        sortDir = 'desc',
+    } = options ?? {};
+
+    const normalizedSearch = search ? sanitizeSearchTerm(search) : '';
+
+    let query = supabase
+        .from('leaves')
+        .select('id, date, client_name, employee_name, is_planned, leave_type, day_count, created_at, approver, reason')
+        .neq('leave_type', 'Dismissed')
+        .neq('leave_type', 'System: Declined');
+
+    if (clientName) {
+        if (Array.isArray(clientName)) { if (clientName.length > 0) query = query.in('client_name', clientName); }
+        else query = query.eq('client_name', clientName);
+    }
+    if (employeeName) {
+        if (Array.isArray(employeeName)) { if (employeeName.length > 0) query = query.in('employee_name', employeeName); }
+        else query = query.eq('employee_name', employeeName);
+    }
+    if (leaveType) {
+        if (Array.isArray(leaveType)) { if (leaveType.length > 0) query = query.in('leave_type', leaveType); }
+        else query = query.ilike('leave_type', leaveType);
+    }
+    query = applyLeaveDateFilter(query, year, month);
+    if (startDate) query = query.gte('date', startDate);
+    if (endDate) query = query.lte('date', endDate);
+    if (normalizedSearch) {
+        query = query.or(`employee_name.ilike."%${normalizedSearch}%",client_name.ilike."%${normalizedSearch}%",leave_type.ilike."%${normalizedSearch}%"`);
+    }
+    query = applyLeaveSort(query, sortKey, sortDir);
+
+    const { data, error } = await query;
+    assertSupabaseOk(error, 'Failed to load all leaves for export');
+
+    return (data ?? []).map((row) => ({
+        ...row,
+        employee_name: toTitleCase(row.employee_name),
+        backup_provided: parseBackupProvided(row),
+        reason: cleanReasonText(row.reason),
+    })) as LeaveRecord[];
+}
+
 export async function getLeaveSummary(options?: LeavePageOptions): Promise<LeaveSummary> {
     const {
         clientName,
