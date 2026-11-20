@@ -214,16 +214,18 @@ export default function DateRangePicker({ value, onChange, className = '', allow
     const rect = triggerRef.current.getBoundingClientRect();
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const panelWidth = Math.min(640, vw - 16);
-    const panelHeight = 450;
+    const panelWidth = Math.min(480, vw - 24);
+    const panelHeight = 360;
 
-    // Right-align to trigger if possible, otherwise clamp within viewport
-    let left = rect.right - panelWidth;
-    if (left < 8) left = Math.max(8, Math.min(rect.left, vw - panelWidth - 8));
+    // Anchor directly beneath or above trigger with smart viewport containment
+    let left = rect.left;
+    if (left + panelWidth > vw - 12) {
+      left = Math.max(12, vw - panelWidth - 12);
+    }
 
-    let top = rect.bottom + 8;
-    if (top + panelHeight > vh - 8 && rect.top - panelHeight - 8 > 8) {
-      top = rect.top - panelHeight - 8;
+    let top = rect.bottom + 6;
+    if (top + panelHeight > vh - 12 && rect.top - panelHeight - 6 > 12) {
+      top = rect.top - panelHeight - 6; // Flip upwards if near viewport bottom
     }
 
     setPanelPos({ top, left, width: panelWidth });
@@ -282,14 +284,19 @@ export default function DateRangePicker({ value, onChange, className = '', allow
       setSelecting('end');
     } else {
       const start = draft.startDate;
+      let finalStart = start;
+      let finalEnd = ds;
       if (ds < start) {
-        setDraft({ preset: null, startDate: ds, endDate: start });
-      } else {
-        setDraft({ preset: null, startDate: start, endDate: ds });
+        finalStart = ds;
+        finalEnd = start;
       }
+      setDraft({ preset: null, startDate: finalStart, endDate: finalEnd });
       setSelecting(null);
+      // Auto-apply on 2nd date selection for zero-friction 2026 UX
+      onChange({ preset: null, startDate: finalStart, endDate: finalEnd });
+      setIsOpen(false);
     }
-  }, [selecting, draft.startDate]);
+  }, [selecting, draft.startDate, onChange]);
 
   const handleApply = useCallback(() => {
     onChange({ preset: draft.preset, startDate: draft.startDate, endDate: draft.endDate });
@@ -440,31 +447,31 @@ export default function DateRangePicker({ value, onChange, className = '', allow
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={handleCancel}
-            className="fixed inset-0 z-[9995] bg-black/55 backdrop-blur-sm cursor-default"
+            className="fixed inset-0 z-[9995] bg-black/20 cursor-default"
           />
           <motion.div
             ref={panelRef}
             key="datepicker-panel"
-            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+            initial={{ opacity: 0, y: 6, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 8, scale: 0.98 }}
-            transition={{ type: 'spring', damping: 28, stiffness: 360 }}
+            exit={{ opacity: 0, y: 6, scale: 0.98 }}
+            transition={{ type: 'spring', damping: 30, stiffness: 400 }}
             style={{
               position: 'fixed',
               zIndex: 9996,
               top: panelPos.top,
               left: panelPos.left,
               width: panelPos.width,
-              maxHeight: 'calc(100vh - 16px)',
+              maxHeight: 'calc(100vh - 24px)',
             }}
-            className="rounded-2xl bg-[#0d0f1a] border border-white/[0.12] shadow-[0_30px_90px_rgba(0,0,0,0.95)] overflow-y-auto"
+            className="rounded-2xl bg-[#0c0e18]/95 backdrop-blur-2xl border border-white/[0.12] shadow-[0_24px_70px_rgba(0,0,0,0.85),0_0_0_1px_rgba(255,255,255,0.06)] overflow-hidden"
           >
-            <div className="flex flex-col md:flex-row">
+            <div className="flex flex-col sm:flex-row">
               {/* Sidebar: Quick Presets */}
-              <div className="md:w-[175px] border-b md:border-b-0 md:border-r border-white/[0.08] p-3.5 bg-[#0a0c15] flex flex-col justify-between gap-3">
+              <div className="sm:w-[136px] border-b sm:border-b-0 sm:border-r border-white/[0.08] p-3 bg-[#090b14]/90 flex flex-col justify-between gap-2.5">
                 <div>
-                  <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.18em] px-2.5 pb-2">Quick Ranges</p>
-                  <div className="grid grid-cols-2 md:grid-cols-1 gap-1">
+                  <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.16em] px-2 pb-2">Quick Presets</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-1 gap-1">
                     {(allowFuture ? FUTURE_PRESETS : BASE_PRESETS).map(p => {
                       const active = value.preset === p.key;
                       return (
@@ -472,9 +479,9 @@ export default function DateRangePicker({ value, onChange, className = '', allow
                           key={p.key}
                           type="button"
                           onClick={() => handlePreset(p.key)}
-                          className={`w-full text-left px-3 py-2 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
+                          className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
                             active
-                              ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/35'
+                              ? 'bg-indigo-500/25 text-indigo-300 border border-indigo-500/40 shadow-[0_0_10px_rgba(99,102,241,0.2)]'
                               : 'text-slate-400 hover:bg-white/[0.06] hover:text-white border border-transparent'
                           }`}
                         >
@@ -490,109 +497,90 @@ export default function DateRangePicker({ value, onChange, className = '', allow
                           setIsOpen(false);
                           setSelecting(null);
                         }}
-                        className="w-full text-left px-3 py-1.5 mt-1 rounded-lg text-[11px] font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-dashed border-rose-500/25 transition-all cursor-pointer flex items-center justify-between"
+                        className="w-full text-left px-2.5 py-1.5 mt-1 rounded-lg text-[10px] font-bold uppercase tracking-wider text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-dashed border-rose-500/25 transition-all cursor-pointer flex items-center justify-between"
                       >
-                        <span>Clear Dates</span>
-                        <X size={11} />
+                        <span>All Dates</span>
+                        <X size={10} />
                       </button>
                     )}
                   </div>
                 </div>
 
-                {/* Selection Guidance */}
-                <div className={`px-3 py-2.5 rounded-xl border ${
-                  selecting === 'end'
-                    ? 'bg-emerald-500/10 border-emerald-500/25'
-                    : 'bg-indigo-500/10 border-indigo-500/25'
-                }`}>
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <Target size={11} className={selecting === 'end' ? 'text-emerald-400' : 'text-indigo-400'} />
-                    <p className={`text-[10px] font-bold uppercase tracking-wider ${
-                      selecting === 'end' ? 'text-emerald-300' : 'text-indigo-300'
-                    }`}>
-                      {selectionHint}
-                    </p>
-                  </div>
-                  <p className="text-[10px] text-slate-400 font-mono">
-                    {selecting === 'end'
-                      ? `Start: ${humanDateShort(draft.startDate)}`
-                      : 'Click any date'}
+                <div className="px-2.5 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
+                  <p className="text-[9px] font-bold uppercase tracking-wider text-indigo-300">
+                    {selecting === 'end' ? 'Select End Date' : 'Select Start Date'}
                   </p>
                 </div>
               </div>
 
-              {/* Main Matrix: Dual-Month Calendar */}
-              <div className="flex-1 p-4 sm:p-5">
-                <div className="flex items-center justify-between mb-4">
+              {/* Main Matrix: Focused Single-Month View */}
+              <div className="flex-1 p-3.5 sm:p-4">
+                <div className="flex items-center justify-between mb-3">
                   <button
                     type="button"
                     onClick={prevMonth}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/[0.05] border border-white/[0.08] hover:bg-white/10 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                    className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/[0.05] border border-white/[0.08] hover:bg-white/10 text-slate-400 hover:text-white transition-colors cursor-pointer"
                   >
-                    <ChevronLeft size={15} />
+                    <ChevronLeft size={14} />
                   </button>
 
-                  <div className="flex items-center gap-4 sm:gap-10">
-                    <span className="text-xs font-bold text-zinc-100 uppercase tracking-wider">{monthLabel(viewMonth.year, viewMonth.month)}</span>
-                    <span className="text-xs font-bold text-zinc-100 uppercase tracking-wider hidden md:block">{monthLabel(nextMonthData.year, nextMonthData.month)}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-zinc-100 uppercase tracking-wider font-mono">
+                      {monthLabel(viewMonth.year, viewMonth.month)}
+                    </span>
                     <button
                       type="button"
                       onClick={handleGoToToday}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/[0.05] border border-white/[0.08] hover:bg-indigo-500/15 hover:border-indigo-500/30 text-slate-400 hover:text-indigo-300 transition-colors cursor-pointer"
+                      className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/[0.05] border border-white/[0.08] hover:bg-indigo-500/15 hover:border-indigo-500/30 text-slate-400 hover:text-indigo-300 transition-colors cursor-pointer"
                       title="Jump to current month"
                     >
-                      <RotateCcw size={10} />
-                      <span className="text-[10px] font-bold uppercase tracking-wider">Today</span>
+                      <RotateCcw size={9} />
+                      <span className="text-[9px] font-bold uppercase tracking-wider">Today</span>
                     </button>
                   </div>
 
                   <button
                     type="button"
                     onClick={nextMonth}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/[0.05] border border-white/[0.08] hover:bg-white/10 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                    className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/[0.05] border border-white/[0.08] hover:bg-white/10 text-slate-400 hover:text-white transition-colors cursor-pointer"
                   >
-                    <ChevronRight size={15} />
+                    <ChevronRight size={14} />
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {renderCalendarGrid(grid)}
-                  <div className="hidden md:block">
-                    {renderCalendarGrid(nextGrid)}
-                  </div>
-                </div>
+                {renderCalendarGrid(grid)}
 
-                {/* Footer */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mt-5 pt-4 border-t border-white/[0.08] gap-3">
-                  <div className="flex items-center flex-wrap gap-2.5">
-                    <div className="flex items-center gap-2">
-                      <Clock size={13} className="text-indigo-400" />
-                      <span className="text-xs font-bold font-mono text-white tabular-nums">
-                        {humanDateShort(draft.startDate)} → {humanDateShort(draft.endDate)}
+                {/* Footer Status & Auto-Confirm */}
+                <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/[0.08] gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {draft.startDate ? (
+                      <span className="text-[11px] font-mono font-semibold text-zinc-200 truncate">
+                        {humanDateShort(draft.startDate)}{draft.endDate && draft.endDate !== draft.startDate ? ` ➔ ${humanDateShort(draft.endDate)}` : ''}
                       </span>
-                    </div>
-                    <div className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/25">
-                      <Zap size={10} className="text-emerald-400" />
-                      <span className="text-[10px] font-bold text-emerald-300">
-                        {workingDays} working day{workingDays !== 1 ? 's' : ''}
+                    ) : (
+                      <span className="text-[11px] text-zinc-500 italic">No date selected</span>
+                    )}
+                    {workingDays > 0 && (
+                      <span className="text-[10px] font-bold text-emerald-400 px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 shrink-0">
+                        {workingDays}d
                       </span>
-                    </div>
+                    )}
                   </div>
 
-                  <div className="flex items-center gap-2 self-end sm:self-auto">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <button
                       type="button"
                       onClick={handleCancel}
-                      className="px-4 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-slate-300 text-xs font-semibold hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+                      className="px-2.5 py-1 rounded-md text-xs font-medium text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
                     >
                       Cancel
                     </button>
                     <button
                       type="button"
                       onClick={handleApply}
-                      className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-colors shadow-[0_4px_16px_rgba(99,102,241,0.35)] cursor-pointer"
+                      className="px-3 py-1 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-[0_2px_10px_rgba(99,102,241,0.3)] cursor-pointer"
                     >
-                      Apply Range
+                      Apply
                     </button>
                   </div>
                 </div>

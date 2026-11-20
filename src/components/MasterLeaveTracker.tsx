@@ -1450,7 +1450,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                     <div className="w-px h-6 bg-white/[0.08] flex-shrink-0" />
 
                     {/* Integrated Cyberpunk Date Range Calendar Picker */}
-                    <div className="w-full sm:w-[220px] shrink-0">
+                    <div className="w-full sm:w-[210px] shrink-0">
                         <DateRangePicker 
                             value={dateRange} 
                             onChange={handleDateRangeChange} 
@@ -1461,27 +1461,6 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                     </div>
 
                     <div className="w-px h-6 bg-white/[0.08] flex-shrink-0" />
-
-                    {/* Year Selector */}
-                    <CustomSelect
-                        options={availableYears.map(yr => ({ value: yr, label: yr }))}
-                        value={filterYear}
-                        onChange={(val) => { setFilterYear(val); if (!val) setFilterMonth(''); }}
-                        placeholder="Year"
-                        className="min-w-[110px]"
-                    />
-
-                    {/* Month Selector */}
-                    <CustomSelect
-                        options={['01','02','03','04','05','06','07','08','09','10','11','12'].map(m => ({
-                            value: m,
-                            label: new Date(2000, Number(m) - 1, 1).toLocaleDateString('en-US', { month: 'short' })
-                        }))}
-                        value={filterMonth}
-                        onChange={setFilterMonth}
-                        placeholder="Month"
-                        className={`min-w-[110px] ${!filterYear ? 'opacity-40 pointer-events-none' : ''}`}
-                    />
 
                     {/* Client Multi-Select */}
                     <CustomSelect
