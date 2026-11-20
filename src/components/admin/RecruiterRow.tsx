@@ -4,14 +4,13 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { formatDuration, getRealNow } from '@/lib/timeUtils';
 import type { UserStatusRecord } from '@/lib/store';
-import { Pencil, LogOut, TrendingUp, User as UserIcon, Play, Square, AlertTriangle, Coffee, Zap } from 'lucide-react';
+import { Pencil, LogOut, TrendingUp, User as UserIcon, Play, Square, AlertTriangle, Coffee } from 'lucide-react';
 import { getClientTheme } from '@/lib/utils';
 
 interface RecruiterRowProps {
   record: UserStatusRecord;
   isOnLeave?: boolean;
   onStartBreak?: (userId: string) => void;
-  onStartBrb?: (userId: string) => void;
   onEndBreak?: (userId: string) => void;
   onEndBrb?: (userId: string) => void;
   onPunchOut?: (userId: string) => void;
@@ -28,7 +27,7 @@ function getInitials(name: string) {
 
 // ─── SHARED GRID ────────────────────────────────────────────────────────────
 // IMPORTANT: header in LiveFloor.tsx MUST use this exact same string
-export const ROW_GRID = 'grid-cols-[48px_1fr_96px_90px_76px_60px_76px_140px]';
+export const ROW_GRID = 'grid-cols-[48px_1fr_100px_96px_80px_64px_80px_112px]';
 export const ROW_GAP  = 'gap-x-4';
 export const ROW_PX   = 'px-5';
 
@@ -36,7 +35,6 @@ export default function RecruiterRow({
   record,
   isOnLeave,
   onStartBreak,
-  onStartBrb,
   onEndBreak,
   onEndBrb,
   onPunchOut,
@@ -381,38 +379,6 @@ export default function RecruiterRow({
               <span className="text-[6px] font-black text-amber-400 uppercase tracking-widest">Elite</span>
             </span>
           )}
-
-          {/* Quick inline micro-action next to name on hover */}
-          {isWorking && onStartBreak && (
-            <motion.button
-              whileHover={{ scale: 1.08 }}
-              whileTap={{ scale: 0.92 }}
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onStartBreak(user.id); }}
-              title={`Quick Break: Send ${user.name} on break`}
-              className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-400 text-[8px] font-bold uppercase tracking-wider cursor-pointer shrink-0"
-            >
-              <Coffee size={8} />
-              <span>Break</span>
-            </motion.button>
-          )}
-          {(status === 'on_break' || status === 'on_brb') && (
-            <motion.button
-              whileHover={{ scale: 1.08 }}
-              whileTap={{ scale: 0.92 }}
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (status === 'on_break' && onEndBreak) onEndBreak(user.id);
-                if (status === 'on_brb' && onEndBrb) onEndBrb(user.id);
-              }}
-              title={`Quick Resume: Resume ${user.name}`}
-              className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-[8px] font-bold uppercase tracking-wider cursor-pointer shrink-0"
-            >
-              <Play size={7} className="fill-current" />
-              <span>Resume</span>
-            </motion.button>
-          )}
         </div>
         <span
           className="text-[8px] font-bold uppercase tracking-[0.18em] flex items-center gap-[3px] truncate leading-tight"
@@ -475,75 +441,45 @@ export default function RecruiterRow({
       </div>
 
       {/* ── 8. Actions ─────────────────────────────────────────────────────── */}
-      <div className="relative flex items-center justify-center gap-1.5">
-        <div className="absolute left-[-8px] top-[15%] bottom-[15%] w-[1px] bg-gradient-to-b from-transparent via-white/[0.06] to-transparent pointer-events-none" />
+      <div className="relative flex items-center justify-center">
+        <div className="absolute left-[-6px] top-1/4 bottom-1/4 w-[1px] bg-gradient-to-b from-transparent via-white/[0.06] to-transparent pointer-events-none" />
 
-        {/* ── When WORKING: State-morphing Start Controller (Break | BRB) ── */}
-        {isWorking && (onStartBreak || onStartBrb) && (
-          <div className="flex items-center rounded-xl bg-white/[0.03] border border-white/[0.08] p-[2px] shadow-sm backdrop-blur-md">
-            {onStartBreak && (
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onStartBreak(user.id); }}
-                className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2 py-1.5 rounded-lg text-amber-400 hover:text-amber-300 hover:bg-amber-500/15 transition-all cursor-pointer whitespace-nowrap"
-                title="Start Break (60m Standard)"
-              >
-                <Coffee size={9} className="shrink-0" />
-                <span>Break</span>
-              </motion.button>
-            )}
-            <div className="w-[1px] h-3 bg-white/10 mx-0.5" />
-            {onStartBrb && (
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onStartBrb(user.id); }}
-                className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2 py-1.5 rounded-lg text-sky-400 hover:text-sky-300 hover:bg-sky-500/15 transition-all cursor-pointer whitespace-nowrap"
-                title="Start BRB (15m Short Away)"
-              >
-                <Zap size={9} className="shrink-0" />
-                <span>BRB</span>
-              </motion.button>
-            )}
-          </div>
-        )}
-
-        {/* ── When ON BREAK: Resume Button ── */}
-        {status === 'on_break' && onEndBreak && (
+        {/* ── Single Action Button: Break when working, Resume when on break or BRB ── */}
+        {isWorking && onStartBreak && (
           <motion.button
-            whileHover={{ scale: 1.06 }}
-            whileTap={{ scale: 0.94 }}
-            onClick={(e) => { e.stopPropagation(); onEndBreak(user.id); }}
-            className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.08em] py-[7px] px-3.5 rounded-xl cursor-pointer whitespace-nowrap"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={(e) => { e.stopPropagation(); onStartBreak(user.id); }}
+            className="flex items-center justify-center gap-1.5 text-[9px] font-black uppercase tracking-[0.08em] py-[7px] px-3.5 rounded-xl cursor-pointer whitespace-nowrap select-none"
             style={{
-              background: 'rgba(245, 158, 11, 0.12)',
-              border: `1px solid rgba(245, 158, 11, 0.4)`,
+              background: 'rgba(245, 158, 11, 0.1)',
+              border: '1px solid rgba(245, 158, 11, 0.35)',
               color: COLOR_BREAK,
-              boxShadow: '0 2px 14px rgba(245, 158, 11, 0.2)',
-              textShadow: '0 0 6px rgba(245, 158, 11, 0.6)',
+              boxShadow: '0 2px 10px rgba(245, 158, 11, 0.12)',
+              textShadow: '0 0 6px rgba(245, 158, 11, 0.5)',
             }}
           >
-            <Play size={8} className="fill-current flex-shrink-0" />
-            Resume
+            <Coffee size={9} className="flex-shrink-0" />
+            Break
           </motion.button>
         )}
 
-        {/* ── When ON BRB: Resume Button ── */}
-        {status === 'on_brb' && onEndBrb && (
+        {(status === 'on_break' || status === 'on_brb') && (onEndBreak || onEndBrb) && (
           <motion.button
-            whileHover={{ scale: 1.06 }}
-            whileTap={{ scale: 0.94 }}
-            onClick={(e) => { e.stopPropagation(); onEndBrb(user.id); }}
-            className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.08em] py-[7px] px-3.5 rounded-xl cursor-pointer whitespace-nowrap"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (status === 'on_break' && onEndBreak) onEndBreak(user.id);
+              if (status === 'on_brb' && onEndBrb) onEndBrb(user.id);
+            }}
+            className="flex items-center justify-center gap-1.5 text-[9px] font-black uppercase tracking-[0.08em] py-[7px] px-3.5 rounded-xl cursor-pointer whitespace-nowrap select-none"
             style={{
-              background: 'rgba(59, 130, 246, 0.12)',
-              border: `1px solid rgba(59, 130, 246, 0.4)`,
-              color: COLOR_BRB,
-              boxShadow: '0 2px 14px rgba(59, 130, 246, 0.2)',
-              textShadow: '0 0 6px rgba(59, 130, 246, 0.6)',
+              background: 'rgba(245, 158, 11, 0.12)',
+              border: '1px solid rgba(245, 158, 11, 0.45)',
+              color: COLOR_BREAK,
+              boxShadow: '0 2px 14px rgba(245, 158, 11, 0.22)',
+              textShadow: '0 0 6px rgba(245, 158, 11, 0.6)',
             }}
           >
             <Play size={8} className="fill-current flex-shrink-0" />
@@ -558,9 +494,9 @@ export default function RecruiterRow({
           </span>
         )}
 
-        {/* Hover-reveal: punch out + edit */}
+        {/* Hover-reveal secondary tools: positioned absolute right so they NEVER shift button alignment */}
         <div
-          className={`flex items-center gap-1 transition-all duration-200 ${
+          className={`absolute right-[-2px] flex items-center gap-0.5 transition-opacity duration-200 ${
             isActive
               ? 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto'
               : 'opacity-100'
@@ -570,18 +506,18 @@ export default function RecruiterRow({
             <button
               onClick={(e) => { e.stopPropagation(); onPunchOut(user.id); }}
               title="Punch out"
-              className="p-1.5 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-400/10 transition-all cursor-pointer"
+              className="p-1 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-400/10 transition-all cursor-pointer"
             >
-              <LogOut size={12} />
+              <LogOut size={11} />
             </button>
           )}
           {onEditLogs && punchIn && (
             <button
               onClick={(e) => { e.stopPropagation(); onEditLogs(user.id, user.name, user.clientName); }}
               title="Edit logs"
-              className="p-1.5 rounded-lg text-slate-600 hover:text-indigo-400 hover:bg-indigo-400/10 transition-all cursor-pointer"
+              className="p-1 rounded-lg text-slate-600 hover:text-indigo-400 hover:bg-indigo-400/10 transition-all cursor-pointer"
             >
-              <Pencil size={12} />
+              <Pencil size={11} />
             </button>
           )}
         </div>

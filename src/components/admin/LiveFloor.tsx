@@ -446,7 +446,6 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
                               record={record}
                               isOnLeave={isOnLeave}
                               onStartBreak={handleStartBreak}
-                              onStartBrb={handleStartBrb}
                               onEndBreak={handleEndBreak}
                               onEndBrb={handleEndBrb}
                               onPunchOut={handlePunchOut}
