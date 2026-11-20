@@ -216,6 +216,16 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
   }, [filteredRecords]);
 
   // Admin actions
+  const handleStartBreak = async (userId: string) => {
+    await masterOverride(userId, 'break_start', user.id);
+    void loadDashboard(true);
+  };
+
+  const handleStartBrb = async (userId: string) => {
+    await masterOverride(userId, 'brb_start', user.id);
+    void loadDashboard(true);
+  };
+
   const handleEndBreak = async (userId: string) => {
     await masterOverride(userId, 'break_end', user.id);
     void loadDashboard(true);
@@ -435,6 +445,8 @@ export default function LiveFloor({ user, onStatusCountsChange, activeFilter }: 
                               key={record.user.id}
                               record={record}
                               isOnLeave={isOnLeave}
+                              onStartBreak={handleStartBreak}
+                              onStartBrb={handleStartBrb}
                               onEndBreak={handleEndBreak}
                               onEndBrb={handleEndBrb}
                               onPunchOut={handlePunchOut}

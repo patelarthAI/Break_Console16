@@ -306,6 +306,11 @@ export default function Home() {
           } catch (e) {
             console.error('Failed to incremental update user status:', e);
           }
+
+          // If the admin started/ended break for this logged-in recruiter, refresh their local state immediately
+          if (saved && !saved.isMaster && userId === saved.id) {
+            void loadLogs(saved);
+          }
         } else {
           loadTeamStatus(); // fallback if payload is weird
         }

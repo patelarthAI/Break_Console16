@@ -976,7 +976,20 @@ export async function getLogs(userId: string, date?: string): Promise<TimeLog[]>
     return (data ?? []).map(r => rowToLog(r as LogRow));
 }
 
+// In-flight event dedup map to prevent simultaneous race conditions
+const inFlightLogLocks = new Map<string, number>();
+
 export async function insertLog(userId: string, log: TimeLog): Promise<void> {
+    // Fast in-memory deduplication (reject duplicate events within 2.5s)
+    const dedupKey = `${userId}:${log.eventType}:${log.date}`;
+    const now = Date.now();
+    const lastTime = inFlightLogLocks.get(dedupKey);
+    if (lastTime && now - lastTime < 2500) {
+        console.warn(`[insertLog] In-memory fast dedup dropped redundant '${log.eventType}' for user ${userId}`);
+        return;
+    }
+    inFlightLogLocks.set(dedupKey, now);
+
     // State machine idempotency: reject duplicate consecutive events (e.g. double break_start, double brb_start)
     if (['break_start', 'brb_start', 'break_end', 'brb_end', 'punch_in'].includes(log.eventType)) {
         const { data: recent } = await supabase
@@ -1138,8 +1151,18 @@ export async function getLogDatesForMonth(userId: string, yearMonth: string): Pr
 }
 
 // ─── Master override ──────────────────────────────────────────────────────────
-export async function masterOverride(userId: string, action: 'break_end' | 'brb_end' | 'punch_out', masterId: string): Promise<void> {
-    const log: TimeLog = { id: generateUUID(), eventType: action, timestamp: Date.now(), date: getTodayKey(), addedBy: masterId };
+export async function masterOverride(
+    userId: string,
+    action: 'break_start' | 'break_end' | 'brb_start' | 'brb_end' | 'punch_out' | 'punch_in',
+    masterId: string
+): Promise<void> {
+    const log: TimeLog = {
+        id: generateUUID(),
+        eventType: action,
+        timestamp: Date.now(),
+        date: getTodayKey(),
+        addedBy: masterId || 'MASTER'
+    };
     await insertLog(userId, log);
 }
 
@@ -1216,19 +1239,49 @@ function deriveStatus(logs: TimeLog[]): Omit<UserStatusRecord, 'user'> {
                 status = 'punched_out'; punchOut = log.timestamp; breakStart = brbStart = undefined; workStart = undefined;
                 if (currentWorkSegStart) { workedMs += log.timestamp - currentWorkSegStart; currentWorkSegStart = undefined; } break;
             case 'break_start':
-                status = 'on_break'; breakStart = log.timestamp; breakCount++; workStart = undefined;
-                if (currentWorkSegStart) { workedMs += log.timestamp - currentWorkSegStart; currentWorkSegStart = undefined; } break;
+                if (status !== 'on_break') {
+                    status = 'on_break';
+                    breakStart = log.timestamp;
+                    breakCount++;
+                    workStart = undefined;
+                    if (currentWorkSegStart) {
+                        workedMs += log.timestamp - currentWorkSegStart;
+                        currentWorkSegStart = undefined;
+                    }
+                }
+                break;
             case 'break_end':
-                status = 'working'; workStart = log.timestamp;
+                status = 'working';
+                workStart = log.timestamp;
                 currentWorkSegStart = log.timestamp; 
-                if (breakStart) { breakMs += log.timestamp - breakStart; breakStart = undefined; } break;
+                if (breakStart) {
+                    const MAX_SINGLE_BREAK_MS = 120 * 60 * 1000;
+                    breakMs += Math.min(log.timestamp - breakStart, MAX_SINGLE_BREAK_MS);
+                    breakStart = undefined;
+                }
+                break;
             case 'brb_start':
-                status = 'on_brb'; brbStart = log.timestamp; brbCount++; workStart = undefined;
-                if (currentWorkSegStart) { workedMs += log.timestamp - currentWorkSegStart; currentWorkSegStart = undefined; } break;
+                if (status !== 'on_brb') {
+                    status = 'on_brb';
+                    brbStart = log.timestamp;
+                    brbCount++;
+                    workStart = undefined;
+                    if (currentWorkSegStart) {
+                        workedMs += log.timestamp - currentWorkSegStart;
+                        currentWorkSegStart = undefined;
+                    }
+                }
+                break;
             case 'brb_end':
-                status = 'working'; workStart = log.timestamp;
+                status = 'working';
+                workStart = log.timestamp;
                 currentWorkSegStart = log.timestamp; 
-                if (brbStart) { brbMs += log.timestamp - brbStart; brbStart = undefined; } break;
+                if (brbStart) {
+                    const MAX_SINGLE_BRB_MS = 30 * 60 * 1000;
+                    brbMs += Math.min(log.timestamp - brbStart, MAX_SINGLE_BRB_MS);
+                    brbStart = undefined;
+                }
+                break;
         }
     }
     const accumulatedWorkedMs = workedMs;
@@ -1240,10 +1293,12 @@ function deriveStatus(logs: TimeLog[]): Omit<UserStatusRecord, 'user'> {
         workedMs += now - currentWorkSegStart;
     }
     if (breakStart && status === 'on_break') {
-        breakMs += now - breakStart;
+        const MAX_OPEN_BREAK_MS = 120 * 60 * 1000;
+        breakMs += Math.min(now - breakStart, MAX_OPEN_BREAK_MS);
     }
     if (brbStart && status === 'on_brb') {
-        brbMs += now - brbStart;
+        const MAX_OPEN_BRB_MS = 30 * 60 * 1000;
+        brbMs += Math.min(now - brbStart, MAX_OPEN_BRB_MS);
     }
     return { 
         status, punchIn, punchOut, breakStart, brbStart, workStart, 
