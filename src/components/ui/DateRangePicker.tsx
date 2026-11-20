@@ -24,7 +24,10 @@ export type DatePreset =
   | 'last7'
   | 'thisMonth'
   | 'lastMonth'
-  | 'last30';
+  | 'last30'
+  | 'next7'
+  | 'next14'
+  | 'nextMonth';
 
 export interface DateRangeValue {
   preset: DatePreset | null;
@@ -36,6 +39,9 @@ interface Props {
   value: DateRangeValue;
   onChange: (range: DateRangeValue) => void;
   className?: string;
+  allowFuture?: boolean;
+  allowClear?: boolean;
+  placeholder?: string;
 }
 
 /* ── Helpers ──────────────────────────────────────────────────────── */
@@ -112,10 +118,23 @@ function getPresetDates(preset: DatePreset): { start: string; end: string } {
       const start = new Date(t); start.setDate(t.getDate() - 29);
       return { start: fmt(start), end: fmt(t) };
     }
+    case 'next7': {
+      const end = new Date(t); end.setDate(t.getDate() + 6);
+      return { start: fmt(t), end: fmt(end) };
+    }
+    case 'next14': {
+      const end = new Date(t); end.setDate(t.getDate() + 13);
+      return { start: fmt(t), end: fmt(end) };
+    }
+    case 'nextMonth': {
+      const start = new Date(t.getFullYear(), t.getMonth() + 1, 1);
+      const end = new Date(t.getFullYear(), t.getMonth() + 2, 0);
+      return { start: fmt(start), end: fmt(end) };
+    }
   }
 }
 
-const PRESETS: { key: DatePreset; label: string }[] = [
+const BASE_PRESETS: { key: DatePreset; label: string }[] = [
   { key: 'today', label: 'Today' },
   { key: 'yesterday', label: 'Yesterday' },
   { key: 'thisWeek', label: 'This Week' },
@@ -124,6 +143,24 @@ const PRESETS: { key: DatePreset; label: string }[] = [
   { key: 'thisMonth', label: 'This Month' },
   { key: 'lastMonth', label: 'Last Month' },
   { key: 'last30', label: 'Last 30 Days' },
+];
+
+const FUTURE_PRESETS: { key: DatePreset; label: string }[] = [
+  { key: 'today', label: 'Today' },
+  { key: 'yesterday', label: 'Yesterday' },
+  { key: 'thisWeek', label: 'This Week' },
+  { key: 'next7', label: 'Next 7 Days' },
+  { key: 'next14', label: 'Next 14 Days' },
+  { key: 'thisMonth', label: 'This Month' },
+  { key: 'nextMonth', label: 'Next Month' },
+  { key: 'last30', label: 'Last 30 Days' },
+];
+
+const ALL_PRESETS = [
+  ...BASE_PRESETS,
+  { key: 'next7' as DatePreset, label: 'Next 7 Days' },
+  { key: 'next14' as DatePreset, label: 'Next 14 Days' },
+  { key: 'nextMonth' as DatePreset, label: 'Next Month' },
 ];
 
 const WEEKDAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -141,11 +178,11 @@ function getMonthGrid(year: number, month: number) {
 
 const presetLabel = (key: DatePreset | null): string | null => {
   if (!key) return null;
-  return PRESETS.find(p => p.key === key)?.label ?? null;
+  return ALL_PRESETS.find(p => p.key === key)?.label ?? null;
 };
 
 /* ── Component ───────────────────────────────────────────────────── */
-export default function DateRangePicker({ value, onChange, className = '' }: Props) {
+export default function DateRangePicker({ value, onChange, className = '', allowFuture = false, allowClear = false, placeholder = 'All Dates' }: Props) {
   const [isOpen, setIsOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [selecting, setSelecting] = useState<'start' | 'end' | null>(null);
@@ -266,11 +303,17 @@ export default function DateRangePicker({ value, onChange, className = '' }: Pro
     setSelecting(null);
   }, [value]);
 
-  const handleResetToToday = useCallback((e: React.MouseEvent | React.KeyboardEvent) => {
+  const handleClear = useCallback((e: React.MouseEvent | React.KeyboardEvent) => {
     e.stopPropagation();
-    const { start, end } = getPresetDates('today');
-    onChange({ preset: 'today', startDate: start, endDate: end });
-  }, [onChange]);
+    if (allowClear) {
+      onChange({ preset: null, startDate: '', endDate: '' });
+    } else {
+      const { start, end } = getPresetDates('today');
+      onChange({ preset: 'today', startDate: start, endDate: end });
+    }
+  }, [onChange, allowClear]);
+
+  const handleResetToToday = handleClear;
 
   const handleGoToToday = useCallback(() => {
     const t = today();
@@ -321,14 +364,18 @@ export default function DateRangePicker({ value, onChange, className = '' }: Pro
   );
 
   const triggerLabel = useMemo(() => {
+    if (!value.startDate && !value.endDate) {
+      return placeholder || 'All Dates';
+    }
     const pLabel = presetLabel(value.preset);
+    if (!value.startDate || !value.endDate) return placeholder || 'All Dates';
     if (value.startDate === value.endDate) {
       const hd = humanDate(value.startDate);
       return pLabel ? `${pLabel} · ${humanDateShort(value.startDate)}` : hd;
     }
     const rangeText = `${humanDateShort(value.startDate)} – ${humanDateShort(value.endDate)}`;
     return pLabel ? `${pLabel} · ${rangeText}` : rangeText;
-  }, [value]);
+  }, [value, placeholder]);
 
   const selectionHint = selecting === 'end' ? 'Step 2: Pick end date' : 'Step 1: Pick start date';
 
@@ -347,7 +394,7 @@ export default function DateRangePicker({ value, onChange, className = '' }: Pro
           const inRange = isInRange(ds);
           const isStart = isRangeStart(ds);
           const isEnd = isRangeEnd(ds);
-          const isFuture = ds > todayStr;
+          const isFuture = allowFuture ? false : ds > todayStr;
           const isWeekend = cell.getDay() === 0 || cell.getDay() === 6;
 
           return (
@@ -418,7 +465,7 @@ export default function DateRangePicker({ value, onChange, className = '' }: Pro
                 <div>
                   <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.18em] px-2.5 pb-2">Quick Ranges</p>
                   <div className="grid grid-cols-2 md:grid-cols-1 gap-1">
-                    {PRESETS.map(p => {
+                    {(allowFuture ? FUTURE_PRESETS : BASE_PRESETS).map(p => {
                       const active = value.preset === p.key;
                       return (
                         <button
@@ -435,6 +482,20 @@ export default function DateRangePicker({ value, onChange, className = '' }: Pro
                         </button>
                       );
                     })}
+                    {allowClear && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onChange({ preset: null, startDate: '', endDate: '' });
+                          setIsOpen(false);
+                          setSelecting(null);
+                        }}
+                        className="w-full text-left px-3 py-1.5 mt-1 rounded-lg text-[11px] font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-dashed border-rose-500/25 transition-all cursor-pointer flex items-center justify-between"
+                      >
+                        <span>Clear Dates</span>
+                        <X size={11} />
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -564,14 +625,14 @@ export default function DateRangePicker({ value, onChange, className = '' }: Pro
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
-          {value.preset !== 'today' && (
+          {(allowClear ? Boolean(value.startDate || value.endDate) : value.preset !== 'today') && (
             <span
               role="button"
               tabIndex={0}
-              onClick={handleResetToToday}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleResetToToday(e); } }}
-              className="p-0.5 rounded hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
-              title="Reset to Today"
+              onClick={handleClear}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClear(e); } }}
+              className="p-0.5 rounded hover:bg-white/10 text-slate-400 hover:text-rose-400 transition-colors cursor-pointer"
+              title={allowClear ? "Clear Date Filter" : "Reset to Today"}
             >
               <X size={12} />
             </span>

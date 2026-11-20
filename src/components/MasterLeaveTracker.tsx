@@ -20,6 +20,7 @@ import { dateStr, exportExcel, getTodayKey } from '@/lib/timeUtils';
 import { useToast } from '@/components/Toast';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import CustomSelect from '@/components/ui/CustomSelect';
+import DateRangePicker, { type DateRangeValue, type DatePreset } from '@/components/ui/DateRangePicker';
 import { toTitleCase } from '@/lib/utils';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -378,8 +379,6 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
     const [search, setSearch] = useState('');
     const [filterYear, setFilterYear] = useState('');
     const [filterMonth, setFilterMonth] = useState('');
-    const [customStartDate, setCustomStartDate] = useState('');
-    const [customEndDate, setCustomEndDate] = useState('');
     const [isExporting, setIsExporting] = useState(false);
     
     // Delivery Horizon & Chronological Anchoring
@@ -388,6 +387,16 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
     const weekInfo = useMemo(() => getWeekRange(todayKey), [todayKey]);
     const yesterdayKey = useMemo(() => getYesterdayStr(todayKey), [todayKey]);
     const [horizon, setHorizon] = useState<HorizonMode>('this_week');
+
+    const [dateRange, setDateRange] = useState<DateRangeValue>(() => {
+        const bounds = getHorizonBounds('this_week', getTodayKey());
+        return {
+            preset: 'thisWeek',
+            startDate: bounds.startDate || '',
+            endDate: bounds.endDate || '',
+        };
+    });
+
     const [horizonCounts, setHorizonCounts] = useState<{
         thisWeek: number;
         today: number;
@@ -405,12 +414,46 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
     function handleHorizonChange(newHorizon: HorizonMode) {
         setHorizon(newHorizon);
-        setCustomStartDate('');
-        setCustomEndDate('');
         setCurrentPage(1);
         const bounds = getHorizonBounds(newHorizon, todayKey);
         setSortConfig({ key: 'Date', dir: bounds.defaultDir });
+        
+        let presetKey: DatePreset | null = null;
+        if (newHorizon === 'this_week') presetKey = 'thisWeek';
+        else if (newHorizon === 'today') presetKey = 'today';
+        else if (newHorizon === 'yesterday') presetKey = 'yesterday';
+        else if (newHorizon === 'upcoming_14') presetKey = 'next14';
+        else if (newHorizon === 'next_month') presetKey = 'nextMonth';
+
+        setDateRange({
+            preset: presetKey,
+            startDate: bounds.startDate || '',
+            endDate: bounds.endDate || '',
+        });
+
         if (newHorizon !== 'all') {
+            setFilterYear('');
+            setFilterMonth('');
+        }
+    }
+
+    function handleDateRangeChange(newRange: DateRangeValue) {
+        setDateRange(newRange);
+        setCurrentPage(1);
+        if (!newRange.startDate && !newRange.endDate) {
+            setHorizon('all');
+        } else if (newRange.preset === 'thisWeek') {
+            setHorizon('this_week');
+        } else if (newRange.preset === 'today') {
+            setHorizon('today');
+        } else if (newRange.preset === 'yesterday') {
+            setHorizon('yesterday');
+        } else if (newRange.preset === 'nextMonth') {
+            setHorizon('next_month');
+        } else {
+            setHorizon('all');
+        }
+        if (newRange.startDate || newRange.endDate) {
             setFilterYear('');
             setFilterMonth('');
         }
@@ -512,7 +555,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
     // Reset to page 1 on filter changes
     useEffect(() => {
         setCurrentPage(1);
-    }, [filterClient, filterEmployee, filterLeaveType, filterYear, filterMonth, customStartDate, customEndDate]);
+    }, [filterClient, filterEmployee, filterLeaveType, filterYear, filterMonth, dateRange]);
 
     // Load leaves on page / filter change with race-condition safety
     useEffect(() => {
@@ -522,8 +565,8 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
         async function fetchData() {
             try {
                 const bounds = getHorizonBounds(horizon, todayKey);
-                const effectiveStartDate = customStartDate || bounds.startDate;
-                const effectiveEndDate = customEndDate || bounds.endDate;
+                const effectiveStartDate = dateRange.startDate || (horizon === 'all' ? undefined : bounds.startDate);
+                const effectiveEndDate = dateRange.endDate || (horizon === 'all' ? undefined : bounds.endDate);
 
                 const filters = {
                     clientName: filterClient.length > 0 ? filterClient : undefined,
@@ -564,15 +607,15 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
         fetchData();
         return () => { active = false; };
-    }, [currentPage, filterClient, filterEmployee, filterLeaveType, debouncedSearch, filterYear, filterMonth, customStartDate, customEndDate, sortConfig, horizon, todayKey]);
+    }, [currentPage, filterClient, filterEmployee, filterLeaveType, debouncedSearch, filterYear, filterMonth, dateRange, sortConfig, horizon, todayKey]);
 
     async function loadLeavesPage(force = false, targetPage = currentPage) {
         setLoading(true);
         try {
             const page = force ? 1 : targetPage;
             const bounds = getHorizonBounds(horizon, todayKey);
-            const effectiveStartDate = customStartDate || bounds.startDate;
-            const effectiveEndDate = customEndDate || bounds.endDate;
+            const effectiveStartDate = dateRange.startDate || (horizon === 'all' ? undefined : bounds.startDate);
+            const effectiveEndDate = dateRange.endDate || (horizon === 'all' ? undefined : bounds.endDate);
 
             const filters = {
                 clientName: filterClient.length > 0 ? filterClient : undefined,
@@ -905,8 +948,8 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
         setIsExporting(true);
         try {
             const bounds = getHorizonBounds(horizon, todayKey);
-            const effectiveStartDate = customStartDate || bounds.startDate;
-            const effectiveEndDate = customEndDate || bounds.endDate;
+            const effectiveStartDate = dateRange.startDate || (horizon === 'all' ? undefined : bounds.startDate);
+            const effectiveEndDate = dateRange.endDate || (horizon === 'all' ? undefined : bounds.endDate);
 
             const filters = {
                 clientName: filterClient.length > 0 ? filterClient : undefined,
@@ -951,60 +994,33 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
             const clientLabel = filterClient.length > 0 ? filterClient.join(', ') : 'All Client Pods';
             const empLabel = filterEmployee.length > 0 ? filterEmployee.join(', ') : 'All Recruiters';
-            const periodLabel = (customStartDate && customEndDate)
-                ? `${fmtDate(customStartDate)} to ${fmtDate(customEndDate)}`
-                : customStartDate
-                    ? `From ${fmtDate(customStartDate)}`
-                    : customEndDate
-                        ? `Up to ${fmtDate(customEndDate)}`
-                        : bounds.startDate && bounds.endDate
-                            ? `${fmtDate(bounds.startDate)} to ${fmtDate(bounds.endDate)}`
-                            : filterYear
-                                ? (filterMonth ? `${filterYear}-${filterMonth}` : `Year ${filterYear}`)
-                                : 'All Archive';
+            const periodLabel = (dateRange.startDate && dateRange.endDate)
+                ? (dateRange.startDate === dateRange.endDate ? fmtDate(dateRange.startDate) : `${fmtDate(dateRange.startDate)} to ${fmtDate(dateRange.endDate)}`)
+                : dateRange.startDate
+                    ? `From ${fmtDate(dateRange.startDate)}`
+                    : dateRange.endDate
+                        ? `Up to ${fmtDate(dateRange.endDate)}`
+                        : filterYear
+                            ? (filterMonth ? `${filterYear}-${filterMonth}` : `Year ${filterYear}`)
+                            : 'All Archive';
             const typeLabel = filterLeaveType.length > 0 ? filterLeaveType.join(', ') : 'All Leave Types';
 
-            // Executive Operations Statement / Memo
-            const memoHeader: (string | number)[][] = [
-                ['BRIGADE PULSE — ENTERPRISE ATTENDANCE & LEAVE STATEMENT'],
-                ['CONFIDENTIAL WORKFORCE OPERATIONS TELEMETRY · EXECUTIVE MEMO'],
-                [],
-                ['Generated At', nowFormatted],
-                ['Reporting Scope (Client)', clientLabel],
-                ['Recruiter / Staff Scope', empLabel],
-                ['Period / Horizon', periodLabel],
-                ['Leave Type Filter', typeLabel],
-                ['Search Query Filter', search.trim() ? `"${search.trim()}"` : 'None'],
-                ['Total Records Exported', allRecords.length],
-                [],
-                ['EXECUTIVE LEAVE SUMMARY MEMO'],
-                ['Metric', 'Total Value', 'Unit', 'Operational Context'],
-                ['Total Approved Leaves', Number(totalDaysSum.toFixed(1)), 'Days', 'Gross workforce absence impact on floor delivery'],
-                ['Casual Leaves (CL)', Number(casualDaysSum.toFixed(1)), 'Days', 'Planned vacation & personal time off'],
-                ['Sick Leaves (SL)', Number(sickDaysSum.toFixed(1)), 'Days', 'Health & medical incapacitation'],
-                ['Leave Without Pay (LWP)', Number(lwpDaysSum.toFixed(1)), 'Days', 'Unpaid absence / exhausted balance'],
-                ['Other / Custom Leaves', Number(otherDaysSum.toFixed(1)), 'Days', 'Special or bereavement leaves'],
-                ['Unplanned / Sudden Absences', unplannedCount, 'Incidents', 'Shift missed without required 24h prior notification'],
-                ['Planned Absences', plannedCount, 'Incidents', 'Notified in advance with scheduled coverage'],
-                ['Unique Staff Impacted', uniqueEmployeesCount, 'Employees', 'Distinct team members on leave during period'],
-                ['Client Pods Affected', uniqueClientsCount, 'Clients', 'Distinct account pods with attendance impact'],
-                [],
-                ['DETAILED LEAVE AUDIT LOG'],
-                [
-                    'Date',
-                    'Day of Week',
-                    'Recruiter / Employee',
-                    'Client Pod',
-                    'Leave Type',
-                    'Duration (Days)',
-                    'Planned?',
-                    'Backup Provided?',
-                    'Reason for Absence',
-                    'Approved By',
-                    'Logged At'
-                ]
+            // 1. Table Headers — ROW 1 for native Excel AutoFilter & proper column auto-sizing
+            const tableHeaders: (string | number)[] = [
+                'Date',
+                'Day of Week',
+                'Recruiter / Employee',
+                'Client Pod',
+                'Leave Type',
+                'Duration (Days)',
+                'Planned?',
+                'Backup Provided?',
+                'Reason for Absence',
+                'Approved By',
+                'Logged At'
             ];
 
+            // 2. Data Rows (Rows 2..N)
             const dataRows: (string | number)[][] = allRecords.map(l => [
                 l.date,
                 getWeekday(l.date),
@@ -1019,31 +1035,55 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                 l.created_at ? new Date(l.created_at).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' }) : ''
             ]);
 
+            // 3. Mathematical Totals Row (Directly below data)
             const totalsRow: (string | number)[] = [
                 'TOTALS',
                 '',
-                `${uniqueEmployeesCount} Employees`,
+                `${uniqueEmployeesCount} Staff`,
                 `${uniqueClientsCount} Clients`,
                 '',
                 Number(totalDaysSum.toFixed(1)),
-                `${plannedCount} Planned`,
+                `${plannedCount} Planned / ${unplannedCount} Unplanned`,
                 '',
-                `CL: ${casualDaysSum.toFixed(1)}d | SL: ${sickDaysSum.toFixed(1)}d | LWP: ${lwpDaysSum.toFixed(1)}d | Unplanned: ${unplannedCount}`,
+                `CL: ${casualDaysSum.toFixed(1)}d | SL: ${sickDaysSum.toFixed(1)}d | LWP: ${lwpDaysSum.toFixed(1)}d`,
                 '',
                 ''
             ];
 
-            const footerRows: (string | number)[][] = [
+            // 4. Executive Operations Memo (At the bottom, matching Breaks Report format)
+            const memoFooter: (string | number)[][] = [
                 [],
-                ['End of Official Statement · Generated by Brigade Pulse Admin Console'],
+                ['--- WORKFORCE ATTENDANCE & LEAVE TELEMETRY STATEMENT ---'],
+                ['Executive Operations Memo & Audit Telemetry'],
+                ['Generated At', nowFormatted],
+                ['Reporting Scope (Client)', clientLabel],
+                ['Recruiter / Staff Scope', empLabel],
+                ['Date Period / Horizon', periodLabel],
+                ['Leave Type Scope', typeLabel],
+                ['Search Query Filter', search.trim() ? `"${search.trim()}"` : 'All'],
+                ['Total Records Exported', allRecords.length],
+                ['Total Approved Leaves (Gross)', `${totalDaysSum.toFixed(1)} Days`],
+                ['Casual Leaves (CL)', `${casualDaysSum.toFixed(1)} Days`],
+                ['Sick Leaves (SL)', `${sickDaysSum.toFixed(1)} Days`],
+                ['Leave Without Pay (LWP)', `${lwpDaysSum.toFixed(1)} Days`],
+                ['Other / Special Leaves', `${otherDaysSum.toFixed(1)} Days`],
+                ['Unplanned Absences', `${unplannedCount} Incidents`],
+                ['Planned Absences', `${plannedCount} Incidents`],
+                ['Unique Staff Impacted', `${uniqueEmployeesCount} Employees`],
+                ['Client Pods Affected', `${uniqueClientsCount} Clients`],
+                ['System Security & Compliance', 'Confidential Internal Workforce Document · Brigade Pulse Console']
             ];
 
-            const finalExport = [...memoHeader, ...dataRows, [], totalsRow, ...footerRows];
-            const safeClientName = filterClient.length === 1 ? filterClient[0].toLowerCase().replace(/[^a-z0-9]/g, '-') : 'workforce';
-            const filename = `leave-statement-${safeClientName}-${getTodayKey()}`;
+            const finalExport = [tableHeaders, ...dataRows, [], totalsRow, ...memoFooter];
+            const targetSlug = filterEmployee.length === 1 
+                ? filterEmployee[0].toLowerCase().replace(/[^a-z0-9]/g, '-') 
+                : filterClient.length === 1 
+                    ? filterClient[0].toLowerCase().replace(/[^a-z0-9]/g, '-') 
+                    : 'workforce';
+            const filename = `leave-report-${targetSlug}`;
 
             await exportExcel(finalExport, filename);
-            success('Export Complete', `Generated executive memo with ${allRecords.length} records (${totalDaysSum.toFixed(1)} days).`);
+            success('Export Complete', `Generated clean Excel report with ${allRecords.length} records (${totalDaysSum.toFixed(1)} days).`);
         } catch (err: any) {
             console.error('Export error:', err);
             toastError('Export Failed', err?.message || 'Could not generate leave export.');
@@ -1058,8 +1098,8 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
         filterLeaveType.length ||
         search ||
         filterYear ||
-        customStartDate ||
-        customEndDate
+        dateRange.startDate ||
+        dateRange.endDate
     );
 
     const filterableEmployees = useMemo(() => {
@@ -1409,50 +1449,15 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
 
                     <div className="w-px h-6 bg-white/[0.08] flex-shrink-0" />
 
-                    {/* Dynamic Date Calendar (From - To) */}
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#151928] border border-white/10 text-xs shadow-inner shrink-0">
-                        <CalendarRange size={13} className="text-indigo-400 shrink-0" />
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">From</span>
-                        <input 
-                            type="date"
-                            value={customStartDate}
-                            onChange={(e) => {
-                                setCustomStartDate(e.target.value);
-                                setFilterYear('');
-                                setFilterMonth('');
-                                setCurrentPage(1);
-                            }}
-                            className="bg-transparent text-white font-mono text-[11px] outline-none cursor-pointer hover:text-indigo-300 transition-colors"
-                            title="Filter From Date"
+                    {/* Integrated Cyberpunk Date Range Calendar Picker */}
+                    <div className="w-full sm:w-[220px] shrink-0">
+                        <DateRangePicker 
+                            value={dateRange} 
+                            onChange={handleDateRangeChange} 
+                            allowFuture={true} 
+                            allowClear={true} 
+                            placeholder="All Dates / Horizon" 
                         />
-                        <span className="text-zinc-600 font-bold px-0.5">➔</span>
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">To</span>
-                        <input 
-                            type="date"
-                            value={customEndDate}
-                            onChange={(e) => {
-                                setCustomEndDate(e.target.value);
-                                setFilterYear('');
-                                setFilterMonth('');
-                                setCurrentPage(1);
-                            }}
-                            className="bg-transparent text-white font-mono text-[11px] outline-none cursor-pointer hover:text-indigo-300 transition-colors"
-                            title="Filter To Date"
-                        />
-                        {(customStartDate || customEndDate) && (
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setCustomStartDate('');
-                                    setCustomEndDate('');
-                                    setCurrentPage(1);
-                                }}
-                                className="p-0.5 ml-1 rounded text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                                title="Clear Custom Date Range"
-                            >
-                                <X size={12} />
-                            </button>
-                        )}
                     </div>
 
                     <div className="w-px h-6 bg-white/[0.08] flex-shrink-0" />
@@ -1516,11 +1521,11 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                 {hasFilter && (
                     <div className="flex items-center justify-between pt-2 border-t border-white/[0.06] text-xs">
                         <div className="flex items-center gap-2 flex-wrap">
-                            {(customStartDate || customEndDate) && (
+                            {(dateRange.startDate || dateRange.endDate) && (
                                 <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-indigo-500/15 border border-indigo-500/30 text-[11px] font-semibold text-indigo-300">
                                     <CalendarRange size={11} className="text-indigo-400" />
-                                    <span>{customStartDate ? fmtDate(customStartDate) : 'Beginning'} ➔ {customEndDate ? fmtDate(customEndDate) : 'End'}</span>
-                                    <button type="button" onClick={() => { setCustomStartDate(''); setCustomEndDate(''); }} className="hover:text-white transition-colors cursor-pointer"><X size={10} /></button>
+                                    <span>{dateRange.startDate ? fmtDate(dateRange.startDate) : 'Beginning'} ➔ {dateRange.endDate ? fmtDate(dateRange.endDate) : 'End'}</span>
+                                    <button type="button" onClick={() => handleDateRangeChange({ preset: null, startDate: '', endDate: '' })} className="hover:text-white transition-colors cursor-pointer"><X size={10} /></button>
                                 </span>
                             )}
                             {filterYear && (
@@ -1549,7 +1554,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                             ))}
                             <button 
                                 type="button"
-                                onClick={() => { setFilterClient([]); setFilterEmployee([]); setFilterLeaveType([]); setSearch(''); setFilterYear(''); setFilterMonth(''); setCustomStartDate(''); setCustomEndDate(''); }}
+                                onClick={() => { setFilterClient([]); setFilterEmployee([]); setFilterLeaveType([]); setSearch(''); setFilterYear(''); setFilterMonth(''); handleDateRangeChange({ preset: null, startDate: '', endDate: '' }); }}
                                 className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-400 hover:text-rose-300 transition-colors px-2 py-0.5 rounded-md bg-rose-500/10 border border-rose-500/20 hover:bg-rose-500/20 cursor-pointer"
                             >
                                 <X size={10} /> Reset All
@@ -1653,7 +1658,7 @@ export default function MasterLeaveTracker({ currentUser }: { currentUser: User 
                                 {(search || hasFilter) && (
                                     <button 
                                         type="button"
-                                        onClick={() => { setSearch(''); setFilterClient([]); setFilterEmployee([]); setFilterLeaveType([]); setFilterYear(''); setFilterMonth(''); setCustomStartDate(''); setCustomEndDate(''); }}
+                                        onClick={() => { setSearch(''); setFilterClient([]); setFilterEmployee([]); setFilterLeaveType([]); setFilterYear(''); setFilterMonth(''); handleDateRangeChange({ preset: null, startDate: '', endDate: '' }); }}
                                         className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors px-4 py-2 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20"
                                     >
                                         Reset all filters
